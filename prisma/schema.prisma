@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScopeType {
+  TENANT
+  COMPANY
+  BRANCH
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+model Tenant {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  companies   Company[]
+  memberships Membership[]
+  roles       Role[]
+  auditLogs   AuditLog[]
+}
+
+model Company {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @db.Uuid
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name         String
+  legalName    String?
+  code         String
+  baseCurrency String       @default("OMR") @db.VarChar(3)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  branches     Branch[]
+  departments  Department[]
+  scopes       AccessScope[]
+  @@unique([tenantId, code])
+  @@unique([tenantId, id])
+  @@index([tenantId])
+}
+
+model Branch {
+  id          String       @id @default(uuid()) @db.Uuid
+  tenantId    String       @db.Uuid
+  companyId   String       @db.Uuid
+  company     Company      @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  name        String
+  code        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  departments Department[]
+  scopes      AccessScope[]
+  @@unique([companyId, code])
+  @@unique([tenantId, companyId, id])
+  @@index([tenantId, companyId])
+}
+
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  companyId String   @db.Uuid
+  branchId  String?  @db.Uuid
+  company   Company  @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch    Branch?  @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  name      String
+  createdAt DateTime @default(now())
+  @@index([tenantId, companyId, branchId])
+}
+
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  email        String       @unique
+  name         String
+  createdAt    DateTime     @default(now())
+  memberships  Membership[]
+}
+
+model Membership {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  userId      String           @db.Uuid
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status      MembershipStatus @default(INVITED)
+  createdAt   DateTime         @default(now())
+  roleGrants  RoleGrant[]
+  @@unique([tenantId, userId])
+  @@unique([tenantId, id])
+  @@index([userId])
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name        String
+  grants      RoleGrant[]
+  permissions RolePermission[]
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+}
+
+model Permission {
+  key   String @id
+  roles RolePermission[]
+}
+
+model RolePermission {
+  tenantId      String     @db.Uuid
+  roleId        String     @db.Uuid
+  permissionKey String
+  role          Role       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade)
+  permission    Permission @relation(fields: [permissionKey], references: [key], onDelete: Restrict)
+  @@id([tenantId, roleId, permissionKey])
+}
+
+model RoleGrant {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  membershipId String      @db.Uuid
+  roleId       String      @db.Uuid
+  membership   Membership  @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
+  role         Role        @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade)
+  scopes       AccessScope[]
+  @@unique([tenantId, id])
+  @@index([tenantId, membershipId])
+}
+
+model AccessScope {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  grantId   String    @db.Uuid
+  type      ScopeType
+  companyId String?   @db.Uuid
+  branchId  String?   @db.Uuid
+  grant     RoleGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Cascade)
+  company   Company?  @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch    Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  @@index([tenantId, grantId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  actorId   String?  @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  @@index([tenantId, createdAt])
+}

@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erp
+      POSTGRES_DB: final_arrow_erp
+    ports:
+      - "5432:5432"
+    volumes:
+      - erp_postgres:/var/lib/postgresql/data
+volumes:
+  erp_postgres:
