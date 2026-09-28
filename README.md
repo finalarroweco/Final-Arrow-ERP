@@ -1,0 +1,39 @@
+# Final Arrow ERP
+
+AI-powered modular ERP platform by Final Arrow.
+
+## Vision
+Build a scalable business operating system with:
+- Multi-tenant SaaS architecture
+- Multi-company and multi-branch support
+- Arabic / English
+- Role-based access control
+- Audit logs
+- CRM
+- Sales
+- Accounting
+- Purchasing
+- Inventory
+- HR
+- Projects
+- Subscriptions
+- POS
+- Helpdesk
+- Documents & approvals
+- Analytics
+- AI & automation
+
+## Initial Architecture
+Tenant → Company → Branch → Department → User
+
+## Proposed Stack
+- Next.js
+- TypeScript
+- PostgreSQL
+- Prisma
+- Redis / background jobs
+- Object storage
+- AI service layer
+
+## Project Status
+Foundation phase started.
