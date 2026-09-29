@@ -33,8 +33,9 @@
       <button data-view="companies"><span>02</span> Companies</button>
       <button data-view="crm"><span>03</span> CRM</button>
       <button data-view="sales"><span>04</span> Sales</button>
-      <button data-view="purchasing"><span>05</span> Purchasing</button>
-      <button data-view="inventory"><span>06</span> Inventory</button>
+      <button data-view="finance"><span>05</span> Finance</button>
+      <button data-view="purchasing"><span>06</span> Purchasing</button>
+      <button data-view="inventory"><span>07</span> Inventory</button>
     </nav><div class="sidefoot">Interface preview<br />Sample records only · no data is saved</div>
   </aside>
   <main><div class="top"><div class="crumb">Final Arrow ERP / <span id="section-name">Overview</span></div><div class="account">Muscat Group <span class="avatar">MG</span></div></div>
@@ -56,6 +57,10 @@
     <section id="sales" class="view"><div class="eyebrow">SALES</div><h1>Quotes & orders.</h1><p class="intro">Prepare quotes, record decisions and track accepted orders.</p><div class="toolbar"><div class="chips"><span class="chip">Final Arrow Trading</span><span class="chip">Quotes</span><span class="chip">Orders</span></div><button class="primary" type="button">+ New quote</button></div>
       <div class="tablewrap"><table><thead><tr><th>Number</th><th>Customer</th><th>Type</th><th>Status</th><th>Total</th></tr></thead><tbody><tr><td>QT-2026-042</td><td>Atlas Retail LLC</td><td>Quote</td><td><span class="badge amber">Sent</span></td><td>1,250.000 OMR</td></tr><tr><td>QT-2026-041</td><td>Oasis Supplies</td><td>Quote</td><td><span class="badge green">Accepted</span></td><td>680.000 OMR</td></tr><tr><td>SO-2026-031</td><td>Oasis Supplies</td><td>Sales order</td><td><span class="badge green">Completed</span></td><td>680.000 OMR</td></tr><tr><td>QT-2026-040</td><td>North Coast Logistics</td><td>Quote</td><td><span class="badge">Draft</span></td><td>395.500 OMR</td></tr></tbody></table></div>
       <div class="cta">Amounts are calculated from line items. An accepted quote creates one sales order containing a fixed copy of its details.</div>
+    </section>
+    <section id="finance" class="view"><div class="eyebrow">ACCOUNTING</div><h1>Internal invoices.</h1><p class="intro">Prepare billing records from completed sales orders and track their status.</p><div class="toolbar"><div class="chips"><span class="chip">Final Arrow Trading</span><span class="chip">All invoices</span></div><button class="primary" type="button">+ Create draft</button></div>
+      <div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Customer</th><th>Sales order</th><th>Status</th><th>Subtotal</th></tr></thead><tbody><tr><td>INV-2026-016</td><td>Oasis Supplies</td><td>SO-2026-031</td><td><span class="badge green">Issued</span></td><td>680.000 OMR</td></tr><tr><td>INV-2026-017</td><td>Atlas Retail LLC</td><td>SO-2026-032</td><td><span class="badge">Draft</span></td><td>1,250.000 OMR</td></tr><tr><td>INV-2026-015</td><td>North Coast Logistics</td><td>SO-2026-029</td><td><span class="badge red">Void</span></td><td>395.500 OMR</td></tr></tbody></table></div>
+      <div class="cta">A completed sales order can create one internal invoice. Tax calculation, payment tracking and compliant invoice PDFs are not in this preview.</div>
     </section>
     <section id="purchasing" class="view"><div class="eyebrow">PURCHASING</div><h1>Suppliers & purchase orders.</h1><p class="intro">Maintain supplier records and follow purchasing from draft to receipt.</p><div class="toolbar"><div class="chips"><span class="chip">Final Arrow Restaurant</span><span class="chip">All branches</span></div><button class="primary" type="button">+ New purchase order</button></div>
       <div class="cards"><div class="card"><small>Active suppliers</small><strong>36</strong><span>Company and branch records</span></div><div class="card"><small>Draft orders</small><strong>5</strong><span>Ready to review</span></div><div class="card"><small>Issued orders</small><strong>3</strong><span>Awaiting receipt</span></div><div class="card"><small>Received orders</small><strong>12</strong><span>Recorded internally</span></div></div>

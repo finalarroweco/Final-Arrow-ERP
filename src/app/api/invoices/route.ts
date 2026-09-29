@@ -16,16 +16,15 @@ export async function GET(request: Request) {
   if (!tenantId.success || !companyId.success || !page.success)
     return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
-    companyId: companyId.data, permission: "order:read" });
+    companyId: companyId.data, permission: "invoice:read" });
   if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const orders = await db.salesOrder.findMany({ where: { tenantId: tenantId.data,
+  const invoices = await db.invoice.findMany({ where: { tenantId: tenantId.data,
     companyId: companyId.data, ...(branches === null ? {} : { branchId: { in: branches } }) },
-    select: { id: true, number: true, quoteId: true, customerName: true, branchId: true,
-      status: true, startedAt: true, completedAt: true, cancelledAt: true,
+    select: { id: true, number: true, orderId: true, customerName: true, branchId: true,
+      status: true, issuedAt: true, voidedAt: true, voidReason: true,
       currency: true, subtotal: true, createdAt: true,
-      invoice: { select: { id: true, number: true } },
       lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });
+  return NextResponse.json({ invoices: invoices.slice(0, 50), nextPage: invoices.length > 50 ? page.data + 1 : null });
 }

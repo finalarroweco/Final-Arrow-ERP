@@ -41,6 +41,12 @@ enum SalesOrderStatus {
   CANCELLED
 }
 
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  VOID
+}
+
 enum PurchaseOrderStatus {
   DRAFT
   ISSUED
@@ -90,6 +96,7 @@ model Company {
   inventoryItems InventoryItem[]
   stockBalances  StockBalance[]
   receipts       GoodsReceipt[]
+  invoices       Invoice[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -117,6 +124,7 @@ model Branch {
   inventoryItems InventoryItem[]
   stockBalances  StockBalance[]
   receipts       GoodsReceipt[]
+  invoices       Invoice[]
 
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
@@ -285,6 +293,7 @@ model Customer {
   convertedLeads Lead[]
   quotes         Quote[]
   orders         SalesOrder[]
+  invoices       Invoice[]
 
   @@unique([companyId, code])
   @@unique([tenantId, id])
@@ -554,10 +563,12 @@ model SalesOrder {
   customer     Customer         @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
   quote        Quote            @relation(fields: [tenantId, companyId, quoteId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        SalesOrderLine[]
+  invoice      Invoice?
 
   @@unique([companyId, number])
   @@unique([tenantId, companyId, quoteId])
   @@unique([tenantId, id])
+  @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId, branchId, createdAt])
 }
 
@@ -574,4 +585,49 @@ model SalesOrderLine {
 
   @@unique([orderId, position])
   @@index([tenantId, orderId])
+}
+
+model Invoice {
+  id           String        @id @default(uuid()) @db.Uuid
+  tenantId     String        @db.Uuid
+  companyId    String        @db.Uuid
+  branchId     String?       @db.Uuid
+  customerId   String        @db.Uuid
+  orderId      String        @unique @db.Uuid
+  number       String
+  customerName String
+  currency     String        @db.VarChar(3)
+  subtotal     Decimal       @db.Decimal(18, 3)
+  notes        String?
+  status       InvoiceStatus @default(DRAFT)
+  issuedAt     DateTime?
+  voidedAt     DateTime?
+  voidReason   String?
+  createdBy    String        @db.Uuid
+  createdAt    DateTime      @default(now())
+  company      Company       @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch       Branch?       @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  customer     Customer      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
+  order        SalesOrder    @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  lines        InvoiceLine[]
+
+  @@unique([companyId, number])
+  @@unique([tenantId, companyId, orderId])
+  @@unique([tenantId, id])
+  @@index([tenantId, companyId, branchId, createdAt])
+}
+
+model InvoiceLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @db.Uuid
+  invoiceId   String  @db.Uuid
+  position    Int
+  description String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(18, 3)
+  amount      Decimal @db.Decimal(18, 3)
+  invoice     Invoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([invoiceId, position])
+  @@index([tenantId, invoiceId])
 }
