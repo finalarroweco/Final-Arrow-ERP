@@ -17,6 +17,8 @@ export default async function QuotesPage() {
     const permissions = async (branchId?: string) => ({
       canCreate: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id,
         branchId, permission: "quote:create" }),
+      canUpdate: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id,
+        branchId, permission: "quote:update" }),
       canSend: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id,
         branchId, permission: "quote:send" }),
       canDecide: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id,

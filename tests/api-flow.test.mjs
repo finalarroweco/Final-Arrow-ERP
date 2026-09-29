@@ -191,6 +191,15 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(quoteB.status, 201);
     const restrictedQuotes = await get(`/api/quotes?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
     assert.deepEqual(restrictedQuotes.data.quotes.map((item) => item.id), [quote.data.quote.id]);
+    const editPath = `/api/quotes/${quote.data.quote.id}`;
+    const editedLines = [{ description: "Revised service", quantity: 3, unitPrice: "2.125" }];
+    assert.equal((await patch(editPath, { tenantId, lines: editedLines }, accepted.cookie)).status, 403);
+    assert.equal((await patch(`/api/quotes/${quoteB.data.quote.id}`, { tenantId, lines: editedLines }, manager.cookie)).status, 403);
+    const revisedQuote = await patch(editPath, { tenantId, notes: "Updated draft", lines: editedLines }, manager.cookie);
+    assert.equal(revisedQuote.status, 200);
+    assert.equal(revisedQuote.data.quote.subtotal, "6.375");
+    assert.equal(revisedQuote.data.quote.lines.length, 1);
+    assert.equal(revisedQuote.data.quote.lines[0].amount, "6.375");
     const statusPath = `/api/quotes/${quote.data.quote.id}/status`;
     assert.equal((await patch(statusPath, { tenantId, action: "send" }, accepted.cookie)).status, 403);
     assert.equal((await patch(`/api/quotes/${quoteB.data.quote.id}/status`, { tenantId, action: "send" }, manager.cookie)).status, 403);
@@ -199,6 +208,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(sentQuote.status, 200);
     assert.equal(sentQuote.data.quote.status, "SENT");
     assert.ok(sentQuote.data.quote.sentAt);
+    assert.equal((await patch(editPath, { tenantId, lines: quoteBody.lines }, manager.cookie)).status, 409);
     assert.equal((await patch(statusPath, { tenantId, action: "send" }, manager.cookie)).status, 409);
     const acceptedQuote = await patch(statusPath, { tenantId, action: "accept" }, manager.cookie);
     assert.equal(acceptedQuote.status, 200);

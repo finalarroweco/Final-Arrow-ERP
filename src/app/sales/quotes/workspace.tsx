@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Permissions = { canCreate: boolean; canSend: boolean; canDecide: boolean };
+type Permissions = { canCreate: boolean; canUpdate: boolean; canSend: boolean; canDecide: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string;
   companyPermissions: Permissions; branches: ({ id: string; name: string } & Permissions)[] };
 type Customer = { id: string; displayName: string; branchId: string | null };
-type Quote = { id: string; number: string; status: string; currency: string; subtotal: string;
+type Quote = { id: string; number: string; status: string; currency: string; subtotal: string; notes: string | null;
   branchId: string | null; customer: { displayName: string }; lines: { description: string; quantity: number;
     unitPrice: string; amount: string }[] };
 type Line = { description: string; quantity: string; unitPrice: string };
@@ -21,6 +21,9 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
   const [lines, setLines] = useState<Line[]>([{ description: "", quantity: "1", unitPrice: "0.000" }]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [editLines, setEditLines] = useState<Line[]>([]);
   const option = options[selected];
   const load = useCallback(async (index: number, pageNumber = 0) => {
     const scope = options[index];
@@ -77,6 +80,26 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
       if (response.ok) await load(selected, page);
     } finally { setBusy(false); }
   }
+  function startEdit(quote: Quote) {
+    setEditing(quote.id);
+    setEditNotes(quote.notes ?? "");
+    setEditLines(quote.lines.map((line) => ({ description: line.description,
+      quantity: String(line.quantity), unitPrice: line.unitPrice })));
+  }
+  async function saveEdit(quote: Quote) {
+    if (!option) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`/api/quotes/${quote.id}`, { method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: option.tenantId, notes: editNotes || null,
+          lines: editLines.map((line) => ({ description: line.description,
+            quantity: Number(line.quantity), unitPrice: line.unitPrice })) }) });
+      const data = await response.json();
+      setMessage(response.ok ? "Draft updated" : data.error ?? "Could not update draft");
+      if (response.ok) { setEditing(null); await load(selected, page); }
+    } finally { setBusy(false); }
+  }
   if (!option) return <section><p>No accessible companies yet.</p></section>;
   return <section>
     <label>Company <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setBranchId(""); setMessage(""); }}>
@@ -116,6 +139,25 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
       return <article key={quote.id}>
       <div><h3>{quote.number} · {quote.customer.displayName}</h3><p>{quote.status} · {quote.subtotal} {quote.currency}</p>
         <ul>{quote.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
+        {quote.status === "DRAFT" && permissions?.canUpdate && editing !== quote.id && <button disabled={busy}
+          onClick={() => startEdit(quote)}>Edit draft</button>}
+        {editing === quote.id && <form className="quote-form" onSubmit={(event) => { event.preventDefault(); void saveEdit(quote); }}>
+          <label>Notes <input value={editNotes} maxLength={2000} onChange={(event) => setEditNotes(event.target.value)} /></label>
+          {editLines.map((line, index) => <div className="quote-line" key={index}>
+            <input aria-label={`Edit description ${index + 1}`} required minLength={2} maxLength={300} value={line.description}
+              onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, description: event.target.value } : item))} />
+            <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" max="100000" required value={line.quantity}
+              onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, quantity: event.target.value } : item))} />
+            <input aria-label={`Edit price ${index + 1}`} required inputMode="decimal"
+              pattern="(0|[1-9][0-9]{0,8})(\.[0-9]{1,3})?" value={line.unitPrice}
+              onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, unitPrice: event.target.value } : item))} />
+            {editLines.length > 1 && <button type="button" onClick={() => setEditLines((current) => current.filter((_, i) => i !== index))}>Remove</button>}
+          </div>)}
+          {editLines.length < 50 && <button type="button" onClick={() => setEditLines((current) => [...current,
+            { description: "", quantity: "1", unitPrice: "0.000" }])}>Add item</button>}
+          <div className="quote-actions"><button disabled={busy}>Save draft</button>
+            <button type="button" onClick={() => setEditing(null)}>Cancel</button></div>
+        </form>}
         {quote.status === "DRAFT" && permissions?.canSend && <button disabled={busy}
           onClick={() => void transition(quote, "send")}>Mark as sent</button>}
         {quote.status === "SENT" && permissions?.canDecide && <div className="quote-actions">
