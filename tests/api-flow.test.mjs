@@ -238,6 +238,36 @@ test("invitation is single-use and a branch viewer sees only their company and b
     }, manager.cookie)).status, 200);
     const snapshot = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, manager.cookie);
     assert.equal(snapshot.data.orders[0].customerName, "Branch A Customer");
+    const orderStatusPath = `/api/orders/${order.data.order.id}/status`;
+    assert.equal((await patch(orderStatusPath, { tenantId, action: "start" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(orderStatusPath, { tenantId, action: "complete" }, manager.cookie)).status, 409);
+    const startedOrder = await patch(orderStatusPath, { tenantId, action: "start" }, manager.cookie);
+    assert.equal(startedOrder.status, 200);
+    assert.equal(startedOrder.data.order.status, "IN_PROGRESS");
+    assert.ok(startedOrder.data.order.startedAt);
+    assert.equal((await patch(orderStatusPath, { tenantId, action: "start" }, manager.cookie)).status, 409);
+    const finishedOrder = await patch(orderStatusPath, { tenantId, action: "complete" }, manager.cookie);
+    assert.equal(finishedOrder.status, 200);
+    assert.equal(finishedOrder.data.order.status, "COMPLETED");
+    assert.ok(finishedOrder.data.order.completedAt);
+    assert.equal((await patch(orderStatusPath, { tenantId, action: "cancel" }, manager.cookie)).status, 409);
+    const quoteC = await post("/api/quotes", { ...quoteBody, branchId: branchB.data.branch.id,
+      customerId: customerB.data.customer.id, number: "QT-003" }, owner.cookie);
+    assert.equal(quoteC.status, 201);
+    const quoteCStatus = `/api/quotes/${quoteC.data.quote.id}/status`;
+    assert.equal((await patch(quoteCStatus, { tenantId, action: "send" }, owner.cookie)).status, 200);
+    assert.equal((await patch(quoteCStatus, { tenantId, action: "accept" }, owner.cookie)).status, 200);
+    const orderB = await post(`/api/quotes/${quoteC.data.quote.id}/order`, { tenantId, number: "SO-002" }, owner.cookie);
+    assert.equal(orderB.status, 201);
+    const orderBStatus = `/api/orders/${orderB.data.order.id}/status`;
+    assert.equal((await patch(orderBStatus, { tenantId, action: "start" }, manager.cookie)).status, 403);
+    const cancelledOrder = await patch(orderBStatus, { tenantId, action: "cancel" }, owner.cookie);
+    assert.equal(cancelledOrder.status, 200);
+    assert.equal(cancelledOrder.data.order.status, "CANCELLED");
+    assert.ok(cancelledOrder.data.order.cancelledAt);
+    assert.equal((await patch(orderBStatus, { tenantId, action: "start" }, owner.cookie)).status, 409);
+    const visibleOrders = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.deepEqual(visibleOrders.data.orders.map((item) => item.id), [order.data.order.id]);
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);

@@ -34,6 +34,13 @@ enum QuoteStatus {
   REJECTED
 }
 
+enum SalesOrderStatus {
+  NEW
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model Tenant {
   id          String       @id @default(uuid()) @db.Uuid
   name        String
@@ -328,6 +335,10 @@ model SalesOrder {
   currency     String           @db.VarChar(3)
   subtotal     Decimal          @db.Decimal(18, 3)
   notes        String?
+  status       SalesOrderStatus @default(NEW)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
   createdBy    String           @db.Uuid
   createdAt    DateTime         @default(now())
   company      Company          @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)

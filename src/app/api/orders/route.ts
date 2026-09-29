@@ -21,6 +21,7 @@ export async function GET(request: Request) {
   const orders = await db.salesOrder.findMany({ where: { tenantId: tenantId.data,
     companyId: companyId.data, ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, quoteId: true, customerName: true, branchId: true,
+      status: true, startedAt: true, completedAt: true, cancelledAt: true,
       currency: true, subtotal: true, createdAt: true,
       lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
