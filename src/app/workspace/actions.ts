@@ -43,3 +43,32 @@ export async function createBranch(form: FormData) {
   });
   redirect("/workspace");
 }
+
+export async function createDepartment(form: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/login");
+  const tenantId = String(form.get("tenantId") ?? "");
+  const companyId = String(form.get("companyId") ?? "");
+  const branchId = String(form.get("branchId") ?? "") || undefined;
+  if (!(await canAccess({ userId: user.id, tenantId, companyId, branchId, permission: "department:create" })))
+    throw new Error("Forbidden");
+  const name = String(form.get("name") ?? "").trim();
+  if (name.length < 2 || name.length > 120) throw new Error("Invalid department name");
+  const company = await db.company.findUnique({
+    where: { tenantId_id: { tenantId, id: companyId } }, select: { id: true },
+  });
+  if (!company) throw new Error("Company not found");
+  if (branchId) {
+    const branch = await db.branch.findUnique({
+      where: { tenantId_companyId_id: { tenantId, companyId, id: branchId } }, select: { id: true },
+    });
+    if (!branch) throw new Error("Branch not found");
+  }
+  await db.$transaction(async (tx) => {
+    const department = await tx.department.create({ data: { tenantId, companyId, branchId, name } });
+    await tx.auditLog.create({
+      data: { tenantId, actorId: user.id, action: "department.created", entity: "Department", entityId: department.id },
+    });
+  });
+  redirect("/workspace");
+}

@@ -2,14 +2,15 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canAccess } from "@/lib/access";
-import { createBranch, createCompany } from "./actions";
+import { createBranch, createCompany, createDepartment } from "./actions";
+import { Logout } from "./logout";
 
 export default async function Workspace() {
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({
     where: { userId: user.id, status: "ACTIVE" },
-    include: { tenant: { include: { companies: { include: { branches: true }, orderBy: { name: "asc" } } } } },
+    include: { tenant: { include: { companies: { include: { branches: true, departments: true }, orderBy: { name: "asc" } } } } },
   });
   const visible = await Promise.all(memberships.map(async ({ tenant }) => ({
     tenant,
@@ -18,13 +19,21 @@ export default async function Workspace() {
       ...company,
       allowed: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "company:read" }),
       canCreateBranch: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "branch:create" }),
+      canCreateDepartment: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "department:create" }),
       branches: (await Promise.all(company.branches.map(async (branch) => ({
         branch,
         allowed: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId: branch.id, permission: "branch:read" }),
       })))).filter(({ allowed }) => allowed).map(({ branch }) => branch),
+      departments: (await Promise.all(company.departments.map(async (department) => ({
+        department,
+        allowed: await canAccess({
+          userId: user.id, tenantId: tenant.id, companyId: company.id,
+          branchId: department.branchId ?? undefined, permission: "department:read",
+        }),
+      })))).filter(({ allowed }) => allowed).map(({ department }) => department),
     })))).filter(({ allowed }) => allowed),
   })));
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div>{user.name}</div></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="account">{user.name} <Logout /></div></header>
     <section className="hero"><p>WORKSPACE</p><h1>Your companies.</h1><p className="sub">Manage the company and branch hierarchy within your organization.</p></section>
     {visible.map(({ tenant, companies, canCreate }) => <section key={tenant.id}>
       <h2>{tenant.name}</h2>
@@ -38,12 +47,24 @@ export default async function Workspace() {
         <div className="icon">{company.code.slice(0, 2)}</div><h3>{company.name}</h3>
         <p>{company.code} · {company.baseCurrency}</p>
         <ul>{company.branches.map((branch) => <li key={branch.id}>{branch.name} ({branch.code})</li>)}</ul>
+        {company.departments.length > 0 && <><h4>Departments</h4><ul>{company.departments.map((department) =>
+          <li key={department.id}>{department.name}{department.branchId ? " · branch" : " · company"}</li>)}</ul></>}
         {company.canCreateBranch && <form action={createBranch} className="branchform">
           <input type="hidden" name="tenantId" value={tenant.id} />
           <input type="hidden" name="companyId" value={company.id} />
           <input name="name" placeholder="Branch name" required minLength={2} maxLength={120} />
           <input name="code" placeholder="Branch code" required minLength={2} maxLength={20} />
           <button type="submit">Add branch</button>
+        </form>}
+        {company.canCreateDepartment && <form action={createDepartment} className="branchform">
+          <input type="hidden" name="tenantId" value={tenant.id} />
+          <input type="hidden" name="companyId" value={company.id} />
+          <input name="name" placeholder="Department name" required minLength={2} maxLength={120} />
+          <select name="branchId" defaultValue="">
+            <option value="">Company-wide department</option>
+            {company.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+          </select>
+          <button type="submit">Add department</button>
         </form>}
       </article>)}</div>
     </section>)}

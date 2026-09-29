@@ -25,7 +25,7 @@ export async function POST(request: Request) {
         data: { tenantId: tenant.id, userId: user.id, status: "ACTIVE" },
       });
       const role = await tx.role.create({ data: { tenantId: tenant.id, name: "Owner" } });
-      for (const key of ["company:read", "company:create", "branch:read", "branch:create"]) {
+      for (const key of ["company:read", "company:create", "branch:read", "branch:create", "department:read", "department:create"]) {
         await tx.permission.upsert({ where: { key }, update: {}, create: { key } });
         await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: role.id, permissionKey: key } });
       }

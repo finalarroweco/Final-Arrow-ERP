@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { scopeMatches } from "./scope";
 
 export async function canAccess(input: {
   userId: string; tenantId: string; permission: string;
@@ -19,9 +20,5 @@ export async function canAccess(input: {
     },
     include: { scopes: true },
   });
-  return grants.some((grant) => grant.scopes.some((scope) =>
-    scope.type === "TENANT" ||
-    (scope.type === "COMPANY" && !!input.companyId && scope.companyId === input.companyId) ||
-    (scope.type === "BRANCH" && !!input.branchId && scope.companyId === input.companyId && scope.branchId === input.branchId)
-  ));
+  return grants.some((grant) => grant.scopes.some((scope) => scopeMatches(scope, input)));
 }

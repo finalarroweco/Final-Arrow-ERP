@@ -1,6 +1,6 @@
 # Foundation implementation
 
-The application shell is a design preview. Its module cards do not represent working modules. The first working slice covers account creation, sign-in, company creation and branch creation.
+The application shell is a design preview. Its module cards do not represent working modules. The first working slice covers account creation, sign-in, company and branch creation, and company-wide or branch-specific departments.
 
 ## Database boundaries
 
@@ -18,4 +18,4 @@ The application shell is a design preview. Its module cards do not represent wor
 3. Run `npm install`, `npm run db:migrate`, and `npm run dev`.
 4. Open `/register` and create a workspace. The first account becomes its Owner.
 
-This milestone includes password authentication, hashed server sessions, owner permissions, authorized company/branch creation and an audit entry for each creation. It does not include email verification, password reset, login throttling, invitations, permission administration, financial operations, or production deployment. Registration is disabled by default in production; `ALLOW_REGISTRATION=true` opens it and should be used only after abuse controls and account recovery exist. The migration and cross-tenant behavior still need live PostgreSQL verification.
+This milestone includes password authentication, hashed server sessions, owner permissions, authorized company/branch/department creation and an audit entry for each creation. `npm test` checks scope matching denial cases. It does not include email verification, password reset, login throttling, invitations, permission administration, financial operations, or production deployment. Registration is disabled by default in production; `ALLOW_REGISTRATION=true` opens it and should be used only after abuse controls and account recovery exist. The migration and cross-tenant behavior still need live PostgreSQL verification.
