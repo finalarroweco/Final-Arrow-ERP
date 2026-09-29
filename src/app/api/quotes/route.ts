@@ -34,6 +34,7 @@ export async function GET(request: Request) {
     select: { id: true, number: true, status: true, sentAt: true, decidedAt: true, currency: true, subtotal: true,
       notes: true, branchId: true, createdAt: true,
       customer: { select: { id: true, displayName: true } },
+      order: { select: { id: true, number: true } },
       lines: { select: { description: true, quantity: true, unitPrice: true, amount: true, position: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });

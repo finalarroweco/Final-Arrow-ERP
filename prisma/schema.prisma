@@ -64,6 +64,7 @@ model Company {
   customers    Customer[]
   leads        Lead[]
   quotes       Quote[]
+  orders       SalesOrder[]
   @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@index([tenantId])
@@ -84,6 +85,7 @@ model Branch {
   customers   Customer[]
   leads       Lead[]
   quotes      Quote[]
+  orders      SalesOrder[]
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId])
@@ -241,6 +243,7 @@ model Customer {
   branch      Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   convertedLeads Lead[]
   quotes      Quote[]
+  orders      SalesOrder[]
   @@unique([companyId, code])
   @@unique([tenantId, id])
   @@unique([tenantId, companyId, id])
@@ -292,8 +295,10 @@ model Quote {
   branch      Branch?     @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   customer    Customer    @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines       QuoteLine[]
+  order       SalesOrder?
   @@unique([companyId, number])
   @@unique([tenantId, id])
+  @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId, branchId, createdAt])
 }
 
@@ -309,4 +314,43 @@ model QuoteLine {
   quote       Quote    @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
   @@unique([quoteId, position])
   @@index([tenantId, quoteId])
+}
+
+model SalesOrder {
+  id           String           @id @default(uuid()) @db.Uuid
+  tenantId     String           @db.Uuid
+  companyId    String           @db.Uuid
+  branchId     String?          @db.Uuid
+  customerId   String           @db.Uuid
+  quoteId      String           @unique @db.Uuid
+  number       String
+  customerName String
+  currency     String           @db.VarChar(3)
+  subtotal     Decimal          @db.Decimal(18, 3)
+  notes        String?
+  createdBy    String           @db.Uuid
+  createdAt    DateTime         @default(now())
+  company      Company          @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch       Branch?          @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  customer     Customer         @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
+  quote        Quote            @relation(fields: [tenantId, companyId, quoteId], references: [tenantId, companyId, id], onDelete: Restrict)
+  lines        SalesOrderLine[]
+  @@unique([companyId, number])
+  @@unique([tenantId, companyId, quoteId])
+  @@unique([tenantId, id])
+  @@index([tenantId, companyId, branchId, createdAt])
+}
+
+model SalesOrderLine {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @db.Uuid
+  orderId     String     @db.Uuid
+  position    Int
+  description String
+  quantity    Int
+  unitPrice   Decimal    @db.Decimal(18, 3)
+  amount      Decimal    @db.Decimal(18, 3)
+  order       SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  @@unique([orderId, position])
+  @@index([tenantId, orderId])
 }

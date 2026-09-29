@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Permissions = { canCreate: boolean; canUpdate: boolean; canSend: boolean; canDecide: boolean };
+type Permissions = { canCreate: boolean; canUpdate: boolean; canSend: boolean; canDecide: boolean; canOrder: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string;
   companyPermissions: Permissions; branches: ({ id: string; name: string } & Permissions)[] };
 type Customer = { id: string; displayName: string; branchId: string | null };
 type Quote = { id: string; number: string; status: string; currency: string; subtotal: string; notes: string | null;
+  order: { id: string; number: string } | null;
   branchId: string | null; customer: { displayName: string }; lines: { description: string; quantity: number;
     unitPrice: string; amount: string }[] };
 type Line = { description: string; quantity: string; unitPrice: string };
@@ -24,6 +25,7 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [editLines, setEditLines] = useState<Line[]>([]);
+  const [ordering, setOrdering] = useState<string | null>(null);
   const option = options[selected];
   const load = useCallback(async (index: number, pageNumber = 0) => {
     const scope = options[index];
@@ -100,6 +102,18 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
       if (response.ok) { setEditing(null); await load(selected, page); }
     } finally { setBusy(false); }
   }
+  async function createOrder(quote: Quote, form: FormData) {
+    if (!option) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`/api/quotes/${quote.id}/order`, { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: option.tenantId, number: form.get("number") }) });
+      const data = await response.json();
+      setMessage(response.ok ? "Sales order created" : data.error ?? "Could not create order");
+      if (response.ok) { setOrdering(null); await load(selected, page); }
+    } finally { setBusy(false); }
+  }
   if (!option) return <section><p>No accessible companies yet.</p></section>;
   return <section>
     <label>Company <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setBranchId(""); setMessage(""); }}>
@@ -164,6 +178,14 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
           <button disabled={busy} onClick={() => void transition(quote, "accept")}>Mark accepted</button>
           <button disabled={busy} onClick={() => void transition(quote, "reject")}>Mark rejected</button>
         </div>}
+        {quote.order && <p>Sales order: {quote.order.number}</p>}
+        {quote.status === "ACCEPTED" && !quote.order && permissions?.canOrder && ordering !== quote.id &&
+          <button disabled={busy} onClick={() => setOrdering(quote.id)}>Create sales order</button>}
+        {ordering === quote.id && <form className="quote-actions" action={(form) => void createOrder(quote, form)}>
+          <input name="number" aria-label="Sales order number" required pattern="[A-Z0-9-]{2,30}" placeholder="SO-001" />
+          <button disabled={busy}>Create</button>
+          <button type="button" onClick={() => setOrdering(null)}>Cancel</button>
+        </form>}
       </div>
     </article>})}</div>
     {page > 0 && <button onClick={() => void load(selected, page - 1)}>Previous</button>}

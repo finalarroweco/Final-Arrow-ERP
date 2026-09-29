@@ -218,6 +218,26 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const rejectedPath = `/api/quotes/${quoteB.data.quote.id}/status`;
     assert.equal((await patch(rejectedPath, { tenantId, action: "send" }, owner.cookie)).status, 200);
     assert.equal((await patch(rejectedPath, { tenantId, action: "reject" }, owner.cookie)).status, 200);
+    const orderPath = `/api/quotes/${quote.data.quote.id}/order`;
+    assert.equal((await post(orderPath, { tenantId, number: "SO-001" }, accepted.cookie)).status, 403);
+    assert.equal((await post(`/api/quotes/${quoteB.data.quote.id}/order`, { tenantId, number: "SO-002" }, manager.cookie)).status, 403);
+    assert.equal((await post(`/api/quotes/${quoteB.data.quote.id}/order`, { tenantId, number: "SO-002" }, owner.cookie)).status, 409);
+    const order = await post(orderPath, { tenantId, number: "SO-001" }, manager.cookie);
+    assert.equal(order.status, 201);
+    assert.equal(order.data.order.subtotal, "6.375");
+    assert.equal(order.data.order.lines.length, 1);
+    assert.equal(order.data.order.lines[0].description, "Revised service");
+    assert.equal((await post(orderPath, { tenantId, number: "SO-003" }, manager.cookie)).status, 409);
+    const ownerOrderList = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, owner.cookie);
+    assert.equal(ownerOrderList.status, 200);
+    assert.deepEqual(ownerOrderList.data.orders.map((item) => item.id), [order.data.order.id]);
+    const viewerOrderList = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.deepEqual(viewerOrderList.data.orders.map((item) => item.id), [order.data.order.id]);
+    assert.equal((await patch(`/api/customers/${customerA.data.customer.id}`, {
+      tenantId, action: "update", displayName: "Renamed Customer",
+    }, manager.cookie)).status, 200);
+    const snapshot = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, manager.cookie);
+    assert.equal(snapshot.data.orders[0].customerName, "Branch A Customer");
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
