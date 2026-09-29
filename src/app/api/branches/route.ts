@@ -18,13 +18,21 @@ export async function GET(request: Request) {
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   if (!tenantId.success || !companyId.success) return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
-  if (!(await canAccess({ userId: user.id, tenantId: tenantId.data, companyId: companyId.data, permission: "branch:read" })))
+  const membership = await db.membership.findUnique({
+    where: { tenantId_userId: { tenantId: tenantId.data, userId: user.id } },
+    select: { status: true },
+  });
+  if (membership?.status !== "ACTIVE")
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const branches = await db.branch.findMany({
+  const candidates = await db.branch.findMany({
     where: { tenantId: tenantId.data, companyId: companyId.data },
     select: { id: true, name: true, code: true },
     orderBy: { name: "asc" },
   });
+  const branches = (await Promise.all(candidates.map(async (branch) =>
+    await canAccess({ userId: user.id, tenantId: tenantId.data, companyId: companyId.data,
+      branchId: branch.id, permission: "branch:read" }) ? branch : null
+  ))).filter((branch) => branch !== null);
   return NextResponse.json({ branches });
 }
 

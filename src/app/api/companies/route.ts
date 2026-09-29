@@ -18,13 +18,28 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   const tenantId = uuid.safeParse(new URL(request.url).searchParams.get("tenantId"));
   if (!tenantId.success) return NextResponse.json({ error: "Invalid tenant" }, { status: 400 });
-  if (!(await canAccess({ userId: user.id, tenantId: tenantId.data, permission: "company:read" })))
+  const membership = await db.membership.findUnique({
+    where: { tenantId_userId: { tenantId: tenantId.data, userId: user.id } },
+    select: { status: true },
+  });
+  if (membership?.status !== "ACTIVE")
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const companies = await db.company.findMany({
+  const candidates = await db.company.findMany({
     where: { tenantId: tenantId.data },
-    select: { id: true, name: true, code: true, legalName: true, baseCurrency: true },
+    select: { id: true, name: true, code: true, legalName: true, baseCurrency: true, branches: { select: { id: true } } },
     orderBy: { name: "asc" },
   });
+  const companies = (await Promise.all(candidates.map(async (company) => {
+    const allowed = await canAccess({
+      userId: user.id, tenantId: tenantId.data, companyId: company.id, permission: "company:read",
+    }) || (await Promise.all(company.branches.map((branch) => canAccess({
+      userId: user.id, tenantId: tenantId.data, companyId: company.id, branchId: branch.id, permission: "company:read",
+    })))).some(Boolean);
+    return allowed ? {
+      id: company.id, name: company.name, code: company.code,
+      legalName: company.legalName, baseCurrency: company.baseCurrency,
+    } : null;
+  }))).filter((company) => company !== null);
   return NextResponse.json({ companies });
 }
 

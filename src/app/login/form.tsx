@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-export function LoginForm() {
+export function LoginForm({ destination }: { destination: string }) {
   const [error, setError] = useState("");
   const router = useRouter();
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -15,7 +15,7 @@ export function LoginForm() {
       body: JSON.stringify(Object.fromEntries(form)),
     });
     if (!response.ok) { setError("Email or password is incorrect."); return; }
-    router.push("/workspace");
+    router.push(destination);
     router.refresh();
   }
   return <form onSubmit={submit} className="authform">

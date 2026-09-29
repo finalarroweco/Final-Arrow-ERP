@@ -18,28 +18,34 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid registration details" }, { status: 400 });
   const { name, email, password, organization, slug } = parsed.data;
   try {
-    const user = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       const user = await tx.user.create({ data: { name, email, passwordHash: await hashPassword(password) } });
       const tenant = await tx.tenant.create({ data: { name: organization, slug } });
       const membership = await tx.membership.create({
         data: { tenantId: tenant.id, userId: user.id, status: "ACTIVE" },
       });
-      const role = await tx.role.create({ data: { tenantId: tenant.id, name: "Owner" } });
-      for (const key of ["company:read", "company:create", "branch:read", "branch:create", "department:read", "department:create"]) {
+      const owner = await tx.role.create({ data: { tenantId: tenant.id, name: "Owner" } });
+      const manager = await tx.role.create({ data: { tenantId: tenant.id, name: "Manager" } });
+      const viewer = await tx.role.create({ data: { tenantId: tenant.id, name: "Viewer" } });
+      for (const key of ["company:read", "company:create", "branch:read", "branch:create", "department:read", "department:create", "user:invite"]) {
         await tx.permission.upsert({ where: { key }, update: {}, create: { key } });
-        await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: role.id, permissionKey: key } });
+        await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: owner.id, permissionKey: key } });
+        if (key.endsWith(":read") || key === "branch:create" || key === "department:create")
+          await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: manager.id, permissionKey: key } });
+        if (key.endsWith(":read"))
+          await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: viewer.id, permissionKey: key } });
       }
       const grant = await tx.roleGrant.create({
-        data: { tenantId: tenant.id, roleId: role.id, membershipId: membership.id },
+        data: { tenantId: tenant.id, roleId: owner.id, membershipId: membership.id },
       });
       await tx.accessScope.create({ data: { tenantId: tenant.id, grantId: grant.id, type: "TENANT" } });
       await tx.auditLog.create({
         data: { tenantId: tenant.id, actorId: user.id, action: "tenant.created", entity: "Tenant", entityId: tenant.id },
       });
-      return user;
+      return { userId: user.id, tenantId: tenant.id };
     });
-    await createSession(user.id);
-    return NextResponse.json({ ok: true }, { status: 201 });
+    await createSession(result.userId);
+    return NextResponse.json({ tenantId: result.tenantId }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
       return NextResponse.json({ error: "Email or workspace name already in use" }, { status: 409 });

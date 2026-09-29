@@ -52,6 +52,22 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   await assert.rejects(db.roleGrant.create({
     data: { tenantId: b.id, membershipId: membership.id, roleId: role.id },
   }));
+  const invitation = await db.invitation.create({
+    data: { tenantId: a.id, email: "invited@example.invalid", tokenHash: randomUUID(),
+      roleId: role.id, type: "BRANCH", companyId: companyA.id, branchId: branchA.id,
+      createdBy: user.id, expiresAt: new Date(Date.now() + 86400_000) },
+  });
+  assert.equal(invitation.branchId, branchA.id);
+  await assert.rejects(db.invitation.create({
+    data: { tenantId: a.id, email: "bad@example.invalid", tokenHash: randomUUID(),
+      roleId: role.id, type: "BRANCH", companyId: companyA.id,
+      createdBy: user.id, expiresAt: new Date(Date.now() + 86400_000) },
+  }));
+  await assert.rejects(db.invitation.create({
+    data: { tenantId: a.id, email: "bad@example.invalid", tokenHash: randomUUID(),
+      roleId: role.id, type: "COMPANY", companyId: companyB.id,
+      createdBy: user.id, expiresAt: new Date(Date.now() + 86400_000) },
+  }));
 });
 
 test.after(async () => db.$disconnect());
