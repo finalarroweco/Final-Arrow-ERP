@@ -284,6 +284,21 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const companyC = await post("/api/companies", { tenantId, name: "Company C", code: "CMPC", baseCurrency: "JOD" }, owner.cookie);
     assert.equal(companyC.status, 201);
     assert.equal(companyC.data.company.baseCurrency, "JOD");
+    const dashboardPath = `/api/dashboard?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    const viewerDashboard = await get(dashboardPath, accepted.cookie);
+    assert.equal(viewerDashboard.status, 200);
+    assert.equal(viewerDashboard.data.customers, 2);
+    assert.equal(viewerDashboard.data.leads.WON, 1);
+    assert.equal(viewerDashboard.data.leads.NEW, 0);
+    assert.equal(viewerDashboard.data.quotes.ACCEPTED, 1);
+    assert.equal(viewerDashboard.data.quotes.REJECTED, 0);
+    assert.equal(viewerDashboard.data.orders.COMPLETED, 1);
+    assert.equal(viewerDashboard.data.orders.CANCELLED, 0);
+    const ownerDashboard = await get(dashboardPath, owner.cookie);
+    assert.equal(ownerDashboard.status, 200);
+    assert.equal(ownerDashboard.data.customers, 4);
+    assert.equal(ownerDashboard.data.orders.CANCELLED, 1);
+    assert.equal((await get(`/api/dashboard?tenantId=${tenantId}&companyId=${companyB.data.company.id}`, accepted.cookie)).status, 403);
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
