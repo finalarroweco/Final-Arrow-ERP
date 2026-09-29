@@ -354,6 +354,33 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 200);
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "cancel" }, manager.cookie)).status, 409);
 
+    const itemA = await post("/api/inventory/items", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchA.data.branch.id, sku: "ITEM-A", name: "Branch A Item", unit: "EA" }, owner.cookie);
+    const itemB = await post("/api/inventory/items", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchB.data.branch.id, sku: "ITEM-B", name: "Branch B Item", unit: "KG" }, owner.cookie);
+    const sharedItem = await post("/api/inventory/items", { tenantId, companyId: companyA.data.company.id,
+      sku: "ITEM-C", name: "Company Item", unit: "EA" }, owner.cookie);
+    assert.equal(itemA.status, 201);
+    assert.equal(itemB.status, 201);
+    assert.equal(sharedItem.status, 201);
+    assert.equal((await post("/api/inventory/items", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchA.data.branch.id, sku: "ITEM-A", name: "Duplicate Item", unit: "EA" }, owner.cookie)).status, 409);
+    assert.equal((await post("/api/inventory/items", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchA.data.branch.id, sku: "ITEM-D", name: "Viewer Item", unit: "EA" }, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/inventory/items", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchB.data.branch.id, sku: "ITEM-E", name: "Wrong Branch", unit: "EA" }, manager.cookie)).status, 403);
+    const itemListPath = `/api/inventory/items?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.deepEqual((await get(itemListPath, accepted.cookie)).data.items.map((item) => item.id), [itemA.data.item.id]);
+    const itemPath = `/api/inventory/items/${itemA.data.item.id}`;
+    assert.equal((await patch(itemPath, { tenantId, action: "update", name: "Viewer Edit" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(itemPath, { tenantId, action: "update", name: "Updated Item", unit: "KG" }, manager.cookie)).status, 200);
+    assert.equal((await patch(itemPath, { tenantId, action: "archive", archived: true }, manager.cookie)).status, 200);
+    assert.equal((await patch(itemPath, { tenantId, action: "update", name: "Blocked" }, manager.cookie)).status, 409);
+    assert.deepEqual((await get(itemListPath, accepted.cookie)).data.items, []);
+    assert.deepEqual((await get(`${itemListPath}&archived=true`, accepted.cookie)).data.items.map((item) => item.id),
+      [itemA.data.item.id]);
+    assert.equal((await patch(itemPath, { tenantId, action: "archive", archived: false }, manager.cookie)).status, 200);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);

@@ -34,6 +34,7 @@
       <button data-view="crm"><span>03</span> CRM</button>
       <button data-view="sales"><span>04</span> Sales</button>
       <button data-view="purchasing"><span>05</span> Purchasing</button>
+      <button data-view="inventory"><span>06</span> Inventory</button>
     </nav><div class="sidefoot">Interface preview<br />Sample records only · no data is saved</div>
   </aside>
   <main><div class="top"><div class="crumb">Final Arrow ERP / <span id="section-name">Overview</span></div><div class="account">Muscat Group <span class="avatar">MG</span></div></div>
@@ -60,6 +61,10 @@
       <div class="cards"><div class="card"><small>Active suppliers</small><strong>36</strong><span>Company and branch records</span></div><div class="card"><small>Draft orders</small><strong>5</strong><span>Ready to review</span></div><div class="card"><small>Issued orders</small><strong>3</strong><span>Awaiting receipt</span></div><div class="card"><small>Received orders</small><strong>12</strong><span>Recorded internally</span></div></div>
       <div class="tablewrap"><table><thead><tr><th>PO number</th><th>Supplier</th><th>Branch</th><th>Status</th><th>Total</th></tr></thead><tbody><tr><td>PO-2026-014</td><td>Fresh Foods Co.</td><td>Al Khuwair</td><td><span class="badge amber">Issued</span></td><td>425.750 OMR</td></tr><tr><td>PO-2026-013</td><td>Packaging Partners</td><td>Company-wide</td><td><span class="badge">Draft</span></td><td>112.500 OMR</td></tr><tr><td>PO-2026-012</td><td>Kitchen Supply LLC</td><td>Seeb</td><td><span class="badge green">Received</span></td><td>890.000 OMR</td></tr></tbody></table></div>
       <div class="cta">Order flow: Draft → Issued → Received. A draft can also be cancelled. Receiving stock and accounting entries are planned next.</div>
+    </section>
+    <section id="inventory" class="view"><div class="eyebrow">INVENTORY</div><h1>Item catalog.</h1><p class="intro">Create and maintain item records across your companies and branches.</p><div class="toolbar"><div class="chips"><span class="chip">Final Arrow Restaurant</span><span class="chip">Active items</span></div><button class="primary" type="button">+ Add item</button></div>
+      <div class="tablewrap"><table><thead><tr><th>SKU</th><th>Item</th><th>Unit</th><th>Scope</th><th>Status</th></tr></thead><tbody><tr><td>FOOD-001</td><td>Basmati rice</td><td>KG</td><td>Al Khuwair</td><td><span class="badge green">Active</span></td></tr><tr><td>PACK-020</td><td>Takeaway container</td><td>EA</td><td>Company-wide</td><td><span class="badge green">Active</span></td></tr><tr><td>DRINK-008</td><td>Mineral water</td><td>EA</td><td>Seeb</td><td><span class="badge green">Active</span></td></tr></tbody></table></div>
+      <div class="cta">This is an item catalog. Quantity on hand and stock movement records are not implemented yet.</div>
     </section>
   </main>
 </div>

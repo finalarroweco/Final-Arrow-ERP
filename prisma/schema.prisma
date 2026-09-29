@@ -81,6 +81,7 @@ model Company {
   orders         SalesOrder[]
   suppliers      Supplier[]
   purchaseOrders PurchaseOrder[]
+  inventoryItems InventoryItem[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -105,6 +106,7 @@ model Branch {
   orders         SalesOrder[]
   suppliers      Supplier[]
   purchaseOrders PurchaseOrder[]
+  inventoryItems InventoryItem[]
 
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
@@ -305,6 +307,28 @@ model Supplier {
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId, branchId])
   @@index([tenantId, companyId, displayName])
+}
+
+model InventoryItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  companyId   String    @db.Uuid
+  branchId    String?   @db.Uuid
+  sku         String
+  name        String
+  unit        String    @db.VarChar(16)
+  description String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   String    @db.Uuid
+  company     Company   @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch      Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+
+  @@unique([companyId, sku])
+  @@unique([tenantId, id])
+  @@index([tenantId, companyId, branchId])
+  @@index([tenantId, companyId, name])
 }
 
 model PurchaseOrder {

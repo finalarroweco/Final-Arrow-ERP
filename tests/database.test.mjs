@@ -47,6 +47,8 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   await assert.rejects(db.purchaseOrder.create({ data: { tenantId: b.id, companyId: companyB.id,
     supplierId: supplier.id, number: "BAD-PO", supplierName: "Supplier A", currency: "OMR",
     subtotal: "1.000", createdBy: randomUUID() } }));
+  await assert.rejects(db.inventoryItem.create({ data: { tenantId: a.id, companyId: companyA.id,
+    branchId: branchB.id, sku: "BAD-ITEM", name: "Wrong branch item", unit: "EA", createdBy: randomUUID() } }));
   await assert.rejects(db.quote.create({
     data: { tenantId: b.id, companyId: companyB.id, customerId: customer.id,
       number: "BAD-Q", currency: "OMR", subtotal: "1.000", createdBy: randomUUID() },

@@ -42,7 +42,7 @@ export default async function Workspace() {
       })))).filter(({ allowed }) => allowed).map(({ department }) => department),
     })))).filter(({ allowed }) => allowed),
   })));
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="account"><a href="/dashboard">Dashboard</a><a href="/crm">CRM</a><a href="/sales/quotes">Quotes</a><a href="/sales/orders">Orders</a><a href="/purchasing/suppliers">Suppliers</a><a href="/purchasing/orders">Purchase orders</a> {user.name} <Logout /></div></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="account"><a href="/dashboard">Dashboard</a><a href="/crm">CRM</a><a href="/sales/quotes">Quotes</a><a href="/sales/orders">Orders</a><a href="/purchasing/suppliers">Suppliers</a><a href="/purchasing/orders">Purchase orders</a><a href="/inventory/items">Items</a> {user.name} <Logout /></div></header>
     <section className="hero"><p>WORKSPACE</p><h1>Your companies.</h1><p className="sub">Manage the company and branch hierarchy within your organization.</p></section>
     {visible.map(({ tenant, companies, canCreate, canInvite, canManage }) => <section key={tenant.id}>
       <h2>{tenant.name}</h2>
