@@ -13,13 +13,39 @@ export async function createCompany(form: FormData) {
     throw new Error("Forbidden");
   const name = String(form.get("name") ?? "").trim();
   const code = String(form.get("code") ?? "").trim().toUpperCase();
-  if (name.length < 2 || name.length > 120 || !/^[A-Z0-9-]{2,20}$/.test(code))
+  const baseCurrency = String(form.get("baseCurrency") ?? "OMR").trim().toUpperCase();
+  if (name.length < 2 || name.length > 120 || !/^[A-Z0-9-]{2,20}$/.test(code) || !/^[A-Z]{3}$/.test(baseCurrency))
     throw new Error("Invalid company details");
   await db.$transaction(async (tx) => {
-    const company = await tx.company.create({ data: { tenantId, name, code } });
+    const company = await tx.company.create({ data: { tenantId, name, code, baseCurrency } });
     await tx.auditLog.create({
       data: { tenantId, actorId: user.id, action: "company.created", entity: "Company", entityId: company.id },
     });
+  });
+  redirect("/workspace");
+}
+
+export async function updateCompany(form: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/login");
+  const tenantId = String(form.get("tenantId") ?? "");
+  const companyId = String(form.get("companyId") ?? "");
+  if (!(await canAccess({ userId: user.id, tenantId, companyId, permission: "company:update" })))
+    throw new Error("Forbidden");
+  const name = String(form.get("name") ?? "").trim();
+  const legalName = String(form.get("legalName") ?? "").trim() || null;
+  const baseCurrency = String(form.get("baseCurrency") ?? "").trim().toUpperCase();
+  if (name.length < 2 || name.length > 120 || (legalName && legalName.length > 200) || !/^[A-Z]{3}$/.test(baseCurrency))
+    throw new Error("Invalid company settings");
+  await db.$transaction(async (tx) => {
+    const previous = await tx.company.findUnique({ where: { tenantId_id: { tenantId, id: companyId } },
+      select: { baseCurrency: true } });
+    if (!previous) throw new Error("Company not found");
+    await tx.company.update({ where: { tenantId_id: { tenantId, id: companyId } },
+      data: { name, legalName, baseCurrency } });
+    await tx.auditLog.create({ data: { tenantId, actorId: user.id, action: "company.updated",
+      entity: "Company", entityId: companyId,
+      metadata: { previousCurrency: previous.baseCurrency, baseCurrency } } });
   });
   redirect("/workspace");
 }

@@ -268,6 +268,22 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(orderBStatus, { tenantId, action: "start" }, owner.cookie)).status, 409);
     const visibleOrders = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
     assert.deepEqual(visibleOrders.data.orders.map((item) => item.id), [order.data.order.id]);
+    const companySettingsPath = `/api/companies/${companyA.data.company.id}`;
+    const settings = { tenantId, name: "Company A Updated", legalName: "Company A LLC", baseCurrency: "JOD" };
+    assert.equal((await patch(companySettingsPath, settings, accepted.cookie)).status, 403);
+    assert.equal((await patch(companySettingsPath, settings, manager.cookie)).status, 403);
+    assert.equal((await patch(companySettingsPath, { ...settings, baseCurrency: "INVALID" }, owner.cookie)).status, 400);
+    const updatedCompany = await patch(companySettingsPath, settings, owner.cookie);
+    assert.equal(updatedCompany.status, 200);
+    assert.equal(updatedCompany.data.company.baseCurrency, "JOD");
+    const nextQuote = await post("/api/quotes", { ...quoteBody, number: "QT-004" }, owner.cookie);
+    assert.equal(nextQuote.status, 201);
+    assert.equal(nextQuote.data.quote.currency, "JOD");
+    const previousOrder = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, owner.cookie);
+    assert.equal(previousOrder.data.orders.find((item) => item.id === order.data.order.id).currency, "OMR");
+    const companyC = await post("/api/companies", { tenantId, name: "Company C", code: "CMPC", baseCurrency: "JOD" }, owner.cookie);
+    assert.equal(companyC.status, 201);
+    assert.equal(companyC.data.company.baseCurrency, "JOD");
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);

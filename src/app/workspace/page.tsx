@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canAccess } from "@/lib/access";
-import { createBranch, createCompany, createDepartment } from "./actions";
+import { createBranch, createCompany, createDepartment, updateCompany } from "./actions";
 import { Logout } from "./logout";
 import { InviteForm } from "./invite-form";
 import { TeamPanel } from "./team-panel";
@@ -27,6 +27,7 @@ export default async function Workspace() {
           permission: "company:read",
         })))).some(Boolean),
       canCreateBranch: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "branch:create" }),
+      canUpdate: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "company:update" }),
       canCreateDepartment: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "department:create" }),
       branches: (await Promise.all(company.branches.map(async (branch) => ({
         branch,
@@ -49,11 +50,21 @@ export default async function Workspace() {
         <input type="hidden" name="tenantId" value={tenant.id} />
         <input name="name" placeholder="Company name" required minLength={2} maxLength={120} />
         <input name="code" placeholder="Code, e.g. FA01" required minLength={2} maxLength={20} />
+        <label>Currency <input name="baseCurrency" defaultValue="OMR" required pattern="[A-Z]{3}" maxLength={3} list="currencies" /></label>
         <button type="submit">Add company</button>
       </form>}
+      <datalist id="currencies"><option value="OMR" /><option value="JOD" /><option value="USD" /><option value="AED" /><option value="SAR" /></datalist>
       <div className="grid">{companies.map((company) => <article key={company.id}>
         <div className="icon">{company.code.slice(0, 2)}</div><h3>{company.name}</h3>
         <p>{company.code} · {company.baseCurrency}</p>
+        {company.canUpdate && <details><summary>Company settings</summary><form action={updateCompany} className="branchform">
+          <input type="hidden" name="tenantId" value={tenant.id} />
+          <input type="hidden" name="companyId" value={company.id} />
+          <label>Name <input name="name" defaultValue={company.name} required minLength={2} maxLength={120} /></label>
+          <label>Legal name <input name="legalName" defaultValue={company.legalName ?? ""} maxLength={200} /></label>
+          <label>Base currency <input name="baseCurrency" defaultValue={company.baseCurrency} required pattern="[A-Z]{3}" maxLength={3} list="currencies" /></label>
+          <button type="submit">Save settings</button>
+        </form></details>}
         <ul>{company.branches.map((branch) => <li key={branch.id}>{branch.name} ({branch.code})</li>)}</ul>
         {company.departments.length > 0 && <><h4>Departments</h4><ul>{company.departments.map((department) =>
           <li key={department.id}>{department.name}{department.branchId ? " · branch" : " · company"}</li>)}</ul></>}

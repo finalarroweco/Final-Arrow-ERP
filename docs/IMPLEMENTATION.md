@@ -32,4 +32,8 @@ Accepted quotes can create one internal sales order each. The order stores the c
 
 Sales orders start in NEW. Authorized managers can move them to IN_PROGRESS and then COMPLETED, or cancel a NEW or IN_PROGRESS order. Each transition records its time and actor in the audit log. Conditional updates reject repeated actions and keep completed or cancelled orders closed.
 
+## Company settings
+
+Owners can set a three-letter base currency when creating a company and update its name, legal name and currency later. New quotes copy the company's current currency. Quotes and sales orders already created keep their original currency as part of their records; changing company settings never converts historical amounts. Updates are audited and existing Owner roles receive the new permission through a migration.
+
 `/sales/quotes` creates draft customer quotes with one or more line items. Each quote uses its company's base currency, calculates line amounts and subtotal on the server with exact decimal arithmetic, and records an audit event. A branch quote may reference a customer from the same branch or a company-wide customer; a company-wide quote may reference only a company-wide customer. Read, create, update, send and decision permissions are checked independently, with branch-limited listings. A draft's notes and lines can be replaced atomically; the total is recalculated on the server, and conditional status checks prevent editing after sending. A draft can be marked sent, then accepted or rejected; the transition is conditional and audited so concurrent or repeated actions cannot change a closed quote. Marking sent records an internal status and does not send an email. Tax, discounts, PDF export and invoicing remain future work.
