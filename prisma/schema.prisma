@@ -19,6 +19,14 @@ enum MembershipStatus {
   SUSPENDED
 }
 
+enum LeadStage {
+  NEW
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
+}
+
 model Tenant {
   id          String       @id @default(uuid()) @db.Uuid
   name        String
@@ -47,6 +55,7 @@ model Company {
   scopes       AccessScope[]
   invitations  Invitation[]
   customers    Customer[]
+  leads        Lead[]
   @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@index([tenantId])
@@ -65,6 +74,7 @@ model Branch {
   scopes      AccessScope[]
   invitations Invitation[]
   customers   Customer[]
+  leads       Lead[]
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId])
@@ -220,8 +230,34 @@ model Customer {
   createdBy   String    @db.Uuid
   company     Company   @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   branch      Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  convertedLeads Lead[]
   @@unique([companyId, code])
   @@unique([tenantId, id])
+  @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId, branchId])
   @@index([tenantId, companyId, displayName])
+}
+
+model Lead {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @db.Uuid
+  companyId           String    @db.Uuid
+  branchId            String?   @db.Uuid
+  code                String
+  displayName         String
+  email               String?
+  phone               String?
+  notes               String?
+  stage               LeadStage @default(NEW)
+  convertedCustomerId String?   @db.Uuid
+  convertedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  createdBy           String    @db.Uuid
+  company             Company   @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch              Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  convertedCustomer   Customer? @relation(fields: [tenantId, companyId, convertedCustomerId], references: [tenantId, companyId, id], onDelete: Restrict)
+  @@unique([companyId, code])
+  @@unique([tenantId, id])
+  @@index([tenantId, companyId, branchId, stage])
 }

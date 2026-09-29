@@ -142,6 +142,26 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const archivedCustomers = await get(`/api/customers?tenantId=${tenantId}&companyId=${companyA.data.company.id}&archived=true`, manager.cookie);
     assert.deepEqual(archivedCustomers.data.customers.map((c) => c.id), [managerCustomer.data.customer.id]);
 
+    const leadA = await post("/api/leads", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchA.data.branch.id, code: "LEAD-A", displayName: "Branch A Lead" }, owner.cookie);
+    const leadB = await post("/api/leads", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchB.data.branch.id, code: "LEAD-B", displayName: "Branch B Lead" }, owner.cookie);
+    assert.equal(leadA.status, 201);
+    assert.equal(leadB.status, 201);
+    const viewerLeads = await get(`/api/leads?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.equal(viewerLeads.status, 200);
+    assert.deepEqual(viewerLeads.data.leads.map((lead) => lead.id), [leadA.data.lead.id]);
+    assert.equal((await patch(`/api/leads/${leadA.data.lead.id}`, { tenantId, stage: "QUALIFIED" }, accepted.cookie)).status, 403);
+    assert.equal((await post(`/api/leads/${leadB.data.lead.id}/convert`, { tenantId, customerCode: "LEAD-B" }, manager.cookie)).status, 403);
+    assert.equal((await patch(`/api/leads/${leadA.data.lead.id}`, { tenantId, stage: "QUALIFIED" }, manager.cookie)).status, 200);
+    const converted = await post(`/api/leads/${leadA.data.lead.id}/convert`, { tenantId, customerCode: "LEAD-A" }, manager.cookie);
+    assert.equal(converted.status, 201);
+    assert.equal(converted.data.customer.displayName, "Branch A Lead");
+    assert.equal((await post(`/api/leads/${leadA.data.lead.id}/convert`, { tenantId, customerCode: "LEAD-A" }, manager.cookie)).status, 409);
+    assert.equal((await patch(`/api/leads/${leadA.data.lead.id}`, { tenantId, stage: "LOST" }, manager.cookie)).status, 409);
+    const convertedList = await get(`/api/customers?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, manager.cookie);
+    assert.equal(convertedList.data.customers.filter((customer) => customer.id === converted.data.customer.id).length, 1);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);

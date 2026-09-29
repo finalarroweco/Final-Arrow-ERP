@@ -34,7 +34,7 @@ export default async function CRMPage() {
       canArchiveCompanyWide: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "customer:archive" }),
     };
   }))).filter((option): option is CompanyOption => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><a href="/workspace">Workspace</a></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><a href="/crm/leads">Leads</a><a href="/workspace">Workspace</a></header>
     <section className="hero"><p>CRM</p><h1>Customers.</h1><p className="sub">Company and branch customer records with scoped access.</p></section>
     <CrmWorkspace options={options} />
   </main>;
