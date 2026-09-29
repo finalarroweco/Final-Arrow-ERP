@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+type Permissions = { canCreate: boolean; canSend: boolean; canDecide: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string;
-  canCreateCompanyWide: boolean; branches: { id: string; name: string; canCreate: boolean }[] };
+  companyPermissions: Permissions; branches: ({ id: string; name: string } & Permissions)[] };
 type Customer = { id: string; displayName: string; branchId: string | null };
 type Quote = { id: string; number: string; status: string; currency: string; subtotal: string;
   branchId: string | null; customer: { displayName: string }; lines: { description: string; quantity: number;
@@ -48,7 +49,7 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
   }, [options]);
   useEffect(() => { void load(selected); }, [load, selected]);
   const createBranches = option?.branches.filter((branch) => branch.canCreate) ?? [];
-  const effectiveBranchId = branchId || (!option?.canCreateCompanyWide ? createBranches[0]?.id ?? "" : "");
+  const effectiveBranchId = branchId || (!option?.companyPermissions.canCreate ? createBranches[0]?.id ?? "" : "");
   const availableCustomers = customers.filter((customer) => !customer.branchId || customer.branchId === effectiveBranchId);
   async function create(form: FormData) {
     if (!option) return;
@@ -64,16 +65,28 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
       if (response.ok) { setLines([{ description: "", quantity: "1", unitPrice: "0.000" }]); await load(selected); }
     } finally { setBusy(false); }
   }
+  async function transition(quote: Quote, action: "send" | "accept" | "reject") {
+    if (!option) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`/api/quotes/${quote.id}/status`, { method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: option.tenantId, action }) });
+      const data = await response.json();
+      setMessage(response.ok ? `Quote marked ${data.quote.status.toLowerCase()}` : data.error ?? "Action failed");
+      if (response.ok) await load(selected, page);
+    } finally { setBusy(false); }
+  }
   if (!option) return <section><p>No accessible companies yet.</p></section>;
   return <section>
     <label>Company <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setBranchId(""); setMessage(""); }}>
       {options.map((item, index) => <option key={`${item.tenantId}:${item.companyId}`} value={index}>{item.label}</option>)}
     </select></label>
-    {(option.canCreateCompanyWide || createBranches.length > 0) && <form action={create} className="quote-form">
+    {(option.companyPermissions.canCreate || createBranches.length > 0) && <form action={create} className="quote-form">
       <h2>New quote</h2>
       <label>Number <input name="number" required pattern="[A-Z0-9-]{2,30}" placeholder="QT-001" /></label>
       <label>Branch <select value={effectiveBranchId} onChange={(event) => setBranchId(event.target.value)}>
-        {option.canCreateCompanyWide && <option value="">Company wide</option>}
+        {option.companyPermissions.canCreate && <option value="">Company wide</option>}
         {createBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
       </select></label>
       <label>Customer <select name="customerId" required defaultValue="" key={`${selected}:${effectiveBranchId}:${customers.length}`}>
@@ -98,10 +111,19 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
     {message && <p role="status">{message}</p>}
     <h2>Quotes</h2>
     {quotes.length === 0 && <p>No quotes on this page.</p>}
-    <div className="customer-list">{quotes.map((quote) => <article key={quote.id}>
+    <div className="customer-list">{quotes.map((quote) => {
+      const permissions = quote.branchId ? option.branches.find((branch) => branch.id === quote.branchId) : option.companyPermissions;
+      return <article key={quote.id}>
       <div><h3>{quote.number} · {quote.customer.displayName}</h3><p>{quote.status} · {quote.subtotal} {quote.currency}</p>
-        <ul>{quote.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul></div>
-    </article>)}</div>
+        <ul>{quote.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
+        {quote.status === "DRAFT" && permissions?.canSend && <button disabled={busy}
+          onClick={() => void transition(quote, "send")}>Mark as sent</button>}
+        {quote.status === "SENT" && permissions?.canDecide && <div className="quote-actions">
+          <button disabled={busy} onClick={() => void transition(quote, "accept")}>Mark accepted</button>
+          <button disabled={busy} onClick={() => void transition(quote, "reject")}>Mark rejected</button>
+        </div>}
+      </div>
+    </article>})}</div>
     {page > 0 && <button onClick={() => void load(selected, page - 1)}>Previous</button>}
     {nextPage !== null && <button onClick={() => void load(selected, nextPage)}>Next</button>}
   </section>;

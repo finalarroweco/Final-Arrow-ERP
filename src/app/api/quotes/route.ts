@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const quotes = await db.quote.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     ...(branches === null ? {} : { branchId: { in: branches } }) },
-    select: { id: true, number: true, status: true, currency: true, subtotal: true,
+    select: { id: true, number: true, status: true, sentAt: true, decidedAt: true, currency: true, subtotal: true,
       notes: true, branchId: true, createdAt: true,
       customer: { select: { id: true, displayName: true } },
       lines: { select: { description: true, quantity: true, unitPrice: true, amount: true, position: true },

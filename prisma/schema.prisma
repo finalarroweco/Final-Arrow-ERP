@@ -280,6 +280,8 @@ model Quote {
   customerId  String      @db.Uuid
   number      String
   status      QuoteStatus @default(DRAFT)
+  sentAt      DateTime?
+  decidedAt   DateTime?
   currency    String      @db.VarChar(3)
   subtotal    Decimal     @db.Decimal(18, 3)
   notes       String?
