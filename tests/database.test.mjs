@@ -49,6 +49,15 @@ test("database enforces tenant hierarchy and scope shape", async () => {
     subtotal: "1.000", createdBy: randomUUID() } }));
   await assert.rejects(db.inventoryItem.create({ data: { tenantId: a.id, companyId: companyA.id,
     branchId: branchB.id, sku: "BAD-ITEM", name: "Wrong branch item", unit: "EA", createdBy: randomUUID() } }));
+  const stockItem = await db.inventoryItem.create({ data: { tenantId: a.id, companyId: companyA.id,
+    sku: "STOCK-A", name: "Stock Item", unit: "EA", createdBy: randomUUID() } });
+  await assert.rejects(db.stockBalance.create({ data: { tenantId: b.id, companyId: companyB.id,
+    branchId: branchB.id, itemId: stockItem.id } }));
+  const stockBalance = await db.stockBalance.create({ data: { tenantId: a.id, companyId: companyA.id,
+    branchId: branchA.id, itemId: stockItem.id } });
+  await assert.rejects(db.stockBalance.update({ where: { id: stockBalance.id }, data: { quantity: "-1.000" } }));
+  await assert.rejects(db.stockMovement.create({ data: { tenantId: a.id, balanceId: stockBalance.id,
+    type: "ADJUSTMENT_OUT", delta: "1.000", reason: "Invalid direction", actorId: randomUUID() } }));
   await assert.rejects(db.quote.create({
     data: { tenantId: b.id, companyId: companyB.id, customerId: customer.id,
       number: "BAD-Q", currency: "OMR", subtotal: "1.000", createdBy: randomUUID() },

@@ -48,6 +48,11 @@ enum PurchaseOrderStatus {
   CANCELLED
 }
 
+enum StockMovementType {
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+}
+
 model Tenant {
   id          String       @id @default(uuid()) @db.Uuid
   name        String
@@ -82,6 +87,7 @@ model Company {
   suppliers      Supplier[]
   purchaseOrders PurchaseOrder[]
   inventoryItems InventoryItem[]
+  stockBalances  StockBalance[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -107,6 +113,7 @@ model Branch {
   suppliers      Supplier[]
   purchaseOrders PurchaseOrder[]
   inventoryItems InventoryItem[]
+  stockBalances  StockBalance[]
 
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
@@ -310,25 +317,59 @@ model Supplier {
 }
 
 model InventoryItem {
-  id          String    @id @default(uuid()) @db.Uuid
-  tenantId    String    @db.Uuid
-  companyId   String    @db.Uuid
-  branchId    String?   @db.Uuid
+  id          String         @id @default(uuid()) @db.Uuid
+  tenantId    String         @db.Uuid
+  companyId   String         @db.Uuid
+  branchId    String?        @db.Uuid
   sku         String
   name        String
-  unit        String    @db.VarChar(16)
+  unit        String         @db.VarChar(16)
   description String?
   archivedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  createdBy   String    @db.Uuid
-  company     Company   @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
-  branch      Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  createdBy   String         @db.Uuid
+  company     Company        @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch      Branch?        @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  balances    StockBalance[]
 
   @@unique([companyId, sku])
   @@unique([tenantId, id])
+  @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId, branchId])
   @@index([tenantId, companyId, name])
+}
+
+model StockBalance {
+  id        String          @id @default(uuid()) @db.Uuid
+  tenantId  String          @db.Uuid
+  companyId String          @db.Uuid
+  branchId  String          @db.Uuid
+  itemId    String          @db.Uuid
+  quantity  Decimal         @default(0) @db.Decimal(18, 3)
+  updatedAt DateTime        @updatedAt
+  company   Company         @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch    Branch          @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  item      InventoryItem   @relation(fields: [tenantId, companyId, itemId], references: [tenantId, companyId, id], onDelete: Restrict)
+  movements StockMovement[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, companyId, branchId, itemId])
+  @@index([tenantId, companyId, branchId])
+}
+
+model StockMovement {
+  id        String            @id @default(uuid()) @db.Uuid
+  tenantId  String            @db.Uuid
+  balanceId String            @db.Uuid
+  type      StockMovementType
+  delta     Decimal           @db.Decimal(18, 3)
+  reason    String
+  actorId   String            @db.Uuid
+  createdAt DateTime          @default(now())
+  balance   StockBalance      @relation(fields: [tenantId, balanceId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, balanceId, createdAt])
 }
 
 model PurchaseOrder {

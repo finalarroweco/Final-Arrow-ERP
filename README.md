@@ -36,6 +36,6 @@ Tenant → Company → Branch → Department → User
 - AI service layer
 
 ## Project Status
-The current slice includes scoped workspaces, team permissions, CRM, sales quotes and orders, suppliers, purchase orders and an inventory item catalog. The public `/erp-preview.html` page is a sample-data interface walkthrough; it does not write records. Live workflows require PostgreSQL and a configured deployment. Stock movements, finance, HR and the other modules shown on the home page are planned.
+The current slice includes scoped workspaces, team permissions, CRM, sales quotes and orders, suppliers, purchase orders, an inventory item catalog and manual branch stock adjustments. The public `/erp-preview.html` page is a sample-data interface walkthrough; it does not write records. Live workflows require PostgreSQL and a configured deployment. Purchase receipts linked to stock, finance, HR and the other modules shown on the home page are planned.
 
 See [implementation notes](docs/IMPLEMENTATION.md) for local setup and current limits.

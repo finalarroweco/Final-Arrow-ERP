@@ -381,6 +381,29 @@ test("invitation is single-use and a branch viewer sees only their company and b
       [itemA.data.item.id]);
     assert.equal((await patch(itemPath, { tenantId, action: "archive", archived: false }, manager.cookie)).status, 200);
 
+    const stockPath = `/api/inventory/stock?tenantId=${tenantId}&companyId=${companyA.data.company.id}&branchId=${branchA.data.branch.id}`;
+    assert.equal((await get(stockPath, accepted.cookie)).status, 200);
+    assert.equal((await get(stockPath.replace(branchA.data.branch.id, branchB.data.branch.id), accepted.cookie)).status, 403);
+    const adjust = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      itemId: itemA.data.item.id, action: "in", quantity: "5.500", reason: "Opening count" };
+    assert.equal((await post("/api/inventory/stock", adjust, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/inventory/stock", { ...adjust, branchId: branchB.data.branch.id }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/inventory/stock", { ...adjust, itemId: itemB.data.item.id }, manager.cookie)).status, 409);
+    assert.equal((await post("/api/inventory/stock", { ...adjust, quantity: "0" }, manager.cookie)).status, 400);
+    assert.equal((await post("/api/inventory/stock", { ...adjust, action: "out" }, manager.cookie)).status, 409);
+    assert.equal((await post("/api/inventory/stock", adjust, manager.cookie)).status, 201);
+    assert.equal((await post("/api/inventory/stock", { ...adjust, itemId: sharedItem.data.item.id,
+      quantity: "1.250" }, manager.cookie)).status, 201);
+    assert.equal((await post("/api/inventory/stock", { ...adjust, action: "out", quantity: "2.125",
+      reason: "Damaged items" }, manager.cookie)).status, 201);
+    assert.equal((await post("/api/inventory/stock", { ...adjust, action: "out", quantity: "4.000",
+      reason: "Overdraw" }, manager.cookie)).status, 409);
+    const stock = await get(stockPath, accepted.cookie);
+    assert.equal(stock.status, 200);
+    assert.equal(stock.data.balances.find((balance) => balance.itemId === itemA.data.item.id).quantity, "3.375");
+    assert.equal(stock.data.balances.find((balance) => balance.itemId === sharedItem.data.item.id).quantity, "1.25");
+    assert.equal(stock.data.movements.length, 3);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);
