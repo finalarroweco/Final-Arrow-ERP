@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   const actor = await currentUser();
   const tokenHash = createHash("sha256").update(parsed.data.token).digest("hex");
   const invitation = await db.invitation.findUnique({ where: { tokenHash } });
-  if (!invitation || invitation.acceptedAt || invitation.expiresAt <= new Date())
+  if (!invitation || invitation.acceptedAt || invitation.revokedAt || invitation.expiresAt <= new Date())
     return NextResponse.json({ error: "Invitation expired or used" }, { status: 410 });
   if (actor && actor.email !== invitation.email)
     return NextResponse.json({ error: "Sign in with the invited email" }, { status: 403 });
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   try {
     const userId = await db.$transaction(async (tx) => {
       const claimed = await tx.invitation.updateMany({
-        where: { id: invitation.id, acceptedAt: null, expiresAt: { gt: new Date() } },
+        where: { id: invitation.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
         data: { acceptedAt: new Date() },
       });
       if (claimed.count !== 1) throw new Error("Invitation already used");

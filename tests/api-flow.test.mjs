@@ -21,6 +21,14 @@ async function get(path, cookie) {
   return { status: response.status, data: await response.json() };
 }
 
+async function patch(path, body, cookie) {
+  const response = await fetch(origin + path, {
+    method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify(body),
+  });
+  return { status: response.status, data: await response.json() };
+}
+
 test("invitation is single-use and a branch viewer sees only their company and branch", { timeout: 90000 }, async () => {
   const server = spawn("./node_modules/.bin/next", ["start", "-p", "3217"], {
     env: { ...process.env, ALLOW_REGISTRATION: "true" },
@@ -80,6 +88,40 @@ test("invitation is single-use and a branch viewer sees only their company and b
       tenantId, companyId: companyB.data.company.id, name: "No access", code: "DENY",
     }, accepted.cookie);
     assert.equal(forbidden.status, 403);
+
+    const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
+    assert.equal(viewerTeam.status, 403);
+    const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);
+    assert.equal(team.status, 200);
+    const viewer = team.data.members.find((member) => member.email === email);
+    const ownerMember = team.data.members.find((member) => member.email !== email);
+    assert.ok(viewer);
+    const selfSuspend = await patch(`/api/team/${ownerMember.id}`, { tenantId, status: "SUSPENDED" }, owner.cookie);
+    assert.equal(selfSuspend.status, 403);
+    const suspend = await patch(`/api/team/${viewer.id}`, { tenantId, status: "SUSPENDED" }, owner.cookie);
+    assert.equal(suspend.status, 200);
+    const blocked = await get(`/api/branches?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.equal(blocked.status, 403);
+    const reactivate = await patch(`/api/team/${viewer.id}`, { tenantId, status: "ACTIVE" }, owner.cookie);
+    assert.equal(reactivate.status, 200);
+    const restored = await get(`/api/branches?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.equal(restored.status, 200);
+
+    const pending = await post("/api/invitations", {
+      tenantId, email: `revoked-${suffix()}@example.invalid`, role: "Viewer",
+      scope: { type: "COMPANY", companyId: companyB.data.company.id },
+    }, owner.cookie);
+    assert.equal(pending.status, 201);
+    const pendingTeam = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);
+    const invite = pendingTeam.data.invitations.find((item) => item.email.startsWith("revoked-"));
+    assert.ok(invite);
+    const revoked = await fetch(origin + `/api/invitations/${invite.id}?tenantId=${tenantId}`, {
+      method: "DELETE", headers: { Cookie: owner.cookie },
+    });
+    assert.equal(revoked.status, 200);
+    const revokedToken = pending.data.path.split("/").at(-1);
+    const rejected = await post("/api/invitations/accept", { token: revokedToken, name: "Revoked", password });
+    assert.equal(rejected.status, 410);
   } finally {
     server.kill("SIGTERM");
   }

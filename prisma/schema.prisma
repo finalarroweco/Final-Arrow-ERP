@@ -190,6 +190,7 @@ model Invitation {
   branchId   String?   @db.Uuid
   expiresAt  DateTime
   acceptedAt DateTime?
+  revokedAt  DateTime?
   createdAt  DateTime  @default(now())
   createdBy  String    @db.Uuid
   tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)

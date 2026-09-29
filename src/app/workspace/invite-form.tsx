@@ -24,6 +24,7 @@ export function InviteForm({ tenantId, companies }: { tenantId: string; companie
     if (!response.ok) { setError("Could not create the invitation. Check the selected scope."); return; }
     const result: { path: string } = await response.json();
     setLink(window.location.origin + result.path);
+    window.dispatchEvent(new Event("erp:invitation-created"));
   }
 
   return <section className="invite-panel">

@@ -5,6 +5,7 @@ import { canAccess } from "@/lib/access";
 import { createBranch, createCompany, createDepartment } from "./actions";
 import { Logout } from "./logout";
 import { InviteForm } from "./invite-form";
+import { TeamPanel } from "./team-panel";
 
 export default async function Workspace() {
   const user = await currentUser();
@@ -17,6 +18,7 @@ export default async function Workspace() {
     tenant,
     canCreate: await canAccess({ userId: user.id, tenantId: tenant.id, permission: "company:create" }),
     canInvite: await canAccess({ userId: user.id, tenantId: tenant.id, permission: "user:invite" }),
+    canManage: await canAccess({ userId: user.id, tenantId: tenant.id, permission: "user:manage" }),
     companies: (await Promise.all(tenant.companies.map(async (company) => ({
       ...company,
       allowed: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "company:read" }) ||
@@ -41,7 +43,7 @@ export default async function Workspace() {
   })));
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="account">{user.name} <Logout /></div></header>
     <section className="hero"><p>WORKSPACE</p><h1>Your companies.</h1><p className="sub">Manage the company and branch hierarchy within your organization.</p></section>
-    {visible.map(({ tenant, companies, canCreate, canInvite }) => <section key={tenant.id}>
+    {visible.map(({ tenant, companies, canCreate, canInvite, canManage }) => <section key={tenant.id}>
       <h2>{tenant.name}</h2>
       {canCreate && <form action={createCompany} className="formrow">
         <input type="hidden" name="tenantId" value={tenant.id} />
@@ -76,6 +78,7 @@ export default async function Workspace() {
       {canInvite && <InviteForm tenantId={tenant.id} companies={companies.map((company) => ({
         id: company.id, name: company.name, branches: company.branches.map((branch) => ({ id: branch.id, name: branch.name })),
       }))} />}
+      {canManage && <TeamPanel tenantId={tenant.id} currentUserId={user.id} />}
     </section>)}
   </main>;
 }

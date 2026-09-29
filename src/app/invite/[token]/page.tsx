@@ -13,7 +13,7 @@ export default async function InvitationPage({ params }: { params: Promise<{ tok
   const invitation = await db.invitation.findUnique({
     where: { tokenHash }, include: { tenant: { select: { name: true } }, role: { select: { name: true } } },
   });
-  if (!invitation || invitation.acceptedAt || invitation.expiresAt <= new Date()) notFound();
+  if (!invitation || invitation.acceptedAt || invitation.revokedAt || invitation.expiresAt <= new Date()) notFound();
   const actor = await currentUser();
   const existing = await db.user.findUnique({ where: { email: invitation.email }, select: { id: true } });
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong></header>

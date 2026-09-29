@@ -36,6 +36,6 @@ Tenant → Company → Branch → Department → User
 - AI service layer
 
 ## Project Status
-Foundation phase: workspace registration, login, tenant-aware company, branch and department creation, scoped team invitations, permission checks, and audit events are implemented. The application modules shown on the home page are planned.
+Foundation phase: workspace registration, login, tenant-aware company, branch and department creation, scoped team invitations, membership suspension, invitation revocation, permission checks, and audit events are implemented. The application modules shown on the home page are planned.
 
 See [implementation notes](docs/IMPLEMENTATION.md) for local setup and current limits.

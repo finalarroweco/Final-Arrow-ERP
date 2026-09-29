@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       const owner = await tx.role.create({ data: { tenantId: tenant.id, name: "Owner" } });
       const manager = await tx.role.create({ data: { tenantId: tenant.id, name: "Manager" } });
       const viewer = await tx.role.create({ data: { tenantId: tenant.id, name: "Viewer" } });
-      for (const key of ["company:read", "company:create", "branch:read", "branch:create", "department:read", "department:create", "user:invite"]) {
+      for (const key of ["company:read", "company:create", "branch:read", "branch:create", "department:read", "department:create", "user:invite", "user:manage"]) {
         await tx.permission.upsert({ where: { key }, update: {}, create: { key } });
         await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: owner.id, permissionKey: key } });
         if (key.endsWith(":read") || key === "branch:create" || key === "department:create")
