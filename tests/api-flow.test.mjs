@@ -162,6 +162,29 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const convertedList = await get(`/api/customers?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, manager.cookie);
     assert.equal(convertedList.data.customers.filter((customer) => customer.id === converted.data.customer.id).length, 1);
 
+    const quoteBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      customerId: customerA.data.customer.id, number: "QT-001",
+      lines: [{ description: "Consulting", quantity: 2, unitPrice: "1.250" },
+        { description: "Implementation", quantity: 1, unitPrice: "3.000" }] };
+    assert.equal((await post("/api/quotes", quoteBody, accepted.cookie)).status, 403);
+    const wrongCustomerQuote = await post("/api/quotes", { ...quoteBody,
+      customerId: customerB.data.customer.id }, manager.cookie);
+    assert.equal(wrongCustomerQuote.status, 409);
+    const quote = await post("/api/quotes", quoteBody, manager.cookie);
+    assert.equal(quote.status, 201);
+    assert.equal(quote.data.quote.subtotal, "5.5");
+    assert.equal(quote.data.quote.currency, "OMR");
+    assert.equal(quote.data.quote.lines[0].amount, "2.5");
+    assert.equal((await post("/api/quotes", quoteBody, manager.cookie)).status, 409);
+    const visibleQuotes = await get(`/api/quotes?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.equal(visibleQuotes.status, 200);
+    assert.deepEqual(visibleQuotes.data.quotes.map((item) => item.id), [quote.data.quote.id]);
+    const quoteB = await post("/api/quotes", { ...quoteBody, branchId: branchB.data.branch.id,
+      customerId: customerB.data.customer.id, number: "QT-002" }, owner.cookie);
+    assert.equal(quoteB.status, 201);
+    const restrictedQuotes = await get(`/api/quotes?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.deepEqual(restrictedQuotes.data.quotes.map((item) => item.id), [quote.data.quote.id]);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);

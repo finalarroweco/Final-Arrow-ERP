@@ -22,6 +22,10 @@ This milestone includes password authentication, hashed server sessions, owner p
 
 Email verification, password reset, login throttling, custom roles, financial operations and production deployment remain outstanding. Registration is disabled by default in production; `ALLOW_REGISTRATION=true` opens it and should be used only after abuse controls and account recovery exist.
 
-## CRM customer slice
+## CRM customer and lead slice
 
-Customers belong to one company and optionally one branch. Company-scoped roles see its customers; a branch-scoped role sees only customers assigned to that branch. Codes are unique within a company. Create, update, archive and restore are checked on the server and recorded in the audit log. The `/crm` screen provides paged lists of active and archived records. Leads, opportunities, contacts, merging duplicate customers, importing, sales workflows and customer portals are future work.
+Customers belong to one company and optionally one branch. Company-scoped roles see its customers; a branch-scoped role sees only customers assigned to that branch. Codes are unique within a company. Create, update, archive and restore are checked on the server and recorded in the audit log. The `/crm` screen provides paged lists of active and archived records. `/crm/leads` tracks scoped leads through NEW, QUALIFIED, PROPOSAL, WON and LOST. Conversion to a customer is an atomic, one-time transaction that requires both lead conversion and customer creation permissions. Contacts, duplicate merging, importing and customer portals remain future work.
+
+## Sales quote slice
+
+`/sales/quotes` creates draft customer quotes with one or more line items. Each quote uses its company's base currency, calculates line amounts and subtotal on the server with exact decimal arithmetic, and records an audit event. A branch quote may reference a customer from the same branch or a company-wide customer; a company-wide quote may reference only a company-wide customer. Read and create permissions are checked independently, with branch-limited listings. Editing, status transitions, tax, discounts, PDF export and invoicing remain future work.

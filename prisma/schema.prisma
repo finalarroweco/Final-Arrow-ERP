@@ -27,6 +27,13 @@ enum LeadStage {
   LOST
 }
 
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
 model Tenant {
   id          String       @id @default(uuid()) @db.Uuid
   name        String
@@ -56,6 +63,7 @@ model Company {
   invitations  Invitation[]
   customers    Customer[]
   leads        Lead[]
+  quotes       Quote[]
   @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@index([tenantId])
@@ -75,6 +83,7 @@ model Branch {
   invitations Invitation[]
   customers   Customer[]
   leads       Lead[]
+  quotes      Quote[]
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId])
@@ -231,6 +240,7 @@ model Customer {
   company     Company   @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   branch      Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   convertedLeads Lead[]
+  quotes      Quote[]
   @@unique([companyId, code])
   @@unique([tenantId, id])
   @@unique([tenantId, companyId, id])
@@ -260,4 +270,41 @@ model Lead {
   @@unique([companyId, code])
   @@unique([tenantId, id])
   @@index([tenantId, companyId, branchId, stage])
+}
+
+model Quote {
+  id          String      @id @default(uuid()) @db.Uuid
+  tenantId    String      @db.Uuid
+  companyId   String      @db.Uuid
+  branchId    String?     @db.Uuid
+  customerId  String      @db.Uuid
+  number      String
+  status      QuoteStatus @default(DRAFT)
+  currency    String      @db.VarChar(3)
+  subtotal    Decimal     @db.Decimal(18, 3)
+  notes       String?
+  createdBy   String      @db.Uuid
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  company     Company     @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch      Branch?     @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  customer    Customer    @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
+  lines       QuoteLine[]
+  @@unique([companyId, number])
+  @@unique([tenantId, id])
+  @@index([tenantId, companyId, branchId, createdAt])
+}
+
+model QuoteLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  quoteId     String   @db.Uuid
+  position    Int
+  description String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(18, 3)
+  amount      Decimal  @db.Decimal(18, 3)
+  quote       Quote    @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
+  @@unique([quoteId, position])
+  @@index([tenantId, quoteId])
 }
