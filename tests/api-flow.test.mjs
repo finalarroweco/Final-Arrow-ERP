@@ -7,18 +7,25 @@ const origin = "http://127.0.0.1:3217";
 const suffix = () => randomUUID().slice(0, 8);
 const password = "Long-test-password-2026";
 
+async function jsonResponse(response, path) {
+  const body = await response.text();
+  assert.ok(body, `${path} returned empty body (HTTP ${response.status})`);
+  try { return JSON.parse(body); }
+  catch { throw new Error(`${path} returned non-JSON body (HTTP ${response.status}): ${body.slice(0, 250)}`); }
+}
+
 async function post(path, body, cookie) {
   const response = await fetch(origin + path, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) },
     body: JSON.stringify(body),
   });
-  return { status: response.status, data: await response.json(), cookie: response.headers.get("set-cookie")?.split(";")[0] };
+  return { status: response.status, data: await jsonResponse(response, path), cookie: response.headers.get("set-cookie")?.split(";")[0] };
 }
 
 async function get(path, cookie) {
   const response = await fetch(origin + path, { headers: { Cookie: cookie } });
-  return { status: response.status, data: await response.json() };
+  return { status: response.status, data: await jsonResponse(response, path) };
 }
 
 async function patch(path, body, cookie) {
@@ -26,13 +33,13 @@ async function patch(path, body, cookie) {
     method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie },
     body: JSON.stringify(body),
   });
-  return { status: response.status, data: await response.json() };
+  return { status: response.status, data: await jsonResponse(response, path) };
 }
 
 test("invitation is single-use and a branch viewer sees only their company and branch", { timeout: 90000 }, async () => {
   const server = spawn("./node_modules/.bin/next", ["start", "-p", "3217"], {
     env: { ...process.env, ALLOW_REGISTRATION: "true" },
-    stdio: "ignore",
+    stdio: ["ignore", "ignore", "inherit"],
   });
   try {
     let ready = false;
