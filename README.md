@@ -36,6 +36,6 @@ Tenant → Company → Branch → Department → User
 - AI service layer
 
 ## Project Status
-Foundation phase: workspace registration, login, tenant-aware company, branch and department creation, scoped team invitations, membership suspension, invitation revocation, permission checks, and audit events are implemented. The first CRM slice supports company/branch customer records, editing and archiving. Other application modules shown on the home page are planned.
+The current slice includes scoped workspaces, team permissions, CRM, sales quotes and orders, suppliers and purchase orders. The public `/erp-preview.html` page is a sample-data interface walkthrough; it does not write records. Live workflows require PostgreSQL and a configured deployment. Finance, inventory, HR and the other modules shown on the home page are planned.
 
 See [implementation notes](docs/IMPLEMENTATION.md) for local setup and current limits.

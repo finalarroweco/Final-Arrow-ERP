@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Final Arrow ERP · Interface Preview</title>
+  <style>
+    :root{font-family:Arial,Helvetica,sans-serif;color:#202124;background:#f5f5f6}
+    *{box-sizing:border-box}body{margin:0}button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
+    .shell{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}
+    aside{background:#171719;color:#fff;padding:28px 18px;display:flex;flex-direction:column;gap:28px}
+    .brand{font-weight:900;letter-spacing:.12em;font-size:17px;padding:4px 12px}.brand b{color:#eb2424}.brand small{display:block;font-size:9px;color:#a9a9ab;letter-spacing:.21em;margin-top:6px}
+    nav{display:grid;gap:6px}nav button{border:0;background:transparent;color:#bbb;text-align:left;width:100%;padding:12px 14px;border-radius:10px;font-size:14px}nav button.active,nav button:hover{background:#302022;color:#fff}nav button.active{border-left:3px solid #dc1515}nav span{display:inline-block;width:28px;color:#f15151;font-weight:bold}
+    .sidefoot{margin-top:auto;border-top:1px solid #38383a;padding:18px 12px 0;font-size:12px;color:#aaa;line-height:1.6}
+    main{min-width:0;padding:0 38px 55px}.top{height:84px;border-bottom:1px solid #e5e5e7;display:flex;justify-content:space-between;align-items:center;gap:16px}.crumb{font-size:13px;color:#777}.account{display:flex;align-items:center;gap:12px;font-size:13px}.avatar{background:#dc1515;color:#fff;border-radius:50%;width:35px;height:35px;display:grid;place-items:center;font-weight:bold}
+    .notice{background:#fff2dc;border:1px solid #f0d8a4;border-radius:10px;margin:24px 0;padding:12px 16px;color:#715018;font-size:13px}
+    .view{display:none}.view.active{display:block}.eyebrow{font-size:11px;letter-spacing:.18em;color:#d60000;font-weight:bold;margin:34px 0 9px}h1{font-size:clamp(30px,4vw,46px);margin:0 0 9px;letter-spacing:-.04em}p.intro{color:#777;margin:0 0 30px;font-size:15px;line-height:1.5}
+    .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:20px 0}.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{background:#fff;border:1px solid #e2e2e4;border-radius:8px;padding:10px 13px;color:#424242;font-size:13px}.primary{background:#d60000;color:#fff;border:0;border-radius:9px;padding:11px 16px;font-weight:bold;font-size:13px}
+    .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:24px 0}.card,.panel{background:white;border:1px solid #e9e9eb;border-radius:14px;box-shadow:0 5px 18px #15151505}.card{padding:22px}.card small{font-size:12px;color:#777}.card strong{display:block;font-size:32px;margin:16px 0 6px;letter-spacing:-.04em}.card span{font-size:12px;color:#b13a3a}.panel{padding:22px;margin:18px 0}.panel h2{font-size:18px;margin:0 0 18px}.two{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}.row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px 0;border-bottom:1px solid #eee;font-size:13px}.row:last-child{border:0}.row strong{display:block;font-size:14px}.row small{display:block;color:#888;margin-top:5px}.metric{font-weight:bold;color:#222}.bar{height:7px;background:#eee;border-radius:20px;margin-top:8px;overflow:hidden}.bar i{display:block;background:#d60000;height:100%;border-radius:20px}
+    .tablewrap{background:#fff;border:1px solid #e9e9eb;border-radius:14px;overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:680px;font-size:13px}th{text-align:left;background:#fafafa;color:#777;font-size:11px;text-transform:uppercase;letter-spacing:.08em}th,td{padding:17px 18px;border-bottom:1px solid #eee}tr:last-child td{border-bottom:0}td:first-child{font-weight:bold}.badge{display:inline-block;padding:6px 9px;background:#f4f4f5;border-radius:7px;font-size:11px;color:#555}.badge.green{background:#e6f5eb;color:#277647}.badge.red{background:#fff0f0;color:#ba3535}.badge.amber{background:#fff3df;color:#996314}
+    .companygrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.company{padding:22px;background:white;border:1px solid #e9e9eb;border-radius:14px}.company h2{margin:0 0 8px;font-size:19px}.company p{color:#777;font-size:13px}.branch{display:flex;justify-content:space-between;border-top:1px solid #eee;padding:12px 0;font-size:13px}
+    .cta{border:1px solid #eee;border-radius:14px;background:#fff;padding:18px 22px;margin-top:24px;color:#555;font-size:13px;line-height:1.6}
+    @media(max-width:1000px){.cards{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
+    @media(max-width:720px){.shell{display:block}aside{padding:16px;gap:10px}.brand{padding:0}nav{display:flex;overflow:auto;gap:4px}nav button{white-space:nowrap;width:auto;padding:10px}.sidefoot{display:none}main{padding:0 18px 40px}.top{height:60px}.cards,.companygrid{grid-template-columns:1fr 1fr}.card{padding:17px}}
+    @media(max-width:480px){.cards,.companygrid{grid-template-columns:1fr}.account{font-size:11px}.crumb{display:none}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside><div class="brand">FINAL <b>ARROW</b><small>ERP WORKSPACE</small></div>
+    <nav aria-label="Preview sections">
+      <button class="active" data-view="dashboard"><span>01</span> Overview</button>
+      <button data-view="companies"><span>02</span> Companies</button>
+      <button data-view="crm"><span>03</span> CRM</button>
+      <button data-view="sales"><span>04</span> Sales</button>
+      <button data-view="purchasing"><span>05</span> Purchasing</button>
+    </nav><div class="sidefoot">Interface preview<br />Sample records only · no data is saved</div>
+  </aside>
+  <main><div class="top"><div class="crumb">Final Arrow ERP / <span id="section-name">Overview</span></div><div class="account">Muscat Group <span class="avatar">MG</span></div></div>
+    <div class="notice"><strong>Interface preview.</strong> This uses sample data. Use the left menu to switch sections. The add buttons are visual examples; no data is saved.</div>
+    <section id="dashboard" class="view active"><div class="eyebrow">OVERVIEW</div><h1>Good afternoon, Odai.</h1><p class="intro">A quick view of your companies, customers and operational work.</p>
+      <div class="toolbar"><div class="chips"><span class="chip">Muscat Group</span><span class="chip">All companies</span></div><button class="primary" data-go="companies">View companies →</button></div>
+      <div class="cards"><div class="card"><small>Active customers</small><strong>128</strong><span>Across 2 companies</span></div><div class="card"><small>Open leads</small><strong>17</strong><span>6 qualified</span></div><div class="card"><small>Sales orders</small><strong>24</strong><span>8 in progress</span></div><div class="card"><small>Purchase orders</small><strong>11</strong><span>3 issued</span></div></div>
+      <div class="two"><div class="panel"><h2>Recent activity</h2><div class="row"><div><strong>PO-2026-014 issued</strong><small>Final Arrow Restaurant · Purchasing</small></div><span class="badge amber">Today</span></div><div class="row"><div><strong>SO-2026-031 completed</strong><small>Final Arrow Trading · Sales</small></div><span class="badge green">Today</span></div><div class="row"><div><strong>New customer · Atlas Retail</strong><small>Final Arrow Trading · CRM</small></div><span class="badge">Yesterday</span></div></div>
+      <div class="panel"><h2>Pipeline by stage</h2><div class="row"><div style="width:100%">Qualified <span style="float:right">6</span><div class="bar"><i style="width:68%"></i></div></div></div><div class="row"><div style="width:100%">Proposal <span style="float:right">4</span><div class="bar"><i style="width:45%"></i></div></div></div><div class="row"><div style="width:100%">New <span style="float:right">7</span><div class="bar"><i style="width:78%"></i></div></div></div></div></div>
+    </section>
+    <section id="companies" class="view"><div class="eyebrow">ORGANIZATION</div><h1>Your companies.</h1><p class="intro">Each company owns its branches, teams and operational records.</p><div class="toolbar"><div class="chips"><span class="chip">Muscat Group</span></div><button class="primary" type="button">+ Add company</button></div>
+      <div class="companygrid"><div class="company"><h2>Final Arrow Trading</h2><p>FAT-01 · OMR · 2 branches</p><div class="branch"><span>Muscat Branch</span><span class="badge green">Active</span></div><div class="branch"><span>Sohar Branch</span><span class="badge green">Active</span></div></div><div class="company"><h2>Final Arrow Restaurant</h2><p>FAR-02 · OMR · 3 branches</p><div class="branch"><span>Al Khuwair</span><span class="badge green">Active</span></div><div class="branch"><span>Seeb</span><span class="badge green">Active</span></div><div class="branch"><span>Qurum</span><span class="badge green">Active</span></div></div></div>
+      <div class="cta">Company and branch permissions control which records each team member can see and change.</div>
+    </section>
+    <section id="crm" class="view"><div class="eyebrow">CUSTOMER RELATIONSHIPS</div><h1>CRM.</h1><p class="intro">Customer records and leads organized by company and branch.</p><div class="toolbar"><div class="chips"><span class="chip">Final Arrow Trading</span><span class="chip">Customers</span><span class="chip">Leads</span></div><button class="primary" type="button">+ Add customer</button></div>
+      <div class="tablewrap"><table><thead><tr><th>Code</th><th>Customer</th><th>Branch</th><th>Contact</th><th>Status</th></tr></thead><tbody><tr><td>CUST-001</td><td>Atlas Retail LLC</td><td>Muscat</td><td>accounts@atlas.example</td><td><span class="badge green">Active</span></td></tr><tr><td>CUST-002</td><td>North Coast Logistics</td><td>Sohar</td><td>+968 9000 0000</td><td><span class="badge green">Active</span></td></tr><tr><td>CUST-003</td><td>Oasis Supplies</td><td>Company-wide</td><td>hello@oasis.example</td><td><span class="badge green">Active</span></td></tr></tbody></table></div>
+      <div class="cta">Lead stages: New → Qualified → Proposal → Won or Lost. A won lead can be converted into a customer once.</div>
+    </section>
+    <section id="sales" class="view"><div class="eyebrow">SALES</div><h1>Quotes & orders.</h1><p class="intro">Prepare quotes, record decisions and track accepted orders.</p><div class="toolbar"><div class="chips"><span class="chip">Final Arrow Trading</span><span class="chip">Quotes</span><span class="chip">Orders</span></div><button class="primary" type="button">+ New quote</button></div>
+      <div class="tablewrap"><table><thead><tr><th>Number</th><th>Customer</th><th>Type</th><th>Status</th><th>Total</th></tr></thead><tbody><tr><td>QT-2026-042</td><td>Atlas Retail LLC</td><td>Quote</td><td><span class="badge amber">Sent</span></td><td>1,250.000 OMR</td></tr><tr><td>QT-2026-041</td><td>Oasis Supplies</td><td>Quote</td><td><span class="badge green">Accepted</span></td><td>680.000 OMR</td></tr><tr><td>SO-2026-031</td><td>Oasis Supplies</td><td>Sales order</td><td><span class="badge green">Completed</span></td><td>680.000 OMR</td></tr><tr><td>QT-2026-040</td><td>North Coast Logistics</td><td>Quote</td><td><span class="badge">Draft</span></td><td>395.500 OMR</td></tr></tbody></table></div>
+      <div class="cta">Amounts are calculated from line items. An accepted quote creates one sales order containing a fixed copy of its details.</div>
+    </section>
+    <section id="purchasing" class="view"><div class="eyebrow">PURCHASING</div><h1>Suppliers & purchase orders.</h1><p class="intro">Maintain supplier records and follow purchasing from draft to receipt.</p><div class="toolbar"><div class="chips"><span class="chip">Final Arrow Restaurant</span><span class="chip">All branches</span></div><button class="primary" type="button">+ New purchase order</button></div>
+      <div class="cards"><div class="card"><small>Active suppliers</small><strong>36</strong><span>Company and branch records</span></div><div class="card"><small>Draft orders</small><strong>5</strong><span>Ready to review</span></div><div class="card"><small>Issued orders</small><strong>3</strong><span>Awaiting receipt</span></div><div class="card"><small>Received orders</small><strong>12</strong><span>Recorded internally</span></div></div>
+      <div class="tablewrap"><table><thead><tr><th>PO number</th><th>Supplier</th><th>Branch</th><th>Status</th><th>Total</th></tr></thead><tbody><tr><td>PO-2026-014</td><td>Fresh Foods Co.</td><td>Al Khuwair</td><td><span class="badge amber">Issued</span></td><td>425.750 OMR</td></tr><tr><td>PO-2026-013</td><td>Packaging Partners</td><td>Company-wide</td><td><span class="badge">Draft</span></td><td>112.500 OMR</td></tr><tr><td>PO-2026-012</td><td>Kitchen Supply LLC</td><td>Seeb</td><td><span class="badge green">Received</span></td><td>890.000 OMR</td></tr></tbody></table></div>
+      <div class="cta">Order flow: Draft → Issued → Received. A draft can also be cancelled. Receiving stock and accounting entries are planned next.</div>
+    </section>
+  </main>
+</div>
+<script>
+  const buttons = [...document.querySelectorAll('[data-view]')];
+  function show(id){
+    document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id===id));
+    buttons.forEach(el=>el.classList.toggle('active',el.dataset.view===id));
+    document.getElementById('section-name').textContent=buttons.find(el=>el.dataset.view===id)?.textContent.trim().replace(/^\d+\s*/, '')||id;
+    location.hash=id;
+  }
+  buttons.forEach(el=>el.addEventListener('click',()=>show(el.dataset.view)));
+  document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));
+  const initial=location.hash.slice(1);if(document.getElementById(initial)?.classList.contains('view'))show(initial);
+</script>
+</body>
+</html>
