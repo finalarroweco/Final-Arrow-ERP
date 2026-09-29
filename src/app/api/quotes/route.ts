@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     const quote = await db.$transaction(async (tx) => {
       const quote = await tx.quote.create({ data: { tenantId, companyId, branchId: branchId ?? null,
         customerId, number, notes: notes ?? null, currency: company.baseCurrency, subtotal,
-        createdBy: actor.id, lines: { create: lines.map((line, position) => ({ tenantId, position,
+        createdBy: actor.id, lines: { create: lines.map((line, position) => ({ position,
           description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, amount: amounts[position] })) } },
         include: { lines: true } });
       await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: "quote.created",
