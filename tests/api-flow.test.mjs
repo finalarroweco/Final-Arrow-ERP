@@ -300,6 +300,35 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(ownerDashboard.data.orders.CANCELLED, 1);
     assert.equal((await get(`/api/dashboard?tenantId=${tenantId}&companyId=${companyB.data.company.id}`, accepted.cookie)).status, 403);
 
+    const supplierA = await post("/api/suppliers", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchA.data.branch.id, code: "SUP-A", displayName: "Branch A Supplier" }, owner.cookie);
+    const supplierB = await post("/api/suppliers", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchB.data.branch.id, code: "SUP-B", displayName: "Branch B Supplier" }, owner.cookie);
+    const sharedSupplier = await post("/api/suppliers", { tenantId, companyId: companyA.data.company.id,
+      code: "SUP-C", displayName: "Company Supplier" }, owner.cookie);
+    assert.equal(supplierA.status, 201);
+    assert.equal(supplierB.status, 201);
+    assert.equal(sharedSupplier.status, 201);
+    assert.equal((await post("/api/suppliers", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchA.data.branch.id, code: "SUP-D", displayName: "Viewer Supplier" }, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/suppliers", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchB.data.branch.id, code: "SUP-E", displayName: "Wrong Branch" }, manager.cookie)).status, 403);
+    const supplierListPath = `/api/suppliers?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    const viewerSuppliers = await get(supplierListPath, accepted.cookie);
+    assert.equal(viewerSuppliers.status, 200);
+    assert.deepEqual(viewerSuppliers.data.suppliers.map((item) => item.id), [supplierA.data.supplier.id]);
+    const supplierPath = `/api/suppliers/${supplierA.data.supplier.id}`;
+    assert.equal((await patch(supplierPath, { tenantId, action: "update", displayName: "Viewer Edit" }, accepted.cookie)).status, 403);
+    const editedSupplier = await patch(supplierPath, { tenantId, action: "update", displayName: "Updated Supplier" }, manager.cookie);
+    assert.equal(editedSupplier.status, 200);
+    assert.equal(editedSupplier.data.supplier.displayName, "Updated Supplier");
+    assert.equal((await patch(supplierPath, { tenantId, action: "archive", archived: true }, manager.cookie)).status, 200);
+    assert.equal((await patch(supplierPath, { tenantId, action: "update", displayName: "Blocked" }, manager.cookie)).status, 409);
+    assert.deepEqual((await get(supplierListPath, accepted.cookie)).data.suppliers, []);
+    const archivedSupplier = await get(`${supplierListPath}&archived=true`, accepted.cookie);
+    assert.deepEqual(archivedSupplier.data.suppliers.map((item) => item.id), [supplierA.data.supplier.id]);
+    assert.equal((await patch(supplierPath, { tenantId, action: "archive", archived: false }, manager.cookie)).status, 200);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);

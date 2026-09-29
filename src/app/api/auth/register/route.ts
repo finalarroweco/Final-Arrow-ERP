@@ -27,10 +27,10 @@ export async function POST(request: Request) {
       const owner = await tx.role.create({ data: { tenantId: tenant.id, name: "Owner" } });
       const manager = await tx.role.create({ data: { tenantId: tenant.id, name: "Manager" } });
       const viewer = await tx.role.create({ data: { tenantId: tenant.id, name: "Viewer" } });
-      for (const key of ["company:read", "company:create", "company:update", "branch:read", "branch:create", "department:read", "department:create", "customer:read", "customer:create", "customer:update", "customer:archive", "lead:read", "lead:create", "lead:update", "lead:convert", "quote:read", "quote:create", "quote:update", "quote:send", "quote:decide", "order:read", "order:create", "order:manage", "user:invite", "user:manage"]) {
+      for (const key of ["company:read", "company:create", "company:update", "branch:read", "branch:create", "department:read", "department:create", "customer:read", "customer:create", "customer:update", "customer:archive", "supplier:read", "supplier:create", "supplier:update", "supplier:archive", "lead:read", "lead:create", "lead:update", "lead:convert", "quote:read", "quote:create", "quote:update", "quote:send", "quote:decide", "order:read", "order:create", "order:manage", "user:invite", "user:manage"]) {
         await tx.permission.upsert({ where: { key }, update: {}, create: { key } });
         await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: owner.id, permissionKey: key } });
-        if (key.endsWith(":read") || ["branch:create", "department:create", "customer:create", "customer:update", "customer:archive", "lead:create", "lead:update", "lead:convert", "quote:create", "quote:update", "quote:send", "quote:decide", "order:create", "order:manage"].includes(key))
+        if (key.endsWith(":read") || ["branch:create", "department:create", "customer:create", "customer:update", "customer:archive", "supplier:create", "supplier:update", "supplier:archive", "lead:create", "lead:update", "lead:convert", "quote:create", "quote:update", "quote:send", "quote:decide", "order:create", "order:manage"].includes(key))
           await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: manager.id, permissionKey: key } });
         if (key.endsWith(":read"))
           await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: viewer.id, permissionKey: key } });

@@ -72,6 +72,7 @@ model Company {
   leads        Lead[]
   quotes       Quote[]
   orders       SalesOrder[]
+  suppliers    Supplier[]
   @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@index([tenantId])
@@ -93,6 +94,7 @@ model Branch {
   leads       Lead[]
   quotes      Quote[]
   orders      SalesOrder[]
+  suppliers   Supplier[]
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId])
@@ -254,6 +256,29 @@ model Customer {
   @@unique([companyId, code])
   @@unique([tenantId, id])
   @@unique([tenantId, companyId, id])
+  @@index([tenantId, companyId, branchId])
+  @@index([tenantId, companyId, displayName])
+}
+
+model Supplier {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  companyId   String    @db.Uuid
+  branchId    String?   @db.Uuid
+  code        String
+  displayName String
+  legalName   String?
+  email       String?
+  phone       String?
+  notes       String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   String    @db.Uuid
+  company     Company   @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch      Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  @@unique([companyId, code])
+  @@unique([tenantId, id])
   @@index([tenantId, companyId, branchId])
   @@index([tenantId, companyId, displayName])
 }

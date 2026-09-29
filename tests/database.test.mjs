@@ -38,6 +38,10 @@ test("database enforces tenant hierarchy and scope shape", async () => {
     data: { tenantId: a.id, companyId: companyA.id, branchId: branchB.id,
       code: "CUST-B", displayName: "Wrong branch customer", createdBy: randomUUID() },
   }));
+  await assert.rejects(db.supplier.create({
+    data: { tenantId: a.id, companyId: companyA.id, branchId: branchB.id,
+      code: "SUP-B", displayName: "Wrong branch supplier", createdBy: randomUUID() },
+  }));
   await assert.rejects(db.quote.create({
     data: { tenantId: b.id, companyId: companyB.id, customerId: customer.id,
       number: "BAD-Q", currency: "OMR", subtotal: "1.000", createdBy: randomUUID() },
