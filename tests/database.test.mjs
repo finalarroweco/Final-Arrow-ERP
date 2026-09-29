@@ -29,6 +29,15 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   await assert.rejects(db.department.create({
     data: { tenantId: a.id, companyId: companyA.id, branchId: branchB.id, name: "Wrong branch" },
   }));
+  const customer = await db.customer.create({
+    data: { tenantId: a.id, companyId: companyA.id, branchId: branchA.id,
+      code: "CUST-A", displayName: "Customer A", createdBy: randomUUID() },
+  });
+  assert.equal(customer.branchId, branchA.id);
+  await assert.rejects(db.customer.create({
+    data: { tenantId: a.id, companyId: companyA.id, branchId: branchB.id,
+      code: "CUST-B", displayName: "Wrong branch customer", createdBy: randomUUID() },
+  }));
 
   const user = await db.user.create({
     data: { email: `test-${unique()}@example.invalid`, name: "Test", passwordHash: "test-only" },

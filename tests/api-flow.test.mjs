@@ -62,6 +62,20 @@ test("invitation is single-use and a branch viewer sees only their company and b
     }, owner.cookie);
     assert.equal(branchA.status, 201);
     assert.equal(branchB.status, 201);
+    const customerA = await post("/api/customers", {
+      tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      code: "CUST-A", displayName: "Branch A Customer",
+    }, owner.cookie);
+    const customerB = await post("/api/customers", {
+      tenantId, companyId: companyA.data.company.id, branchId: branchB.data.branch.id,
+      code: "CUST-B", displayName: "Branch B Customer",
+    }, owner.cookie);
+    const sharedCustomer = await post("/api/customers", {
+      tenantId, companyId: companyA.data.company.id, code: "CUST-C", displayName: "Company Customer",
+    }, owner.cookie);
+    assert.equal(customerA.status, 201);
+    assert.equal(customerB.status, 201);
+    assert.equal(sharedCustomer.status, 201);
 
     const email = `viewer-${suffix()}@example.invalid`;
     const invitation = await post("/api/invitations", {
@@ -84,10 +98,49 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const companies = await get(`/api/companies?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(companies.status, 200);
     assert.deepEqual(companies.data.companies.map((c) => c.id), [companyA.data.company.id]);
+    const customerList = await get(`/api/customers?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
+    assert.equal(customerList.status, 200);
+    assert.deepEqual(customerList.data.customers.map((c) => c.id), [customerA.data.customer.id]);
+    const viewerEdit = await patch(`/api/customers/${customerA.data.customer.id}`, {
+      tenantId, action: "update", displayName: "Unauthorized",
+    }, accepted.cookie);
+    assert.equal(viewerEdit.status, 403);
     const forbidden = await post("/api/branches", {
       tenantId, companyId: companyB.data.company.id, name: "No access", code: "DENY",
     }, accepted.cookie);
     assert.equal(forbidden.status, 403);
+
+    const managerInvite = await post("/api/invitations", {
+      tenantId, email: `manager-${suffix()}@example.invalid`, role: "Manager",
+      scope: { type: "BRANCH", companyId: companyA.data.company.id, branchId: branchA.data.branch.id },
+    }, owner.cookie);
+    assert.equal(managerInvite.status, 201);
+    const manager = await post("/api/invitations/accept", {
+      token: managerInvite.data.path.split("/").at(-1), name: "Manager", password,
+    });
+    assert.equal(manager.status, 200);
+    const managerCustomer = await post("/api/customers", {
+      tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      code: "CUST-D", displayName: "Managed Customer",
+    }, manager.cookie);
+    assert.equal(managerCustomer.status, 201);
+    const managerWrongBranch = await post("/api/customers", {
+      tenantId, companyId: companyA.data.company.id, branchId: branchB.data.branch.id,
+      code: "CUST-E", displayName: "Wrong branch",
+    }, manager.cookie);
+    assert.equal(managerWrongBranch.status, 403);
+    const managerUpdate = await patch(`/api/customers/${managerCustomer.data.customer.id}`, {
+      tenantId, action: "update", displayName: "Updated Customer",
+    }, manager.cookie);
+    assert.equal(managerUpdate.status, 200);
+    const managerArchive = await patch(`/api/customers/${managerCustomer.data.customer.id}`, {
+      tenantId, action: "archive", archived: true,
+    }, manager.cookie);
+    assert.equal(managerArchive.status, 200);
+    const activeCustomers = await get(`/api/customers?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, manager.cookie);
+    assert.equal(activeCustomers.data.customers.some((c) => c.id === managerCustomer.data.customer.id), false);
+    const archivedCustomers = await get(`/api/customers?tenantId=${tenantId}&companyId=${companyA.data.company.id}&archived=true`, manager.cookie);
+    assert.deepEqual(archivedCustomers.data.customers.map((c) => c.id), [managerCustomer.data.customer.id]);
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
