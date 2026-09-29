@@ -329,6 +329,31 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.deepEqual(archivedSupplier.data.suppliers.map((item) => item.id), [supplierA.data.supplier.id]);
     assert.equal((await patch(supplierPath, { tenantId, action: "archive", archived: false }, manager.cookie)).status, 200);
 
+    const purchaseOrderBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      supplierId: supplierA.data.supplier.id, number: "PO-001", lines: [{ description: "Packaging", quantity: 3, unitPrice: "2.125" }] };
+    assert.equal((await post("/api/purchase-orders", purchaseOrderBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/purchase-orders", { ...purchaseOrderBody,
+      branchId: branchB.data.branch.id, number: "PO-OTHER" }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/purchase-orders", { ...purchaseOrderBody,
+      supplierId: supplierB.data.supplier.id, number: "PO-WRONG" }, manager.cookie)).status, 409);
+    assert.equal((await post("/api/purchase-orders", { ...purchaseOrderBody,
+      companyId: companyB.data.company.id, number: "PO-CROSS" }, owner.cookie)).status, 404);
+    const purchaseOrder = await post("/api/purchase-orders", purchaseOrderBody, manager.cookie);
+    assert.equal(purchaseOrder.status, 201);
+    assert.equal(purchaseOrder.data.order.subtotal, "6.375");
+    assert.equal(purchaseOrder.data.order.supplierName, "Updated Supplier");
+    assert.equal((await post("/api/purchase-orders", purchaseOrderBody, manager.cookie)).status, 409);
+    const purchaseOrdersPath = `/api/purchase-orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.deepEqual((await get(purchaseOrdersPath, accepted.cookie)).data.orders.map((item) => item.id),
+      [purchaseOrder.data.order.id]);
+    const purchaseStatusPath = `/api/purchase-orders/${purchaseOrder.data.order.id}/status`;
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "issue" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 409);
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "issue" }, manager.cookie)).status, 200);
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "issue" }, manager.cookie)).status, 409);
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 200);
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "cancel" }, manager.cookie)).status, 409);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);
