@@ -1,0 +1,48 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { createSession, hashPassword } from "@/lib/auth";
+
+const schema = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(255).transform((v) => v.toLowerCase()),
+  password: z.string().min(12).max(128),
+  organization: z.string().trim().min(2).max(120),
+  slug: z.string().trim().regex(/^[a-z0-9-]{3,40}$/),
+});
+
+export async function POST(request: Request) {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_REGISTRATION !== "true")
+    return NextResponse.json({ error: "Registration is closed" }, { status: 403 });
+  const parsed = schema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid registration details" }, { status: 400 });
+  const { name, email, password, organization, slug } = parsed.data;
+  try {
+    const user = await db.$transaction(async (tx) => {
+      const user = await tx.user.create({ data: { name, email, passwordHash: await hashPassword(password) } });
+      const tenant = await tx.tenant.create({ data: { name: organization, slug } });
+      const membership = await tx.membership.create({
+        data: { tenantId: tenant.id, userId: user.id, status: "ACTIVE" },
+      });
+      const role = await tx.role.create({ data: { tenantId: tenant.id, name: "Owner" } });
+      for (const key of ["company:read", "company:create", "branch:read", "branch:create"]) {
+        await tx.permission.upsert({ where: { key }, update: {}, create: { key } });
+        await tx.rolePermission.create({ data: { tenantId: tenant.id, roleId: role.id, permissionKey: key } });
+      }
+      const grant = await tx.roleGrant.create({
+        data: { tenantId: tenant.id, roleId: role.id, membershipId: membership.id },
+      });
+      await tx.accessScope.create({ data: { tenantId: tenant.id, grantId: grant.id, type: "TENANT" } });
+      await tx.auditLog.create({
+        data: { tenantId: tenant.id, actorId: user.id, action: "tenant.created", entity: "Tenant", entityId: tenant.id },
+      });
+      return user;
+    });
+    await createSession(user.id);
+    return NextResponse.json({ ok: true }, { status: 201 });
+  } catch (error) {
+    if (typeof error === "object" && error && "code" in error && error.code === "P2002")
+      return NextResponse.json({ error: "Email or workspace name already in use" }, { status: 409 });
+    throw error;
+  }
+}
