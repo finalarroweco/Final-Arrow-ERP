@@ -5,7 +5,7 @@ import { canAccess } from "@/lib/access";
 import { db } from "@/lib/db";
 
 const uuid = z.string().uuid();
-const schema = z.object({ tenantId: uuid, action: z.enum(["issue", "receive", "cancel"]) }).strict();
+const schema = z.object({ tenantId: uuid, action: z.enum(["issue", "cancel"]) }).strict();
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
@@ -21,14 +21,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: order.companyId,
     branchId: order.branchId ?? undefined, permission: "purchase-order:manage" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const status = action === "issue" ? "ISSUED" : action === "receive" ? "RECEIVED" : "CANCELLED";
-  const expected = action === "receive" ? "ISSUED" : "DRAFT";
-  const field = action === "issue" ? "issuedAt" : action === "receive" ? "receivedAt" : "cancelledAt";
+  const status = action === "issue" ? "ISSUED" : "CANCELLED";
+  const expected = "DRAFT";
+  const field = action === "issue" ? "issuedAt" : "cancelledAt";
   const result = await db.$transaction(async (tx) => {
     const changed = await tx.purchaseOrder.updateMany({ where: { id, tenantId, status: expected },
       data: { status, [field]: new Date() } });
     if (changed.count !== 1) return null;
-    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: `purchase-order.${action === "issue" ? "issued" : action === "receive" ? "received" : "cancelled"}`,
+    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: `purchase-order.${action === "issue" ? "issued" : "cancelled"}`,
       entity: "PurchaseOrder", entityId: id, metadata: { from: expected, to: status } } });
     return tx.purchaseOrder.findUnique({ where: { id }, select: { id: true, status: true,
       issuedAt: true, receivedAt: true, cancelledAt: true } });

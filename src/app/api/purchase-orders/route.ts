@@ -34,7 +34,8 @@ export async function GET(request: Request) {
     select: { id: true, number: true, supplierId: true, supplierName: true, branchId: true,
       status: true, issuedAt: true, receivedAt: true, cancelledAt: true,
       currency: true, subtotal: true, notes: true, createdAt: true,
-      lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
+      receipt: { select: { id: true, branchId: true, createdAt: true } },
+      lines: { select: { id: true, position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
   return NextResponse.json({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });

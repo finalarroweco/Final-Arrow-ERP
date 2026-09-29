@@ -51,6 +51,7 @@ enum PurchaseOrderStatus {
 enum StockMovementType {
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
+  PURCHASE_RECEIPT
 }
 
 model Tenant {
@@ -88,6 +89,7 @@ model Company {
   purchaseOrders PurchaseOrder[]
   inventoryItems InventoryItem[]
   stockBalances  StockBalance[]
+  receipts       GoodsReceipt[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -114,6 +116,7 @@ model Branch {
   purchaseOrders PurchaseOrder[]
   inventoryItems InventoryItem[]
   stockBalances  StockBalance[]
+  receipts       GoodsReceipt[]
 
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
@@ -317,21 +320,22 @@ model Supplier {
 }
 
 model InventoryItem {
-  id          String         @id @default(uuid()) @db.Uuid
-  tenantId    String         @db.Uuid
-  companyId   String         @db.Uuid
-  branchId    String?        @db.Uuid
-  sku         String
-  name        String
-  unit        String         @db.VarChar(16)
-  description String?
-  archivedAt  DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  createdBy   String         @db.Uuid
-  company     Company        @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
-  branch      Branch?        @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
-  balances    StockBalance[]
+  id           String             @id @default(uuid()) @db.Uuid
+  tenantId     String             @db.Uuid
+  companyId    String             @db.Uuid
+  branchId     String?            @db.Uuid
+  sku          String
+  name         String
+  unit         String             @db.VarChar(16)
+  description  String?
+  archivedAt   DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  createdBy    String             @db.Uuid
+  company      Company            @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch       Branch?            @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  balances     StockBalance[]
+  receiptLines GoodsReceiptLine[]
 
   @@unique([companyId, sku])
   @@unique([tenantId, id])
@@ -359,16 +363,19 @@ model StockBalance {
 }
 
 model StockMovement {
-  id        String            @id @default(uuid()) @db.Uuid
-  tenantId  String            @db.Uuid
-  balanceId String            @db.Uuid
-  type      StockMovementType
-  delta     Decimal           @db.Decimal(18, 3)
-  reason    String
-  actorId   String            @db.Uuid
-  createdAt DateTime          @default(now())
-  balance   StockBalance      @relation(fields: [tenantId, balanceId], references: [tenantId, id], onDelete: Restrict)
+  id            String            @id @default(uuid()) @db.Uuid
+  tenantId      String            @db.Uuid
+  balanceId     String            @db.Uuid
+  type          StockMovementType
+  delta         Decimal           @db.Decimal(18, 3)
+  reason        String
+  actorId       String            @db.Uuid
+  createdAt     DateTime          @default(now())
+  balance       StockBalance      @relation(fields: [tenantId, balanceId], references: [tenantId, id], onDelete: Restrict)
+  receiptLineId String?           @unique @db.Uuid
+  receiptLine   GoodsReceiptLine? @relation(fields: [tenantId, receiptLineId], references: [tenantId, id], onDelete: Restrict)
 
+  @@unique([tenantId, receiptLineId])
   @@index([tenantId, balanceId, createdAt])
 }
 
@@ -393,25 +400,67 @@ model PurchaseOrder {
   branch       Branch?             @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   supplier     Supplier            @relation(fields: [tenantId, companyId, supplierId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        PurchaseOrderLine[]
+  receipt      GoodsReceipt?
 
   @@unique([companyId, number])
   @@unique([tenantId, id])
+  @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId, branchId, createdAt])
 }
 
 model PurchaseOrderLine {
-  id          String        @id @default(uuid()) @db.Uuid
-  tenantId    String        @db.Uuid
-  orderId     String        @db.Uuid
-  position    Int
-  description String
-  quantity    Int
-  unitPrice   Decimal       @db.Decimal(18, 3)
-  amount      Decimal       @db.Decimal(18, 3)
-  order       PurchaseOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  id           String             @id @default(uuid()) @db.Uuid
+  tenantId     String             @db.Uuid
+  orderId      String             @db.Uuid
+  position     Int
+  description  String
+  quantity     Int
+  unitPrice    Decimal            @db.Decimal(18, 3)
+  amount       Decimal            @db.Decimal(18, 3)
+  order        PurchaseOrder      @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+  receiptLines GoodsReceiptLine[]
 
   @@unique([orderId, position])
+  @@unique([tenantId, orderId, id])
   @@index([tenantId, orderId])
+}
+
+model GoodsReceipt {
+  id        String             @id @default(uuid()) @db.Uuid
+  tenantId  String             @db.Uuid
+  companyId String             @db.Uuid
+  branchId  String             @db.Uuid
+  orderId   String             @unique @db.Uuid
+  createdBy String             @db.Uuid
+  createdAt DateTime           @default(now())
+  company   Company            @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch    Branch             @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  order     PurchaseOrder      @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  lines     GoodsReceiptLine[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, companyId, orderId])
+  @@unique([tenantId, companyId, orderId, id])
+  @@index([tenantId, companyId, branchId, createdAt])
+}
+
+model GoodsReceiptLine {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @db.Uuid
+  companyId   String            @db.Uuid
+  orderId     String            @db.Uuid
+  receiptId   String            @db.Uuid
+  orderLineId String            @db.Uuid
+  itemId      String            @db.Uuid
+  quantity    Decimal           @db.Decimal(18, 3)
+  receipt     GoodsReceipt      @relation(fields: [tenantId, companyId, orderId, receiptId], references: [tenantId, companyId, orderId, id], onDelete: Restrict)
+  orderLine   PurchaseOrderLine @relation(fields: [tenantId, orderId, orderLineId], references: [tenantId, orderId, id], onDelete: Restrict)
+  item        InventoryItem     @relation(fields: [tenantId, companyId, itemId], references: [tenantId, companyId, id], onDelete: Restrict)
+  movement    StockMovement?
+
+  @@unique([tenantId, id])
+  @@unique([receiptId, orderLineId])
+  @@index([tenantId, companyId, orderId])
 }
 
 model Lead {

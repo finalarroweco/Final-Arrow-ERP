@@ -348,10 +348,10 @@ test("invitation is single-use and a branch viewer sees only their company and b
       [purchaseOrder.data.order.id]);
     const purchaseStatusPath = `/api/purchase-orders/${purchaseOrder.data.order.id}/status`;
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "issue" }, accepted.cookie)).status, 403);
-    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 409);
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 400);
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "issue" }, manager.cookie)).status, 200);
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "issue" }, manager.cookie)).status, 409);
-    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 200);
+    assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 400);
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "cancel" }, manager.cookie)).status, 409);
 
     const itemA = await post("/api/inventory/items", { tenantId, companyId: companyA.data.company.id,
@@ -403,6 +403,24 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(stock.data.balances.find((balance) => balance.itemId === itemA.data.item.id).quantity, "3.375");
     assert.equal(stock.data.balances.find((balance) => balance.itemId === sharedItem.data.item.id).quantity, "1.25");
     assert.equal(stock.data.movements.length, 3);
+
+    const receiptPath = `/api/purchase-orders/${purchaseOrder.data.order.id}/receive`;
+    const receiptBody = { tenantId, branchId: branchA.data.branch.id,
+      lines: [{ orderLineId: purchaseOrder.data.order.lines[0].id, itemId: itemA.data.item.id }] };
+    assert.equal((await post(receiptPath, receiptBody, accepted.cookie)).status, 403);
+    assert.equal((await post(receiptPath, { ...receiptBody, branchId: branchB.data.branch.id }, manager.cookie)).status, 403);
+    assert.equal((await post(receiptPath, { ...receiptBody, lines: [] }, manager.cookie)).status, 400);
+    assert.equal((await post(receiptPath, { ...receiptBody,
+      lines: [{ ...receiptBody.lines[0], itemId: itemB.data.item.id }] }, manager.cookie)).status, 409);
+    assert.equal((await get(stockPath, accepted.cookie)).data.balances.find((balance) =>
+      balance.itemId === itemA.data.item.id).quantity, "3.375");
+    const receipt = await post(receiptPath, receiptBody, manager.cookie);
+    assert.equal(receipt.status, 201);
+    assert.equal(receipt.data.receipt.lines.length, 1);
+    assert.equal((await post(receiptPath, receiptBody, manager.cookie)).status, 409);
+    assert.equal((await get(stockPath, accepted.cookie)).data.balances.find((balance) =>
+      balance.itemId === itemA.data.item.id).quantity, "6.375");
+    assert.equal((await get(stockPath, accepted.cookie)).data.movements.length, 4);
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);

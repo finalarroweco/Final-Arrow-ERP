@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Rights = { canCreate: boolean; canManage: boolean };
+type Rights = { canCreate: boolean; canManage: boolean; canStockAdjust: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string;
   companyPermissions: Rights; branches: ({ id: string; name: string } & Rights)[] };
 type Supplier = { id: string; displayName: string; branchId: string | null };
 type Order = { id: string; number: string; supplierName: string; branchId: string | null;
   status: "DRAFT" | "ISSUED" | "RECEIVED" | "CANCELLED"; currency: string; subtotal: string;
-  lines: { description: string; quantity: number; unitPrice: string; amount: string }[] };
+  receipt: { id: string; branchId: string } | null;
+  lines: { id: string; description: string; quantity: number; unitPrice: string; amount: string }[] };
+type Item = { id: string; sku: string; name: string; unit: string };
 
 export function PurchaseOrdersWorkspace({ options }: { options: Option[] }) {
   const [selected, setSelected] = useState(0);
@@ -20,6 +22,9 @@ export function PurchaseOrdersWorkspace({ options }: { options: Option[] }) {
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [receivingId, setReceivingId] = useState<string | null>(null);
+  const [receiptBranchId, setReceiptBranchId] = useState("");
+  const [receiptItems, setReceiptItems] = useState<Item[]>([]);
   const [lines, setLines] = useState([{ description: "", quantity: 1, unitPrice: "0.000" }]);
   const load = useCallback(async (index: number, pageNumber = 0) => {
     const scope = options[index];
@@ -61,7 +66,7 @@ export function PurchaseOrdersWorkspace({ options }: { options: Option[] }) {
         await load(selected); }
     } finally { setBusy(false); }
   }
-  async function change(order: Order, action: "issue" | "receive" | "cancel") {
+  async function change(order: Order, action: "issue" | "cancel") {
     if (!scope) return;
     setBusy(true); setError("");
     try {
@@ -72,9 +77,35 @@ export function PurchaseOrdersWorkspace({ options }: { options: Option[] }) {
       else await load(selected, page);
     } finally { setBusy(false); }
   }
+  async function selectReceiptBranch(order: Order, targetBranchId: string) {
+    if (!scope) return;
+    setReceivingId(order.id); setReceiptBranchId(targetBranchId); setReceiptItems([]); setError("");
+    const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId,
+      branchId: targetBranchId });
+    const response = await fetch(`/api/inventory/stock?${query}`);
+    const data = await response.json();
+    if (!response.ok) setError(data.error ?? "Could not load inventory items");
+    else setReceiptItems(data.items);
+  }
+  async function receive(event: React.FormEvent<HTMLFormElement>, order: Order) {
+    event.preventDefault();
+    if (!scope || !receiptBranchId) return;
+    const values = new FormData(event.currentTarget);
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/purchase-orders/${order.id}/receive`, { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: scope.tenantId, branchId: receiptBranchId,
+          lines: order.lines.map((line) => ({ orderLineId: line.id, itemId: values.get(line.id) })) }) });
+      const data = await response.json();
+      if (!response.ok) setError(data.error ?? "Could not receive purchase order");
+      else { setReceivingId(null); setReceiptItems([]); await load(selected, page); }
+    } finally { setBusy(false); }
+  }
   if (!options.length) return <section><p>No accessible companies yet.</p></section>;
   return <section><label>Company <select value={selected} onChange={(event) => {
     setSelected(Number(event.target.value)); setBranchId(""); setSupplierId(""); setSuppliers([]); setOrders([]);
+    setReceivingId(null); setReceiptItems([]);
   }}>{options.map((option, index) => <option key={`${option.tenantId}:${option.companyId}`} value={index}>{option.label}</option>)}</select></label>
     {rights?.canCreate && <form onSubmit={(event) => void create(event)} className="branchform">
       <h2>New purchase order</h2>
@@ -103,15 +134,35 @@ export function PurchaseOrdersWorkspace({ options }: { options: Option[] }) {
     <div className="customer-list">{orders.map((order) => {
       const canManage = order.branchId ? scope.branches.find((branch) => branch.id === order.branchId)?.canManage
         : scope.companyPermissions.canManage;
-      return <article key={order.id}><h3>{order.number} · {order.supplierName}</h3>
+      const receiptBranches = scope.branches.filter((branch) => branch.canStockAdjust);
+      const canReceive = canManage && (order.branchId
+        ? receiptBranches.some((branch) => branch.id === order.branchId) : receiptBranches.length > 0);
+      return <article key={order.id}><div><h3>{order.number} · {order.supplierName}</h3>
         <p>{order.status} · {order.subtotal} {order.currency}</p>
         <ul>{order.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
+        {order.receipt && <p>Received into {scope.branches.find((branch) => branch.id === order.receipt?.branchId)?.name ?? "branch"}</p>}
         {canManage && <div className="quote-actions">
           {order.status === "DRAFT" && <><button disabled={busy} onClick={() => void change(order, "issue")}>Mark issued</button>
             <button disabled={busy} onClick={() => void change(order, "cancel")}>Cancel</button></>}
-          {order.status === "ISSUED" && <button disabled={busy} onClick={() => void change(order, "receive")}>Mark received</button>}
+          {order.status === "ISSUED" && canReceive && <button disabled={busy} onClick={() => {
+            const target = order.branchId ?? receiptBranches[0].id;
+            if (receivingId === order.id) setReceivingId(null);
+            else void selectReceiptBranch(order, target);
+          }}>Receive into stock</button>}
         </div>}
-      </article>;
+        {receivingId === order.id && <form className="branchform" onSubmit={(event) => void receive(event, order)}>
+          <h4>Goods receipt · map every order line to an item</h4>
+          {!order.branchId && <label>Receiving branch <select value={receiptBranchId}
+            onChange={(event) => void selectReceiptBranch(order, event.target.value)}>
+            {receiptBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+          </select></label>}
+          {order.lines.map((line) => <label key={line.id}>{line.description} · {line.quantity} units
+            <select name={line.id} required defaultValue=""><option value="">Choose inventory item</option>
+              {receiptItems.map((item) => <option key={item.id} value={item.id}>{item.sku} · {item.name} ({item.unit})</option>)}
+            </select></label>)}
+          <button disabled={busy || !receiptItems.length}>Record full receipt</button>
+        </form>}
+      </div></article>;
     })}</div>
     {!orders.length && <p>No purchase orders on this page.</p>}
     {page > 0 && <button onClick={() => void load(selected, page - 1)}>Previous</button>}

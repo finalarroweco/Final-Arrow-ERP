@@ -19,6 +19,8 @@ export default async function PurchaseOrdersPage() {
         branchId, permission: "purchase-order:create" }),
       canManage: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id,
         branchId, permission: "purchase-order:manage" }),
+      canStockAdjust: branchId ? await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id,
+        branchId, permission: "inventory-stock:adjust" }) : false,
     });
     return { tenantId: tenant.id, companyId: company.id, label: `${tenant.name} / ${company.name}`,
       currency: company.baseCurrency, companyPermissions: await permissions(),
