@@ -507,6 +507,40 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(employeePath, { tenantId, action: "update", jobTitle: "Blocked" }, manager.cookie)).status, 409);
     assert.equal((await patch(employeePath, { tenantId, action: "status", status: "ACTIVE" }, manager.cookie)).status, 200);
 
+    const leaveBody = { tenantId, companyId: companyA.data.company.id, employeeId: employeeA.data.employee.id,
+      type: "ANNUAL", startDate: "2026-11-01", endDate: "2026-11-05", note: "Family visit" };
+    assert.equal((await post("/api/leave-requests", leaveBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/leave-requests", { ...leaveBody,
+      employeeId: employeeB.data.employee.id }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/leave-requests", { ...leaveBody,
+      companyId: companyB.data.company.id }, owner.cookie)).status, 404);
+    assert.equal((await post("/api/leave-requests", { ...leaveBody,
+      endDate: "2026-10-31" }, manager.cookie)).status, 400);
+    const leaveA = await post("/api/leave-requests", leaveBody, manager.cookie);
+    const leaveB = await post("/api/leave-requests", { ...leaveBody,
+      employeeId: employeeB.data.employee.id, note: "Other branch" }, owner.cookie);
+    assert.equal(leaveA.status, 201);
+    assert.equal(leaveB.status, 201);
+    const leavePath = `/api/leave-requests?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.equal((await get(leavePath, accepted.cookie)).status, 403);
+    assert.deepEqual((await get(leavePath, manager.cookie)).data.requests.map((item) => item.id), [leaveA.data.request.id]);
+    assert.equal((await get(leavePath.replace(companyA.data.company.id, companyB.data.company.id), manager.cookie)).status, 403);
+    const leaveDecision = `/api/leave-requests/${leaveA.data.request.id}`;
+    assert.equal((await patch(leaveDecision, { tenantId, action: "approve" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(`/api/leave-requests/${leaveB.data.request.id}`,
+      { tenantId, action: "approve" }, manager.cookie)).status, 403);
+    assert.equal((await patch(leaveDecision, { tenantId, action: "reject", note: "" }, manager.cookie)).status, 400);
+    assert.equal((await patch(leaveDecision, { tenantId, action: "approve" }, manager.cookie)).status, 200);
+    assert.equal((await patch(leaveDecision, { tenantId, action: "approve" }, manager.cookie)).status, 409);
+    assert.equal((await patch(leaveDecision, { tenantId, action: "cancel", note: "Employee requested" }, manager.cookie)).status, 200);
+    assert.equal((await patch(leaveDecision, { tenantId, action: "cancel", note: "Again" }, manager.cookie)).status, 409);
+    assert.equal((await get(leavePath, manager.cookie)).data.requests[0].decisionNote, "Employee requested");
+    const rejectedLeave = await post("/api/leave-requests", { ...leaveBody,
+      startDate: "2026-12-01", endDate: "2026-12-02" }, manager.cookie);
+    assert.equal(rejectedLeave.status, 201);
+    assert.equal((await patch(`/api/leave-requests/${rejectedLeave.data.request.id}`,
+      { tenantId, action: "reject", note: "Staffing constraint" }, manager.cookie)).status, 200);
+
     const expenseBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
       number: "EXP-A", description: "Branch supplies", category: "Operations",
       amount: "12.375", expenseDate: "2026-09-30" };

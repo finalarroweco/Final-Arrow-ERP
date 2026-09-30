@@ -69,3 +69,7 @@ Owners can set a three-letter base currency when creating a company and update i
 ## Internal expenses
 
 `/accounting/expenses` records company or branch spending in the company base currency. A positive amount, category, description and date are required. Drafts can be posted once or voided with a reason; posted records can also be voided. Status changes are audited and conditional. This is an internal expense register, not a general ledger, tax system, payment execution or approval chain.
+
+## Leave requests
+
+`/hr/leave` lets Owners and Managers create leave requests for active employees in their company or branch and approve, reject or cancel them. Dates, type and employee are required. Rejection and cancellation need a reason; each decision is audited and conditional on the current state. The request inherits the employee branch. This first slice does not calculate leave balances, holidays, working days or payroll impact.

@@ -104,6 +104,20 @@ test("database enforces tenant hierarchy and scope shape", async () => {
     amount: "2.500", currency: "OMR", expenseDate: new Date("2026-09-30"), createdBy: randomUUID() } });
   assert.equal(expense.branchId, branchA.id);
 
+  await assert.rejects(db.leaveRequest.create({ data: { tenantId: b.id, companyId: companyB.id,
+    employeeId: employee.id, type: "ANNUAL", startDate: new Date("2026-10-01"),
+    endDate: new Date("2026-10-02"), createdBy: randomUUID() } }));
+  await assert.rejects(db.leaveRequest.create({ data: { tenantId: a.id, companyId: companyA.id,
+    employeeId: employee.id, branchId: branchB.id, type: "ANNUAL", startDate: new Date("2026-10-01"),
+    endDate: new Date("2026-10-02"), createdBy: randomUUID() } }));
+  await assert.rejects(db.leaveRequest.create({ data: { tenantId: a.id, companyId: companyA.id,
+    employeeId: employee.id, branchId: branchA.id, type: "ANNUAL", startDate: new Date("2026-10-03"),
+    endDate: new Date("2026-10-02"), createdBy: randomUUID() } }));
+  const leave = await db.leaveRequest.create({ data: { tenantId: a.id, companyId: companyA.id,
+    employeeId: employee.id, branchId: branchA.id, type: "ANNUAL", startDate: new Date("2026-10-01"),
+    endDate: new Date("2026-10-02"), createdBy: randomUUID() } });
+  assert.equal(leave.status, "PENDING");
+
   const user = await db.user.create({
     data: { email: `test-${unique()}@example.invalid`, name: "Test", passwordHash: "test-only" },
   });
