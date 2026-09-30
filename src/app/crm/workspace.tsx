@@ -1,5 +1,6 @@
 "use client";
 
+import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 export type CompanyOption = {
@@ -13,7 +14,8 @@ type Customer = {
   archivedAt: string | null;
 };
 
-export function CrmWorkspace({ options }: { options: CompanyOption[] }) {
+export function CrmWorkspace({ options, locale }: { options: CompanyOption[]; locale: Locale }) {
+  const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [page, setPage] = useState(0);
@@ -27,10 +29,10 @@ export function CrmWorkspace({ options }: { options: CompanyOption[] }) {
     const item = options[index];
     if (!item) return;
     const response = await fetch(`/api/customers?tenantId=${item.tenantId}&companyId=${item.companyId}&page=${next}&archived=${archived}`);
-    if (!response.ok) { setError("Could not load customers."); return; }
+    if (!response.ok) { setError(t("Could not load customers.", "تعذر تحميل العملاء.")); return; }
     const result: { customers: Customer[]; nextPage: number | null } = await response.json();
     setCustomers(result.customers); setPage(next); setNextPage(result.nextPage); setError("");
-  }, [options]);
+  }, [options, t]);
   useEffect(() => { void load(selected, 0, showArchived); }, [load, selected, showArchived]);
 
   async function add(event: FormEvent<HTMLFormElement>) {
@@ -49,7 +51,7 @@ export function CrmWorkspace({ options }: { options: CompanyOption[] }) {
     });
     if (!response.ok) {
       const result: { error?: string } = await response.json();
-      setError(result.error ?? "Could not add customer."); return;
+      setError(result.error ?? t("Could not add customer.", "تعذر إضافة العميل.")); return;
     }
     form.reset(); setShowArchived(false); await load(selected, 0, false);
   }
@@ -64,7 +66,7 @@ export function CrmWorkspace({ options }: { options: CompanyOption[] }) {
         displayName: values.get("displayName"), email: values.get("email") || null,
         phone: values.get("phone") || null }),
     });
-    if (!response.ok) { setError("Could not update customer."); return; }
+    if (!response.ok) { setError(t("Could not update customer.", "تعذر تحديث العميل.")); return; }
     setEditing(null); await load(selected, page, showArchived);
   }
 
@@ -74,34 +76,34 @@ export function CrmWorkspace({ options }: { options: CompanyOption[] }) {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tenantId: option.tenantId, action: "archive", archived }),
     });
-    if (!response.ok) { setError("Could not archive customer."); return; }
+    if (!response.ok) { setError(t("Could not archive customer.", "تعذر تغيير أرشفة العميل.")); return; }
     await load(selected, page, showArchived);
   }
 
-  if (options.length === 0) return <p>No accessible companies yet.</p>;
+  if (options.length === 0) return <p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p>;
   const canCreate = option.canCreateCompanyWide || option.branches.some((branch) => branch.canCreate);
   return <section>
-    <label>Company <select value={selected} onChange={(e) => { setSelected(Number(e.target.value)); setEditing(null); }}>
+    <label>{t("Company", "الشركة")} <select value={selected} onChange={(e) => { setSelected(Number(e.target.value)); setEditing(null); }}>
       {options.map((item, index) => <option key={`${item.tenantId}:${item.companyId}`} value={index}>{item.label}</option>)}
     </select></label>
     {error && <p role="alert">{error}</p>}
     {canCreate && <form onSubmit={add} className="crm-form">
-      <h2>Add customer</h2>
-      <input name="code" placeholder="Customer code" required pattern="[A-Za-z0-9-]{2,30}" maxLength={30} />
-      <input name="displayName" placeholder="Customer name" required minLength={2} maxLength={160} />
-      <input name="email" type="email" placeholder="Email (optional)" />
-      <input name="phone" placeholder="Phone (optional)" maxLength={40} />
+      <h2>{t("Add customer", "إضافة عميل")}</h2>
+      <input name="code" placeholder={t("Customer code", "رمز العميل")} required pattern="[A-Za-z0-9-]{2,30}" maxLength={30} />
+      <input name="displayName" placeholder={t("Customer name", "اسم العميل")} required minLength={2} maxLength={160} />
+      <input name="email" type="email" placeholder={t("Email (optional)", "البريد الإلكتروني (اختياري)")} />
+      <input name="phone" placeholder={t("Phone (optional)", "الهاتف (اختياري)")} maxLength={40} />
       <select name="branchId" required={!option.canCreateCompanyWide}>
-        {option.canCreateCompanyWide && <option value="">Company-wide</option>}
-        {!option.canCreateCompanyWide && <option value="">Select branch</option>}
+        {option.canCreateCompanyWide && <option value="">{t("Company-wide", "على مستوى الشركة")}</option>}
+        {!option.canCreateCompanyWide && <option value="">{t("Select branch", "اختر الفرع")}</option>}
         {option.branches.filter((branch) => branch.canCreate).map((branch) =>
           <option key={branch.id} value={branch.id}>{branch.name}</option>)}
       </select>
-      <button type="submit">Add customer</button>
+      <button type="submit">{t("Add customer", "إضافة عميل")}</button>
     </form>}
-    <div className="formrow"><h2>Customer records</h2>
+    <div className="formrow"><h2>{t("Customer records", "سجلات العملاء")}</h2>
       <button type="button" onClick={() => { setShowArchived(!showArchived); setEditing(null); }}>
-        {showArchived ? "Show active" : "Show archived"}
+        {showArchived ? t("Show active", "عرض النشطين") : t("Show archived", "عرض المؤرشفين")}
       </button>
     </div>
     <div className="customer-list">{customers.map((customer) => {
@@ -113,21 +115,21 @@ export function CrmWorkspace({ options }: { options: CompanyOption[] }) {
           <input name="displayName" defaultValue={customer.displayName} required minLength={2} maxLength={160} />
           <input name="email" type="email" defaultValue={customer.email ?? ""} />
           <input name="phone" defaultValue={customer.phone ?? ""} maxLength={40} />
-          <button type="submit">Save</button><button type="button" onClick={() => setEditing(null)}>Cancel</button>
+          <button type="submit">{t("Save", "حفظ")}</button><button type="button" onClick={() => setEditing(null)}>{t("Cancel", "إلغاء")}</button>
         </form> : <>
-          <div><h3>{customer.displayName}</h3><p>{customer.code} · {branch?.name ?? "Company-wide"}</p>
+          <div><h3>{customer.displayName}</h3><p>{customer.code} · {branch?.name ?? t("Company-wide", "على مستوى الشركة")}</p>
             <p>{customer.email ?? ""} {customer.phone ?? ""}</p></div>
           <div className="customer-actions">
-            {canUpdate && !customer.archivedAt && <button type="button" onClick={() => setEditing(customer.id)}>Edit</button>}
+            {canUpdate && !customer.archivedAt && <button type="button" onClick={() => setEditing(customer.id)}>{t("Edit", "تعديل")}</button>}
             {canArchive && <button type="button" onClick={() => void archive(customer, !customer.archivedAt)}>
-              {customer.archivedAt ? "Restore" : "Archive"}
+              {customer.archivedAt ? t("Restore", "استعادة") : t("Archive", "أرشفة")}
             </button>}
           </div>
         </>}
       </article>;
     })}</div>
-    {customers.length === 0 && <p>No customers in this company yet.</p>}
-    <div className="formrow">{page > 0 && <button type="button" onClick={() => void load(selected, page - 1, showArchived)}>Previous</button>}
-      {nextPage !== null && <button type="button" onClick={() => void load(selected, nextPage, showArchived)}>Next</button>}</div>
+    {customers.length === 0 && <p>{t("No customers in this company yet.", "لا يوجد عملاء في هذه الشركة بعد.")}</p>}
+    <div className="formrow">{page > 0 && <button type="button" onClick={() => void load(selected, page - 1, showArchived)}>{t("Previous", "السابق")}</button>}
+      {nextPage !== null && <button type="button" onClick={() => void load(selected, nextPage, showArchived)}>{t("Next", "التالي")}</button>}</div>
   </section>;
 }
