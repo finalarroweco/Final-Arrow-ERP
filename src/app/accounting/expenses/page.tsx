@@ -1,3 +1,6 @@
+import { getLocale } from "@/lib/server-locale";
+import { translate } from "@/lib/locale";
+import { LanguageSwitcher } from "../../language-switcher";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { canAccess, readableCompanyBranches } from "@/lib/access";
@@ -5,6 +8,8 @@ import { db } from "@/lib/db";
 import { ExpensesWorkspace } from "./workspace";
 
 export default async function ExpensesPage() {
+  const locale = await getLocale();
+  const t = (en: string, ar: string) => translate(locale, en, ar);
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({ where: { userId: user.id, status: "ACTIVE" },
@@ -24,8 +29,8 @@ export default async function ExpensesPage() {
       branches: await Promise.all(company.branches.filter((branch) => visible === null || visible.includes(branch.id))
         .map(async (branch) => ({ id: branch.id, name: branch.name, ...await rights(branch.id) }))) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><a href="/accounting/invoices">Invoices</a><a href="/workspace">Workspace</a></header>
-    <section className="hero"><p>ACCOUNTING</p><h1>Expenses.</h1><p className="sub">Record and review internal company spending.</p></section>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/accounting/invoices">{t("Invoices", "الفواتير")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+    <section className="hero"><p>{t("ACCOUNTING", "المحاسبة")}</p><h1>{t("Expenses.", "المصاريف.")}</h1><p className="sub">{t("Record and review internal company spending.", "سجّل وراجع مصاريف الشركة الداخلية.")}</p></section>
     <ExpensesWorkspace options={options} />
   </main>;
 }

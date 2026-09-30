@@ -1,3 +1,6 @@
+import { getLocale } from "@/lib/server-locale";
+import { translate } from "@/lib/locale";
+import { LanguageSwitcher } from "../../language-switcher";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { canAccess, readableCompanyBranches } from "@/lib/access";
@@ -5,6 +8,8 @@ import { db } from "@/lib/db";
 import { QuotesWorkspace } from "./workspace";
 
 export default async function QuotesPage() {
+  const locale = await getLocale();
+  const t = (en: string, ar: string) => translate(locale, en, ar);
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({ where: { userId: user.id, status: "ACTIVE" },
@@ -32,8 +37,8 @@ export default async function QuotesPage() {
       branches: (await Promise.all(company.branches.map(async (branch) => ({ id: branch.id, name: branch.name,
         ...await permissions(branch.id) })))).filter((branch) => visible === null || visible.includes(branch.id)) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><a href="/sales/orders">Orders</a><a href="/workspace">Workspace</a></header>
-    <section className="hero"><p>SALES</p><h1>Quotes.</h1><p className="sub">Customer quotes with branch access and calculated totals.</p></section>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/sales/orders">{t("Orders", "الطلبات")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+    <section className="hero"><p>{t("SALES", "المبيعات")}</p><h1>{t("Quotes.", "عروض الأسعار.")}</h1><p className="sub">{t("Customer quotes with branch access and calculated totals.", "عروض العملاء مع صلاحيات الفروع والإجماليات المحسوبة.")}</p></section>
     <QuotesWorkspace options={options} />
   </main>;
 }

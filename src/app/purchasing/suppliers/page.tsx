@@ -1,3 +1,6 @@
+import { getLocale } from "@/lib/server-locale";
+import { translate } from "@/lib/locale";
+import { LanguageSwitcher } from "../../language-switcher";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { canAccess, readableCompanyBranches } from "@/lib/access";
@@ -5,6 +8,8 @@ import { db } from "@/lib/db";
 import { SuppliersWorkspace } from "./workspace";
 
 export default async function SuppliersPage() {
+  const locale = await getLocale();
+  const t = (en: string, ar: string) => translate(locale, en, ar);
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({ where: { userId: user.id, status: "ACTIVE" },
@@ -24,8 +29,8 @@ export default async function SuppliersPage() {
       branches: await Promise.all(company.branches.filter((branch) => visible === null || visible.includes(branch.id))
         .map(async (branch) => ({ id: branch.id, name: branch.name, ...await permissions(branch.id) }))) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><a href="/workspace">Workspace</a></header>
-    <section className="hero"><p>PURCHASING</p><h1>Suppliers.</h1><p className="sub">Company and branch supplier records.</p></section>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+    <section className="hero"><p>{t("PURCHASING", "المشتريات")}</p><h1>{t("Suppliers.", "الموردون.")}</h1><p className="sub">{t("Company and branch supplier records.", "سجلات موردي الشركات والفروع.")}</p></section>
     <SuppliersWorkspace options={options} />
   </main>;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 type Option = { tenantId: string; companyId: string; branchId: string; label: string; canAdjust: boolean };
@@ -9,7 +10,8 @@ type Balance = { itemId: string; quantity: string;
 type Movement = { id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT"; delta: string;
   reason: string; createdAt: string; balance: { item: Item } };
 
-export function StockWorkspace({ options }: { options: Option[] }) {
+export function StockWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
+  const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -24,9 +26,9 @@ export function StockWorkspace({ options }: { options: Option[] }) {
       branchId: branch.branchId });
     const response = await fetch(`/api/inventory/stock?${query}`);
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? "Could not load stock"); return; }
+    if (!response.ok) { setError(data.error ?? t("Could not load stock", "تعذر تحميل المخزون")); return; }
     setItems(data.items); setBalances(data.balances); setMovements(data.movements); setError("");
-  }, [options]);
+  }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
   async function adjust(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,32 +42,32 @@ export function StockWorkspace({ options }: { options: Option[] }) {
           itemId: values.get("itemId"), action: values.get("action"), quantity: values.get("quantity"),
           reason: values.get("reason") }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? "Could not adjust stock");
+      if (!response.ok) setError(data.error ?? t("Could not adjust stock", "تعذر تعديل المخزون"));
       else { form.reset(); await load(selected); }
     } finally { setBusy(false); }
   }
-  if (!options.length) return <section><p>No accessible branches yet. Create a branch and assign stock permissions first.</p></section>;
-  return <section><label>Branch <select value={selected} onChange={(event) => {
+  if (!options.length) return <section><p>{t("No accessible branches yet. Create a branch and assign stock permissions first.", "لا توجد فروع متاحة. أنشئ فرعاً وامنح صلاحيات المخزون أولاً.")}</p></section>;
+  return <section><label>{t("Branch", "الفرع")} <select value={selected} onChange={(event) => {
     setSelected(Number(event.target.value)); setItems([]); setBalances([]); setMovements([]);
   }}>{options.map((option, index) => <option key={`${option.tenantId}:${option.branchId}`} value={index}>{option.label}</option>)}</select></label>
     {scope.canAdjust && <form onSubmit={(event) => void adjust(event)} className="crm-form">
-      <h2>Manual adjustment</h2>
-      <select name="itemId" required defaultValue=""><option value="">Choose item</option>
+      <h2>{t("Manual adjustment", "تسوية يدوية")}</h2>
+      <select name="itemId" required defaultValue=""><option value="">{t("Choose item", "اختر صنفاً")}</option>
         {items.map((item) => <option key={item.id} value={item.id}>{item.sku} · {item.name} ({item.unit})</option>)}</select>
-      <select name="action"><option value="in">Add stock</option><option value="out">Remove stock</option></select>
+      <select name="action"><option value="in">{t("Add stock", "إضافة للمخزون")}</option><option value="out">{t("Remove stock", "سحب من المخزون")}</option></select>
       <input name="quantity" required inputMode="decimal" pattern="(0|[1-9][0-9]{0,8})(\.[0-9]{1,3})?"
-        placeholder="Quantity, e.g. 2.500" />
-      <input name="reason" required minLength={3} maxLength={200} placeholder="Reason for adjustment" />
-      <button disabled={busy || !items.length}>Record adjustment</button>
+        placeholder={t("Quantity, e.g. 2.500", "الكمية، مثال 2.500")} />
+      <input name="reason" required minLength={3} maxLength={200} placeholder={t("Reason for adjustment", "سبب التسوية")} />
+      <button disabled={busy || !items.length}>{t("Record adjustment", "تسجيل التسوية")}</button>
     </form>}
     {error && <p role="alert">{error}</p>}
-    <h2>Balances</h2><div className="customer-list">{balances.map((balance) => <article key={balance.itemId}>
-      <div><h3>{balance.item.name}</h3><p>{balance.item.sku}{balance.item.archivedAt ? " · archived" : ""}</p></div>
+    <h2>{t("Balances", "الأرصدة")}</h2><div className="customer-list">{balances.map((balance) => <article key={balance.itemId}>
+      <div><h3>{balance.item.name}</h3><p>{balance.item.sku}{balance.item.archivedAt ? t(" · archived", " · مؤرشف") : ""}</p></div>
       <strong>{balance.quantity} {balance.item.unit}</strong>
-    </article>)}</div>{!balances.length && <p>No stock balances recorded in this branch.</p>}
-    <h2>Recent movements</h2><div className="customer-list">{movements.map((movement) => <article key={movement.id}>
+    </article>)}</div>{!balances.length && <p>{t("No stock balances recorded in this branch.", "لا توجد أرصدة مسجلة لهذا الفرع.")}</p>}
+    <h2>{t("Recent movements", "الحركات الأخيرة")}</h2><div className="customer-list">{movements.map((movement) => <article key={movement.id}>
       <div><h3>{movement.balance.item.name}</h3><p>{movement.reason} · {new Date(movement.createdAt).toLocaleString()}</p></div>
       <strong>{movement.delta} {movement.balance.item.unit}</strong>
-    </article>)}</div>{!movements.length && <p>No movements yet.</p>}
+    </article>)}</div>{!movements.length && <p>{t("No movements yet.", "لا توجد حركات بعد.")}</p>}
   </section>;
 }
