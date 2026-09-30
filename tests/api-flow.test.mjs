@@ -523,7 +523,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(expenseA.status, 201);
     assert.equal(expenseB.status, 201);
     assert.equal(sharedExpense.status, 201);
-    assert.equal(expenseA.data.expense.currency, "OMR");
+    assert.equal(expenseA.data.expense.currency, "JOD");
     assert.equal((await post("/api/expenses", expenseBody, manager.cookie)).status, 409);
     const expensesPath = `/api/expenses?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
     assert.deepEqual((await get(expensesPath, accepted.cookie)).data.expenses.map((item) => item.id), [expenseA.data.expense.id]);
