@@ -507,6 +507,32 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(employeePath, { tenantId, action: "update", jobTitle: "Blocked" }, manager.cookie)).status, 409);
     assert.equal((await patch(employeePath, { tenantId, action: "status", status: "ACTIVE" }, manager.cookie)).status, 200);
 
+    const assignedProject = await post("/api/projects", { tenantId, companyId: companyA.data.company.id,
+      branchId: branchA.data.branch.id, code: "PRJ-TEAM", name: "Team project" }, manager.cookie);
+    assert.equal(assignedProject.status, 201);
+    const assignedTasksPath = `/api/projects/${assignedProject.data.project.id}/tasks`;
+    assert.equal((await post(assignedTasksPath, { tenantId, title: "Wrong company",
+      assigneeEmployeeId: randomUUID() }, manager.cookie)).status, 404);
+    assert.equal((await post(assignedTasksPath, { tenantId, title: "Wrong branch",
+      assigneeEmployeeId: employeeB.data.employee.id }, owner.cookie)).status, 409);
+    const assignedTask = await post(assignedTasksPath, { tenantId, title: "Assigned task",
+      assigneeEmployeeId: employeeA.data.employee.id }, manager.cookie);
+    assert.equal(assignedTask.status, 201);
+    assert.equal(assignedTask.data.task.assigneeEmployeeId, employeeA.data.employee.id);
+    const viewerAssigned = await get(`${assignedTasksPath}?tenantId=${tenantId}`, accepted.cookie);
+    assert.equal(viewerAssigned.data.tasks[0].assigneeName, null);
+    const managerAssigned = await get(`${assignedTasksPath}?tenantId=${tenantId}`, manager.cookie);
+    assert.equal(managerAssigned.data.tasks[0].assigneeName, "Branch A Employee");
+    const assignedTaskPath = `${assignedTasksPath}/${assignedTask.data.task.id}`;
+    assert.equal((await patch(assignedTaskPath, { tenantId, action: "assign",
+      employeeId: null }, accepted.cookie)).status, 403);
+    assert.equal((await patch(assignedTaskPath, { tenantId, action: "assign",
+      employeeId: employeeB.data.employee.id }, owner.cookie)).status, 409);
+    assert.equal((await patch(assignedTaskPath, { tenantId, action: "assign",
+      employeeId: null }, manager.cookie)).status, 200);
+    assert.equal((await get(`${assignedTasksPath}?tenantId=${tenantId}`, manager.cookie))
+      .data.tasks[0].assigneeEmployeeId, null);
+
     const leaveBody = { tenantId, companyId: companyA.data.company.id, employeeId: employeeA.data.employee.id,
       type: "ANNUAL", startDate: "2026-11-01", endDate: "2026-11-05", note: "Family visit" };
     assert.equal((await post("/api/leave-requests", leaveBody, accepted.cookie)).status, 403);
@@ -571,7 +597,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const scopedDashboard = await get(dashboardPath, accepted.cookie);
     assert.equal(scopedDashboard.status, 200);
     assert.equal(scopedDashboard.data.projects.COMPLETED, 1);
-    assert.equal(scopedDashboard.data.projects.PLANNED, 0);
+    assert.equal(scopedDashboard.data.projects.PLANNED, 1);
     assert.equal(scopedDashboard.data.employees, null);
     assert.deepEqual(scopedDashboard.data.expenses, { currency: "JOD", postedCount: 1, postedAmount: "12.375" });
     const managerDashboard = await get(dashboardPath, manager.cookie);
@@ -580,7 +606,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(managerDashboard.data.expenses.postedCount, 1);
     const ownerAllDashboard = await get(dashboardPath, owner.cookie);
     assert.equal(ownerAllDashboard.data.employees, 2);
-    assert.equal(ownerAllDashboard.data.projects.PLANNED, 2);
+    assert.equal(ownerAllDashboard.data.projects.PLANNED, 3);
     assert.equal(ownerAllDashboard.data.expenses.postedCount, 1);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, manager.cookie)).status, 409);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "Duplicate entry" }, manager.cookie)).status, 200);
@@ -588,6 +614,36 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await get(expensesPath, accepted.cookie)).data.expenses[0].voidReason, "Duplicate entry");
     assert.deepEqual((await get(dashboardPath, accepted.cookie)).data.expenses,
       { currency: "JOD", postedCount: 0, postedAmount: "0" });
+
+    const inboxLeave = await post("/api/leave-requests", { ...leaveBody,
+      startDate: "2027-01-04", endDate: "2027-01-05" }, manager.cookie);
+    const inboxExpense = await post("/api/expenses", { ...expenseBody,
+      number: "EXP-INBOX", description: "Approval inbox expense" }, manager.cookie);
+    const inboxPurchase = await post("/api/purchase-orders", { ...purchaseOrderBody,
+      number: "PO-INBOX" }, manager.cookie);
+    assert.equal(inboxLeave.status, 201);
+    assert.equal(inboxExpense.status, 201);
+    assert.equal(inboxPurchase.status, 201);
+    const inboxPath = `/api/approvals?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.equal((await get(inboxPath, accepted.cookie)).status, 403);
+    const managerInbox = await get(inboxPath, manager.cookie);
+    assert.equal(managerInbox.status, 200);
+    assert.deepEqual(managerInbox.data.counts, { leave: 1, expense: 1, purchase: 1 });
+    assert.deepEqual(new Set(managerInbox.data.items.map((item) => item.id)),
+      new Set([inboxLeave.data.request.id, inboxExpense.data.expense.id, inboxPurchase.data.order.id]));
+    assert.equal((await get(inboxPath.replace(companyA.data.company.id, companyB.data.company.id), manager.cookie)).status, 403);
+    const ownerInbox = await get(inboxPath, owner.cookie);
+    assert.equal(ownerInbox.data.counts.leave, 2);
+    assert.equal(ownerInbox.data.counts.expense, 3);
+    assert.equal(ownerInbox.data.counts.purchase, 1);
+    assert.equal((await patch(`/api/leave-requests/${inboxLeave.data.request.id}`,
+      { tenantId, action: "approve" }, manager.cookie)).status, 200);
+    assert.equal((await patch(`/api/expenses/${inboxExpense.data.expense.id}/status`,
+      { tenantId, action: "post" }, manager.cookie)).status, 200);
+    assert.equal((await patch(`/api/purchase-orders/${inboxPurchase.data.order.id}/status`,
+      { tenantId, action: "issue" }, manager.cookie)).status, 200);
+    assert.deepEqual((await get(inboxPath, manager.cookie)).data.counts,
+      { leave: 0, expense: 0, purchase: 0 });
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);

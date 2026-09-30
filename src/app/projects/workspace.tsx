@@ -8,7 +8,9 @@ type Option = { tenantId: string; companyId: string; label: string; companyPermi
 type Project = { id: string; code: string; name: string; description: string | null; branchId: string | null;
   status: "PLANNED" | "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED"; dueDate: string | null;
   _count: { tasks: number } };
-type Task = { id: string; title: string; status: "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED"; dueDate: string | null };
+type Task = { id: string; title: string; status: "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+  dueDate: string | null; assigneeEmployeeId: string | null; assigneeName: string | null };
+type Employee = { id: string; fullName: string; code: string; branchId: string | null };
 
 export function ProjectsWorkspace({ options }: { options: Option[] }) {
   const [selected, setSelected] = useState(0);
@@ -19,6 +21,8 @@ export function ProjectsWorkspace({ options }: { options: Option[] }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskPage, setTaskPage] = useState(0);
   const [nextTaskPage, setNextTaskPage] = useState<number | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [nextEmployeePage, setNextEmployeePage] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const option = options[selected];
@@ -40,7 +44,18 @@ export function ProjectsWorkspace({ options }: { options: Option[] }) {
     if (!response.ok) { setMessage(data.error ?? "Could not load tasks"); return; }
     setTasks(data.tasks); setTaskPage(number); setNextTaskPage(data.nextPage);
   }, [options]);
-  useEffect(() => { void load(selected); }, [load, selected]);
+  const loadEmployees = useCallback(async (index: number, number = 0) => {
+    const scope = options[index];
+    if (!scope || !(scope.companyPermissions.canCreateTask || scope.companyPermissions.canManageTask ||
+      scope.branches.some((branch) => branch.canCreateTask || branch.canManageTask))) return;
+    const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, page: String(number) });
+    const response = await fetch(`/api/employees?${query}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    setEmployees((previous) => number === 0 ? data.employees : [...previous, ...data.employees]);
+    setNextEmployeePage(data.nextPage);
+  }, [options]);
+  useEffect(() => { void load(selected); void loadEmployees(selected); }, [load, loadEmployees, selected]);
   useEffect(() => { if (openId) void loadTasks(selected, openId); }, [loadTasks, openId, selected]);
   async function mutate(url: string, method: "POST" | "PATCH", body: object, success: string, refresh: () => Promise<void>) {
     setBusy(true); setMessage("");
@@ -54,7 +69,7 @@ export function ProjectsWorkspace({ options }: { options: Option[] }) {
   if (!option) return <section className="panel"><p>No accessible companies yet.</p></section>;
   const createBranches = option.branches.filter((branch) => branch.canCreate);
   return <section className="panel">
-    <label>Company <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setOpenId(null); setTasks([]); setProjects([]); setMessage(""); }}>
+    <label>Company <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setOpenId(null); setTasks([]); setProjects([]); setEmployees([]); setNextEmployeePage(null); setMessage(""); }}>
       {options.map((item, index) => <option key={item.companyId} value={index}>{item.label}</option>)}
     </select></label>
     {(option.companyPermissions.canCreate || createBranches.length > 0) && <form action={(form) => mutate("/api/projects", "POST",
@@ -77,6 +92,8 @@ export function ProjectsWorkspace({ options }: { options: Option[] }) {
     {projects.length === 0 && <p>No projects on this page.</p>}
     {projects.map((project) => {
       const permissions = project.branchId ? option.branches.find((branch) => branch.id === project.branchId) : option.companyPermissions;
+      const assignable = employees.filter((employee) => !project.branchId || !employee.branchId ||
+        project.branchId === employee.branchId);
       const expanded = openId === project.id;
       const projectAction = (action: "activate" | "pause" | "complete" | "cancel") => void mutate(
         `/api/projects/${project.id}`, "PATCH", { tenantId: option.tenantId, action }, "Project updated", () => load(selected, page));
@@ -93,14 +110,31 @@ export function ProjectsWorkspace({ options }: { options: Option[] }) {
         {expanded && <div>
           {permissions?.canCreateTask && (project.status === "PLANNED" || project.status === "ACTIVE") && <form action={(form) => mutate(
             `/api/projects/${project.id}/tasks`, "POST",
-            { tenantId: option.tenantId, title: form.get("title"), dueDate: form.get("dueDate") || null },
+            { tenantId: option.tenantId, title: form.get("title"), dueDate: form.get("dueDate") || null,
+              assigneeEmployeeId: form.get("assigneeEmployeeId") || null },
             "Task created", async () => { await loadTasks(selected, project.id); await load(selected, page); })}>
             <h3>New task</h3><label>Title <input name="title" required minLength={2} maxLength={200} /></label>
-            <label>Due date <input name="dueDate" type="date" /></label><button disabled={busy}>Add task</button>
+            <label>Due date <input name="dueDate" type="date" /></label>
+            <label>Assignee <select name="assigneeEmployeeId"><option value="">Unassigned</option>
+              {assignable.map((employee) => <option key={employee.id} value={employee.id}>{employee.code} · {employee.fullName}</option>)}
+            </select></label><button disabled={busy}>Add task</button>
           </form>}
+          {(permissions?.canCreateTask || permissions?.canManageTask) && nextEmployeePage !== null &&
+            <button disabled={busy} onClick={() => void loadEmployees(selected, nextEmployeePage)}>Load more employees</button>}
           {tasks.length === 0 && <p>No tasks on this page.</p>}
           {tasks.map((task) => <div key={task.id} className="card">
             <strong>{task.title}</strong> · {task.status}{task.dueDate && ` · Due ${task.dueDate.slice(0, 10)}`}
+            {task.assigneeEmployeeId && <p>Assigned to {task.assigneeName ?? "employee"}</p>}
+            {permissions?.canManageTask && (project.status === "PLANNED" || project.status === "ACTIVE") &&
+              (task.status === "TODO" || task.status === "IN_PROGRESS") && <form action={(form) => mutate(
+                `/api/projects/${project.id}/tasks/${task.id}`, "PATCH",
+                { tenantId: option.tenantId, action: "assign", employeeId: form.get("employeeId") || null },
+                "Assignment updated", () => loadTasks(selected, project.id, taskPage))}>
+                <label>Assign <select name="employeeId" defaultValue={task.assigneeEmployeeId ?? ""}>
+                  <option value="">Unassigned</option>
+                  {assignable.map((employee) => <option key={employee.id} value={employee.id}>{employee.code} · {employee.fullName}</option>)}
+                </select></label><button disabled={busy}>Save assignee</button>
+              </form>}
             {permissions?.canManageTask && project.status === "ACTIVE" && (task.status === "TODO" || task.status === "IN_PROGRESS") && <div>
               {task.status === "TODO" && <button disabled={busy} onClick={() => void mutate(`/api/projects/${project.id}/tasks/${task.id}`, "PATCH", { tenantId: option.tenantId, action: "start" }, "Task started", () => loadTasks(selected, project.id, taskPage))}>Start</button>}
               <button disabled={busy} onClick={() => void mutate(`/api/projects/${project.id}/tasks/${task.id}`, "PATCH", { tenantId: option.tenantId, action: "complete" }, "Task completed", () => loadTasks(selected, project.id, taskPage))}>Complete</button>

@@ -704,19 +704,21 @@ model Project {
 }
 
 model ProjectTask {
-  id          String            @id @default(uuid()) @db.Uuid
-  tenantId    String            @db.Uuid
-  companyId   String            @db.Uuid
-  projectId   String            @db.Uuid
-  title       String
-  description String?
-  status      ProjectTaskStatus @default(TODO)
-  dueDate     DateTime?         @db.Date
-  completedAt DateTime?
-  createdBy   String            @db.Uuid
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  project     Project           @relation(fields: [tenantId, companyId, projectId], references: [tenantId, companyId, id], onDelete: Restrict)
+  id                 String            @id @default(uuid()) @db.Uuid
+  tenantId           String            @db.Uuid
+  companyId          String            @db.Uuid
+  projectId          String            @db.Uuid
+  assigneeEmployeeId String?           @db.Uuid
+  title              String
+  description        String?
+  status             ProjectTaskStatus @default(TODO)
+  dueDate            DateTime?         @db.Date
+  completedAt        DateTime?
+  createdBy          String            @db.Uuid
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  project            Project           @relation(fields: [tenantId, companyId, projectId], references: [tenantId, companyId, id], onDelete: Restrict)
+  assignee           Employee?         @relation(fields: [tenantId, companyId, assigneeEmployeeId], references: [tenantId, companyId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@index([tenantId, companyId, projectId, status])
@@ -740,6 +742,7 @@ model Employee {
   company       Company        @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   branch        Branch?        @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   leaveRequests LeaveRequest[]
+  assignedTasks ProjectTask[]
 
   @@unique([companyId, code])
   @@unique([tenantId, id])

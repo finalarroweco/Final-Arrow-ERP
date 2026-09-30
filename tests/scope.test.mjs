@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { scopeMatches } from "../src/lib/scope.ts";
+import { intersectBranches } from "../src/lib/approval-scope.ts";
+
+test("approval scope requires both read and action rights", () => {
+  assert.equal(intersectBranches(null, null), null);
+  assert.deepEqual(intersectBranches(null, ["a"]), ["a"]);
+  assert.deepEqual(intersectBranches(["a", "b"], ["b", "c"]), ["b"]);
+  assert.equal(intersectBranches(["a"], ["b"]), false);
+  assert.equal(intersectBranches(false, null), false);
+});
 
 test("tenant grant covers its hierarchy", () => {
   const scope = { type: "TENANT", companyId: null, branchId: null };

@@ -1,6 +1,6 @@
 # Foundation implementation
 
-The application shell is a design preview. Its module cards do not represent working modules. The first working slice covers account creation, sign-in, company and branch creation, and company-wide or branch-specific departments.
+The public sample-data preview is separate from the working application. The authenticated routes provide the scoped workflows listed below.
 
 ## Database boundaries
 
@@ -60,11 +60,11 @@ Owners can set a three-letter base currency when creating a company and update i
 
 ## Projects
 
-`/projects` manages company-wide or branch-specific projects and tasks. Projects move through planned, active, on-hold, completed and cancelled states. Tasks can be started, completed or cancelled while a project is active; a project cannot complete with open tasks. Read, create and manage permissions follow company and branch scopes. Changes are audited; due dates are optional.
+`/projects` manages company-wide or branch-specific projects and tasks. Projects move through planned, active, on-hold, completed and cancelled states. Tasks can be started, completed or cancelled while a project is active; a project cannot complete with open tasks. Tasks can be assigned to active employees in the same company and compatible branch; assignee names are returned only to users with employee read access. Read, create and manage permissions follow company and branch scopes. Changes are audited; due dates are optional.
 
 ## Employee directory
 
-`/hr/employees` stores staff codes, names, job titles, contact information and optional start dates by company or branch. Owners and Managers can read, create and manage staff; Viewers do not receive employee access by default. Records can be deactivated and reactivated. This is a directory, not payroll, leave, attendance or fingerprint integration.
+`/hr/employees` stores staff codes, names, job titles, contact information and optional start dates by company or branch. Owners and Managers can read, create and manage staff; Viewers do not receive employee access by default. Records can be deactivated and reactivated. This is a directory, not payroll, attendance or fingerprint integration.
 
 ## Internal expenses
 
@@ -73,3 +73,7 @@ Owners can set a three-letter base currency when creating a company and update i
 ## Leave requests
 
 `/hr/leave` lets Owners and Managers create leave requests for active employees in their company or branch and approve, reject or cancel them. Dates, type and employee are required. Rejection and cancellation need a reason; each decision is audited and conditional on the current state. The request inherits the employee branch. This first slice does not calculate leave balances, holidays, working days or payroll impact.
+
+## Action inbox
+
+`/approvals` combines the latest 25 pending leave requests, expense drafts and purchase-order drafts that the current user can both read and act on. Counts cover all matching records in the user's scope. Actions call each module's existing conditional, audited endpoint. The inbox does not add a separate approval chain or substitute for the complete lists in each module.
