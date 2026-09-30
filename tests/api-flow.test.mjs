@@ -671,7 +671,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const ticketsPath = `/api/tickets?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
     const viewerTickets = await get(ticketsPath, accepted.cookie);
     assert.deepEqual(viewerTickets.data.tickets.map((item) => item.id), [ticketA.data.ticket.id]);
-    assert.equal(viewerTickets.data.tickets[0].customerName, customerA.data.customer.displayName);
+    assert.equal(viewerTickets.data.tickets[0].customerName, "Renamed Customer");
     assert.equal(viewerTickets.data.tickets[0].assigneeName, null);
     assert.equal((await get(ticketsPath.replace(companyA.data.company.id, companyB.data.company.id),
       accepted.cookie)).status, 403);
