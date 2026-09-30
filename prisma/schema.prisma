@@ -47,6 +47,21 @@ enum InvoiceStatus {
   VOID
 }
 
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectTaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
 enum PurchaseOrderStatus {
   DRAFT
   ISSUED
@@ -97,6 +112,7 @@ model Company {
   stockBalances  StockBalance[]
   receipts       GoodsReceipt[]
   invoices       Invoice[]
+  projects       Project[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -125,6 +141,7 @@ model Branch {
   stockBalances  StockBalance[]
   receipts       GoodsReceipt[]
   invoices       Invoice[]
+  projects       Project[]
 
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
@@ -630,4 +647,46 @@ model InvoiceLine {
 
   @@unique([invoiceId, position])
   @@index([tenantId, invoiceId])
+}
+
+model Project {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @db.Uuid
+  companyId   String        @db.Uuid
+  branchId    String?       @db.Uuid
+  code        String
+  name        String
+  description String?
+  status      ProjectStatus @default(PLANNED)
+  dueDate     DateTime?     @db.Date
+  createdBy   String        @db.Uuid
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  company     Company       @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch      Branch?       @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  tasks       ProjectTask[]
+
+  @@unique([companyId, code])
+  @@unique([tenantId, id])
+  @@unique([tenantId, companyId, id])
+  @@index([tenantId, companyId, branchId, status])
+}
+
+model ProjectTask {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @db.Uuid
+  companyId   String            @db.Uuid
+  projectId   String            @db.Uuid
+  title       String
+  description String?
+  status      ProjectTaskStatus @default(TODO)
+  dueDate     DateTime?         @db.Date
+  completedAt DateTime?
+  createdBy   String            @db.Uuid
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  project     Project           @relation(fields: [tenantId, companyId, projectId], references: [tenantId, companyId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, companyId, projectId, status])
 }

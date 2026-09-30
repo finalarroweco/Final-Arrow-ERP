@@ -443,6 +443,43 @@ test("invitation is single-use and a branch viewer sees only their company and b
       balance.itemId === itemA.data.item.id).quantity, "6.375");
     assert.equal((await get(stockPath, accepted.cookie)).data.movements.length, 4);
 
+    const projectBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      code: "PRJ-A", name: "Branch A project", dueDate: "2026-12-31" };
+    assert.equal((await post("/api/projects", projectBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/projects", { ...projectBody, branchId: branchB.data.branch.id }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/projects", { ...projectBody, dueDate: "2026-02-30" }, manager.cookie)).status, 400);
+    const projectA = await post("/api/projects", projectBody, manager.cookie);
+    const projectB = await post("/api/projects", { ...projectBody, branchId: branchB.data.branch.id,
+      code: "PRJ-B", name: "Branch B project" }, owner.cookie);
+    const companyProject = await post("/api/projects", { ...projectBody, branchId: null,
+      code: "PRJ-C", name: "Company project" }, owner.cookie);
+    assert.equal(projectA.status, 201);
+    assert.equal(projectB.status, 201);
+    assert.equal(companyProject.status, 201);
+    assert.equal((await post("/api/projects", projectBody, manager.cookie)).status, 409);
+    const projectsPath = `/api/projects?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.deepEqual((await get(projectsPath, accepted.cookie)).data.projects.map((item) => item.id), [projectA.data.project.id]);
+    assert.equal((await get(projectsPath.replace(companyA.data.company.id, companyB.data.company.id), accepted.cookie)).status, 403);
+    const projectPath = `/api/projects/${projectA.data.project.id}`;
+    const tasksPath = `${projectPath}/tasks`;
+    assert.equal((await get(`${tasksPath}?tenantId=${tenantId}`, accepted.cookie)).status, 200);
+    assert.equal((await get(`/api/projects/${projectB.data.project.id}/tasks?tenantId=${tenantId}`, accepted.cookie)).status, 403);
+    assert.equal((await post(tasksPath, { tenantId, title: "Viewer task" }, accepted.cookie)).status, 403);
+    const task = await post(tasksPath, { tenantId, title: "Prepare delivery", dueDate: "2026-12-20" }, manager.cookie);
+    assert.equal(task.status, 201);
+    assert.equal((await patch(projectPath, { tenantId, action: "activate" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(projectPath, { tenantId, action: "complete" }, manager.cookie)).status, 409);
+    assert.equal((await patch(projectPath, { tenantId, action: "activate" }, manager.cookie)).status, 200);
+    assert.equal((await patch(projectPath, { tenantId, action: "complete" }, manager.cookie)).status, 409);
+    const taskPath = `${tasksPath}/${task.data.task.id}`;
+    assert.equal((await patch(taskPath, { tenantId, action: "start" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(taskPath, { tenantId, action: "start" }, manager.cookie)).status, 200);
+    assert.equal((await patch(taskPath, { tenantId, action: "start" }, manager.cookie)).status, 409);
+    assert.equal((await patch(taskPath, { tenantId, action: "complete" }, manager.cookie)).status, 200);
+    assert.equal((await patch(projectPath, { tenantId, action: "complete" }, manager.cookie)).status, 200);
+    assert.equal((await post(tasksPath, { tenantId, title: "Too late" }, manager.cookie)).status, 409);
+    assert.deepEqual((await get(`${tasksPath}?tenantId=${tenantId}`, accepted.cookie)).data.tasks.map((item) => item.status), ["DONE"]);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);
