@@ -42,7 +42,7 @@ Owners can set a three-letter base currency when creating a company and update i
 
 ## Dashboard
 
-`/dashboard` shows active customer count and lead, quote and order status counts for a selected company. Each metric checks its own read permission. Branch-scoped users see only records assigned to their branches, never company-wide or sibling-branch records. Metrics without permission are omitted, and the endpoint rejects requests with no readable modules. Counts are operational activity, not financial revenue.
+`/dashboard` shows active customer and employee counts, lead, quote, order and project status counts, and posted expense totals for a selected company. Each metric checks its own read permission. Branch-scoped users see only records assigned to their branches, never company-wide or sibling-branch records. Metrics without permission are omitted, and the endpoint rejects requests with no readable modules. Expense totals represent posted internal records in the company base currency, not cash paid or financial revenue.
 
 ## Supplier directory
 

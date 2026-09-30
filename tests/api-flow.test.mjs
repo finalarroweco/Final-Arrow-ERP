@@ -534,10 +534,26 @@ test("invitation is single-use and a branch viewer sees only their company and b
       { tenantId, action: "post" }, manager.cookie)).status, 403);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "" }, manager.cookie)).status, 400);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, manager.cookie)).status, 200);
+    const scopedDashboard = await get(dashboardPath, accepted.cookie);
+    assert.equal(scopedDashboard.status, 200);
+    assert.equal(scopedDashboard.data.projects.COMPLETED, 1);
+    assert.equal(scopedDashboard.data.projects.PLANNED, 0);
+    assert.equal(scopedDashboard.data.employees, null);
+    assert.deepEqual(scopedDashboard.data.expenses, { currency: "JOD", postedCount: 1, postedAmount: "12.375" });
+    const managerDashboard = await get(dashboardPath, manager.cookie);
+    assert.equal(managerDashboard.data.employees, 1);
+    assert.equal(managerDashboard.data.projects.COMPLETED, 1);
+    assert.equal(managerDashboard.data.expenses.postedCount, 1);
+    const ownerAllDashboard = await get(dashboardPath, owner.cookie);
+    assert.equal(ownerAllDashboard.data.employees, 2);
+    assert.equal(ownerAllDashboard.data.projects.PLANNED, 2);
+    assert.equal(ownerAllDashboard.data.expenses.postedCount, 1);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, manager.cookie)).status, 409);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "Duplicate entry" }, manager.cookie)).status, 200);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "Again" }, manager.cookie)).status, 409);
     assert.equal((await get(expensesPath, accepted.cookie)).data.expenses[0].voidReason, "Duplicate entry");
+    assert.deepEqual((await get(dashboardPath, accepted.cookie)).data.expenses,
+      { currency: "JOD", postedCount: 0, postedAmount: "0" });
 
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);

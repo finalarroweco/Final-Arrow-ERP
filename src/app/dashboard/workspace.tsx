@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Option = { tenantId: string; companyId: string; label: string };
 type Summary = { customers: number | null;
   leads: Record<string, number> | null; quotes: Record<string, number> | null;
-  orders: Record<string, number> | null };
+  orders: Record<string, number> | null; projects: Record<string, number> | null;
+  employees: number | null; expenses: { currency: string; postedCount: number; postedAmount: string } | null };
 
 export function DashboardWorkspace({ options }: { options: Option[] }) {
   const [selected, setSelected] = useState(0);
@@ -39,6 +40,12 @@ export function DashboardWorkspace({ options }: { options: Option[] }) {
         <p>Active quotes · {summary.quotes.ACCEPTED} accepted · {summary.quotes.REJECTED} rejected</p><a href="/sales/quotes">Open quotes</a></article>}
       {summary.orders && <article><small>OPERATIONS</small><h2>{summary.orders.NEW + summary.orders.IN_PROGRESS}</h2>
         <p>Open orders · {summary.orders.COMPLETED} completed · {summary.orders.CANCELLED} cancelled</p><a href="/sales/orders">Open orders</a></article>}
+      {summary.projects && <article><small>PROJECTS</small><h2>{summary.projects.PLANNED + summary.projects.ACTIVE + summary.projects.ON_HOLD}</h2>
+        <p>Open projects · {summary.projects.COMPLETED} completed</p><a href="/projects">Open projects</a></article>}
+      {summary.employees !== null && <article><small>HUMAN RESOURCES</small><h2>{summary.employees}</h2>
+        <p>Active employees</p><a href="/hr/employees">Open employees</a></article>}
+      {summary.expenses && <article><small>ACCOUNTING</small><h2>{summary.expenses.postedAmount} {summary.expenses.currency}</h2>
+        <p>Posted expenses · {summary.expenses.postedCount} records</p><a href="/accounting/expenses">Open expenses</a></article>}
     </div>}
     <button onClick={() => void load(selected)}>Refresh</button>
   </section>;
