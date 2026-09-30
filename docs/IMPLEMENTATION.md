@@ -65,3 +65,7 @@ Owners can set a three-letter base currency when creating a company and update i
 ## Employee directory
 
 `/hr/employees` stores staff codes, names, job titles, contact information and optional start dates by company or branch. Owners and Managers can read, create and manage staff; Viewers do not receive employee access by default. Records can be deactivated and reactivated. This is a directory, not payroll, leave, attendance or fingerprint integration.
+
+## Internal expenses
+
+`/accounting/expenses` records company or branch spending in the company base currency. A positive amount, category, description and date are required. Drafts can be posted once or voided with a reason; posted records can also be voided. Status changes are audited and conditional. This is an internal expense register, not a general ledger, tax system, payment execution or approval chain.

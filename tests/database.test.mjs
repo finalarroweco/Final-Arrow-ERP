@@ -93,6 +93,17 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   await assert.rejects(db.employee.create({ data: { tenantId: a.id, companyId: companyA.id,
     branchId: branchB.id, code: "EMP-BAD", fullName: "Wrong branch", createdBy: randomUUID() } }));
 
+  await assert.rejects(db.expense.create({ data: { tenantId: a.id, companyId: companyA.id,
+    branchId: branchB.id, number: "EXP-BAD", description: "Wrong branch", category: "Other",
+    amount: "1.000", currency: "OMR", expenseDate: new Date("2026-09-30"), createdBy: randomUUID() } }));
+  await assert.rejects(db.expense.create({ data: { tenantId: a.id, companyId: companyA.id,
+    branchId: branchA.id, number: "EXP-ZERO", description: "Zero amount", category: "Other",
+    amount: "0.000", currency: "OMR", expenseDate: new Date("2026-09-30"), createdBy: randomUUID() } }));
+  const expense = await db.expense.create({ data: { tenantId: a.id, companyId: companyA.id,
+    branchId: branchA.id, number: "EXP-DB", description: "Valid expense", category: "Other",
+    amount: "2.500", currency: "OMR", expenseDate: new Date("2026-09-30"), createdBy: randomUUID() } });
+  assert.equal(expense.branchId, branchA.id);
+
   const user = await db.user.create({
     data: { email: `test-${unique()}@example.invalid`, name: "Test", passwordHash: "test-only" },
   });

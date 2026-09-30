@@ -507,6 +507,38 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(employeePath, { tenantId, action: "update", jobTitle: "Blocked" }, manager.cookie)).status, 409);
     assert.equal((await patch(employeePath, { tenantId, action: "status", status: "ACTIVE" }, manager.cookie)).status, 200);
 
+    const expenseBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      number: "EXP-A", description: "Branch supplies", category: "Operations",
+      amount: "12.375", expenseDate: "2026-09-30" };
+    assert.equal((await post("/api/expenses", expenseBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/expenses", { ...expenseBody, branchId: branchB.data.branch.id }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/expenses", { ...expenseBody, amount: "0" }, manager.cookie)).status, 400);
+    assert.equal((await post("/api/expenses", { ...expenseBody, amount: "-1" }, manager.cookie)).status, 400);
+    assert.equal((await post("/api/expenses", { ...expenseBody, expenseDate: "2026-02-30" }, manager.cookie)).status, 400);
+    const expenseA = await post("/api/expenses", expenseBody, manager.cookie);
+    const expenseB = await post("/api/expenses", { ...expenseBody, branchId: branchB.data.branch.id,
+      number: "EXP-B", description: "Other branch supplies" }, owner.cookie);
+    const sharedExpense = await post("/api/expenses", { ...expenseBody, branchId: null,
+      number: "EXP-C", description: "Company supplies" }, owner.cookie);
+    assert.equal(expenseA.status, 201);
+    assert.equal(expenseB.status, 201);
+    assert.equal(sharedExpense.status, 201);
+    assert.equal(expenseA.data.expense.currency, "OMR");
+    assert.equal((await post("/api/expenses", expenseBody, manager.cookie)).status, 409);
+    const expensesPath = `/api/expenses?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.deepEqual((await get(expensesPath, accepted.cookie)).data.expenses.map((item) => item.id), [expenseA.data.expense.id]);
+    assert.equal((await get(expensesPath.replace(companyA.data.company.id, companyB.data.company.id), accepted.cookie)).status, 403);
+    const expenseStatusPath = `/api/expenses/${expenseA.data.expense.id}/status`;
+    assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(`/api/expenses/${expenseB.data.expense.id}/status`,
+      { tenantId, action: "post" }, manager.cookie)).status, 403);
+    assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "" }, manager.cookie)).status, 400);
+    assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, manager.cookie)).status, 200);
+    assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, manager.cookie)).status, 409);
+    assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "Duplicate entry" }, manager.cookie)).status, 200);
+    assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "Again" }, manager.cookie)).status, 409);
+    assert.equal((await get(expensesPath, accepted.cookie)).data.expenses[0].voidReason, "Duplicate entry");
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);
