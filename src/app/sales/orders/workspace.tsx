@@ -1,5 +1,6 @@
 "use client";
 
+import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 
 type Option = { tenantId: string; companyId: string; label: string; canManageCompanyWide: boolean;
@@ -9,7 +10,8 @@ type Order = { id: string; number: string; quoteId: string; customerName: string
   currency: string; subtotal: string; lines: { description: string; quantity: number;
     unitPrice: string; amount: string }[] };
 
-export function OrdersWorkspace({ options }: { options: Option[] }) {
+export function OrdersWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
+  const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0);
   const [orders, setOrders] = useState<Order[]>([]);
   const [page, setPage] = useState(0);
@@ -22,9 +24,9 @@ export function OrdersWorkspace({ options }: { options: Option[] }) {
     const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, page: String(pageNumber) });
     const response = await fetch(`/api/orders?${query}`);
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? "Could not load orders"); return; }
+    if (!response.ok) { setError(data.error ?? t("Could not load orders", "تعذر تحميل الطلبات")); return; }
     setOrders(data.orders); setPage(pageNumber); setNextPage(data.nextPage); setError("");
-  }, [options]);
+  }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
   async function change(order: Order, action: "start" | "complete" | "cancel") {
     const scope = options[selected];
@@ -35,12 +37,12 @@ export function OrdersWorkspace({ options }: { options: Option[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, action }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? "Could not update order");
+      if (!response.ok) setError(data.error ?? t("Could not update order", "تعذر تحديث الطلب"));
       else await load(selected, page);
     } finally { setBusy(false); }
   }
-  if (!options.length) return <section><p>No accessible companies yet.</p></section>;
-  return <section><label>Company <select value={selected} onChange={(event) => setSelected(Number(event.target.value))}>
+  if (!options.length) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
+  return <section><label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => setSelected(Number(event.target.value))}>
     {options.map((option, index) => <option key={`${option.tenantId}:${option.companyId}`} value={index}>{option.label}</option>)}
   </select></label>
     {error && <p role="alert">{error}</p>}
@@ -49,17 +51,17 @@ export function OrdersWorkspace({ options }: { options: Option[] }) {
       const canManage = order.branchId ? scope.branches.find((branch) => branch.id === order.branchId)?.canManage
         : scope.canManageCompanyWide;
       return <article key={order.id}><div>
-      <h3>{order.number} · {order.customerName}</h3><p>{order.status.replace("_", " ")} · {order.subtotal} {order.currency}</p>
+      <h3>{order.number} · {order.customerName}</h3><p>{t(order.status.replace("_", " "), ({ NEW: "جديد", IN_PROGRESS: "قيد التنفيذ", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
       <ul>{order.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
       {canManage && <div className="quote-actions">
-        {order.status === "NEW" && <button disabled={busy} onClick={() => void change(order, "start")}>Start work</button>}
-        {order.status === "IN_PROGRESS" && <button disabled={busy} onClick={() => void change(order, "complete")}>Complete</button>}
+        {order.status === "NEW" && <button disabled={busy} onClick={() => void change(order, "start")}>{t("Start work", "بدء العمل")}</button>}
+        {order.status === "IN_PROGRESS" && <button disabled={busy} onClick={() => void change(order, "complete")}>{t("Complete", "إكمال")}</button>}
         {["NEW", "IN_PROGRESS"].includes(order.status) && <button disabled={busy}
-          onClick={() => void change(order, "cancel")}>Cancel</button>}
+          onClick={() => void change(order, "cancel")}>{t("Cancel", "إلغاء")}</button>}
       </div>}
     </div></article>})}</div>
-    {!orders.length && <p>No orders on this page.</p>}
-    {page > 0 && <button onClick={() => void load(selected, page - 1)}>Previous</button>}
-    {nextPage !== null && <button onClick={() => void load(selected, nextPage)}>Next</button>}
+    {!orders.length && <p>{t("No orders on this page.", "لا توجد طلبات في هذه الصفحة.")}</p>}
+    {page > 0 && <button onClick={() => void load(selected, page - 1)}>{t("Previous", "السابق")}</button>}
+    {nextPage !== null && <button onClick={() => void load(selected, nextPage)}>{t("Next", "التالي")}</button>}
   </section>;
 }

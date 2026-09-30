@@ -1,6 +1,6 @@
 # Final Arrow ERP release status
 
-This repository is an expanding product foundation. The public HTML preview contains sample data and does not save changes. The authenticated app needs PostgreSQL and has not been deployed for public use.
+This repository is an expanding product foundation. The bilingual `/erp-preview-v2.html` preview contains sample data and does not save changes. It is a separately maintained interface walkthrough, so app changes do not appear there automatically. The authenticated app needs PostgreSQL and has not been deployed for public use.
 
 | Area | Current implementation | Remaining work |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ This repository is an expanding product foundation. The public HTML preview cont
 | Accounting | Internal invoice and expense registers | General ledger, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
 | Other planned modules | Preview cards only | POS, subscriptions, documents, AI and automation |
-| Localization | English working app | Complete Arabic interface, right-to-left layout and translation QA |
+| Localization | AR/EN switch and RTL foundation; core entry pages, CRM, dashboard, approvals, helpdesk, HR, inventory, suppliers, invoices and expenses have translated UI text | Remaining sales, purchasing, projects and team workspaces; server error text, translation QA and fonts |
 
 ## Before a real deployment
 

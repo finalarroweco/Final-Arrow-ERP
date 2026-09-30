@@ -28,6 +28,6 @@ export default async function OrdersPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/sales/quotes">{t("Quotes", "عروض الأسعار")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("SALES", "المبيعات")}</p><h1>{t("Orders.", "الطلبات.")}</h1><p className="sub">{t("Accepted quote snapshots ready for operations.", "الطلبات الناتجة عن عروض الأسعار المقبولة.")}</p></section>
-    <OrdersWorkspace options={options} />
+    <OrdersWorkspace options={options} locale={locale} />
   </main>;
 }
