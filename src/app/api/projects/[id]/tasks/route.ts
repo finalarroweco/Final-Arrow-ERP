@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
 import { db } from "@/lib/db";
 import { dueDate } from "@/lib/date";
-import { validateProjectAssignee } from "@/lib/project-assignee";
+import { validateEmployeeAssignment } from "@/lib/employee-assignment";
 
 const uuid = z.string().uuid();
 const schema = z.object({ tenantId: uuid, title: z.string().trim().min(2).max(200),
@@ -62,8 +62,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     !(await canAccess({ ...scope, permission: "project-task:create" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (assigneeEmployeeId) {
-    const problem = await validateProjectAssignee({ userId: actor.id, tenantId,
-      companyId: project.companyId, projectBranchId: project.branchId, employeeId: assigneeEmployeeId });
+    const problem = await validateEmployeeAssignment({ userId: actor.id, tenantId,
+      companyId: project.companyId, recordBranchId: project.branchId, employeeId: assigneeEmployeeId });
     if (problem) return NextResponse.json({ error: problem.error }, { status: problem.status });
   }
   const task = await db.$transaction(async (tx) => {

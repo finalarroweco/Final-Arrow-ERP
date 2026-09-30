@@ -42,7 +42,7 @@ Owners can set a three-letter base currency when creating a company and update i
 
 ## Dashboard
 
-`/dashboard` shows active customer and employee counts, lead, quote, order and project status counts, and posted expense totals for a selected company. Each metric checks its own read permission. Branch-scoped users see only records assigned to their branches, never company-wide or sibling-branch records. Metrics without permission are omitted, and the endpoint rejects requests with no readable modules. Expense totals represent posted internal records in the company base currency, not cash paid or financial revenue.
+`/dashboard` shows active customer and employee counts, lead, quote, order, project and ticket status counts, and posted expense totals for a selected company. Each metric checks its own read permission. Branch-scoped users see only records assigned to their branches, never company-wide or sibling-branch records. Metrics without permission are omitted, and the endpoint rejects requests with no readable modules. Expense totals represent posted internal records in the company base currency, not cash paid or financial revenue.
 
 ## Supplier directory
 
@@ -77,3 +77,7 @@ Owners can set a three-letter base currency when creating a company and update i
 ## Action inbox
 
 `/approvals` combines the latest 25 pending leave requests, expense drafts and purchase-order drafts that the current user can both read and act on. Counts cover all matching records in the user's scope. Actions call each module's existing conditional, audited endpoint. The inbox does not add a separate approval chain or substitute for the complete lists in each module.
+
+## Helpdesk tickets
+
+`/helpdesk` manages company or branch tickets with a number, subject, description and priority. A ticket can optionally link to an active customer in a compatible branch and to an active employee in the same company and compatible branch. Reader visibility follows the ticket scope; linked customer and employee names require their own read permissions. Managers can start, resolve with a note, reopen or close a ticket. Changes are audited and invalid transitions return a conflict. Conversations, email intake, attachments, notifications, customer portal and SLA tracking are future work.

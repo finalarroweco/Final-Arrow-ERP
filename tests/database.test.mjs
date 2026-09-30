@@ -97,6 +97,16 @@ test("database enforces tenant hierarchy and scope shape", async () => {
     projectId: project.id, assigneeEmployeeId: employee.id, title: "Assigned task",
     createdBy: randomUUID() } });
   assert.equal(assignedTask.assigneeEmployeeId, employee.id);
+  await assert.rejects(db.ticket.create({ data: { tenantId: b.id, companyId: companyB.id,
+    customerId: customer.id, number: "TKT-CROSS", subject: "Bad ticket",
+    description: "Wrong company", createdBy: randomUUID() } }));
+  await assert.rejects(db.ticket.create({ data: { tenantId: a.id, companyId: companyA.id,
+    branchId: branchB.id, number: "TKT-BRANCH", subject: "Bad ticket",
+    description: "Wrong branch", createdBy: randomUUID() } }));
+  const ticket = await db.ticket.create({ data: { tenantId: a.id, companyId: companyA.id,
+    branchId: branchA.id, customerId: customer.id, assigneeEmployeeId: employee.id,
+    number: "TKT-DB", subject: "Valid ticket", description: "Linked records", createdBy: randomUUID() } });
+  assert.equal(ticket.status, "OPEN");
   await assert.rejects(db.employee.create({ data: { tenantId: a.id, companyId: companyA.id,
     branchId: branchB.id, code: "EMP-BAD", fullName: "Wrong branch", createdBy: randomUUID() } }));
 

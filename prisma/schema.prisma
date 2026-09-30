@@ -87,6 +87,20 @@ enum LeaveStatus {
   CANCELLED
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 enum PurchaseOrderStatus {
   DRAFT
   ISSUED
@@ -141,6 +155,7 @@ model Company {
   employees      Employee[]
   expenses       Expense[]
   leaveRequests  LeaveRequest[]
+  tickets        Ticket[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -173,6 +188,7 @@ model Branch {
   employees      Employee[]
   expenses       Expense[]
   leaveRequests  LeaveRequest[]
+  tickets        Ticket[]
 
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
@@ -342,6 +358,7 @@ model Customer {
   quotes         Quote[]
   orders         SalesOrder[]
   invoices       Invoice[]
+  tickets        Ticket[]
 
   @@unique([companyId, code])
   @@unique([tenantId, id])
@@ -725,24 +742,25 @@ model ProjectTask {
 }
 
 model Employee {
-  id            String         @id @default(uuid()) @db.Uuid
-  tenantId      String         @db.Uuid
-  companyId     String         @db.Uuid
-  branchId      String?        @db.Uuid
-  code          String
-  fullName      String
-  jobTitle      String?
-  email         String?
-  phone         String?
-  startDate     DateTime?      @db.Date
-  status        EmployeeStatus @default(ACTIVE)
-  createdBy     String         @db.Uuid
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  company       Company        @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
-  branch        Branch?        @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
-  leaveRequests LeaveRequest[]
-  assignedTasks ProjectTask[]
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @db.Uuid
+  companyId       String         @db.Uuid
+  branchId        String?        @db.Uuid
+  code            String
+  fullName        String
+  jobTitle        String?
+  email           String?
+  phone           String?
+  startDate       DateTime?      @db.Date
+  status          EmployeeStatus @default(ACTIVE)
+  createdBy       String         @db.Uuid
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  company         Company        @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch          Branch?        @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  leaveRequests   LeaveRequest[]
+  assignedTasks   ProjectTask[]
+  assignedTickets Ticket[]
 
   @@unique([companyId, code])
   @@unique([tenantId, id])
@@ -800,4 +818,32 @@ model LeaveRequest {
   @@unique([tenantId, id])
   @@index([tenantId, companyId, branchId, status, startDate])
   @@index([tenantId, companyId, employeeId, startDate])
+}
+
+model Ticket {
+  id                 String         @id @default(uuid()) @db.Uuid
+  tenantId           String         @db.Uuid
+  companyId          String         @db.Uuid
+  branchId           String?        @db.Uuid
+  customerId         String?        @db.Uuid
+  assigneeEmployeeId String?        @db.Uuid
+  number             String
+  subject            String
+  description        String
+  priority           TicketPriority @default(NORMAL)
+  status             TicketStatus   @default(OPEN)
+  resolutionNote     String?
+  resolvedAt         DateTime?
+  closedAt           DateTime?
+  createdBy          String         @db.Uuid
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  company            Company        @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch             Branch?        @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  customer           Customer?      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
+  assignee           Employee?      @relation(fields: [tenantId, companyId, assigneeEmployeeId], references: [tenantId, companyId, id], onDelete: Restrict)
+
+  @@unique([companyId, number])
+  @@unique([tenantId, id])
+  @@index([tenantId, companyId, branchId, status, priority])
 }

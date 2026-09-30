@@ -645,6 +645,58 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.deepEqual((await get(inboxPath, manager.cookie)).data.counts,
       { leave: 0, expense: 0, purchase: 0 });
 
+    const ticketBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      customerId: customerA.data.customer.id, assigneeEmployeeId: employeeA.data.employee.id,
+      number: "TKT-A", subject: "Delivery question", description: "Check delivery status", priority: "HIGH" };
+    assert.equal((await post("/api/tickets", ticketBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/tickets", { ...ticketBody, branchId: branchB.data.branch.id },
+      manager.cookie)).status, 403);
+    assert.equal((await post("/api/tickets", { ...ticketBody, customerId: customerB.data.customer.id,
+      number: "TKT-WRONG" }, owner.cookie)).status, 409);
+    assert.equal((await post("/api/tickets", { ...ticketBody, assigneeEmployeeId: employeeB.data.employee.id,
+      number: "TKT-WRONG" }, owner.cookie)).status, 409);
+    assert.equal((await post("/api/tickets", { ...ticketBody, companyId: companyB.data.company.id,
+      number: "TKT-CROSS" }, owner.cookie)).status, 404);
+    const ticketA = await post("/api/tickets", ticketBody, manager.cookie);
+    const ticketB = await post("/api/tickets", { ...ticketBody, branchId: branchB.data.branch.id,
+      customerId: customerB.data.customer.id, assigneeEmployeeId: employeeB.data.employee.id,
+      number: "TKT-B", subject: "Other branch request" }, owner.cookie);
+    const sharedTicket = await post("/api/tickets", { ...ticketBody, branchId: null,
+      customerId: sharedCustomer.data.customer.id, assigneeEmployeeId: null,
+      number: "TKT-C", subject: "Company request" }, owner.cookie);
+    assert.equal(ticketA.status, 201);
+    assert.equal(ticketB.status, 201);
+    assert.equal(sharedTicket.status, 201);
+    assert.equal((await post("/api/tickets", ticketBody, manager.cookie)).status, 409);
+    const ticketsPath = `/api/tickets?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    const viewerTickets = await get(ticketsPath, accepted.cookie);
+    assert.deepEqual(viewerTickets.data.tickets.map((item) => item.id), [ticketA.data.ticket.id]);
+    assert.equal(viewerTickets.data.tickets[0].customerName, customerA.data.customer.displayName);
+    assert.equal(viewerTickets.data.tickets[0].assigneeName, null);
+    assert.equal((await get(ticketsPath.replace(companyA.data.company.id, companyB.data.company.id),
+      accepted.cookie)).status, 403);
+    assert.equal((await get(ticketsPath, manager.cookie)).data.tickets[0].assigneeName, "Branch A Employee");
+    const ticketPath = `/api/tickets/${ticketA.data.ticket.id}`;
+    assert.equal((await patch(ticketPath, { tenantId, action: "start" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(`/api/tickets/${ticketB.data.ticket.id}`,
+      { tenantId, action: "start" }, manager.cookie)).status, 403);
+    assert.equal((await patch(ticketPath, { tenantId, action: "close" }, manager.cookie)).status, 409);
+    assert.equal((await patch(ticketPath, { tenantId, action: "update", priority: "URGENT" }, manager.cookie)).status, 200);
+    assert.equal((await patch(ticketPath, { tenantId, action: "assign",
+      employeeId: employeeB.data.employee.id }, owner.cookie)).status, 409);
+    assert.equal((await patch(ticketPath, { tenantId, action: "assign", employeeId: null }, manager.cookie)).status, 200);
+    assert.equal((await patch(ticketPath, { tenantId, action: "start" }, manager.cookie)).status, 200);
+    assert.equal((await patch(ticketPath, { tenantId, action: "start" }, manager.cookie)).status, 409);
+    assert.equal((await patch(ticketPath, { tenantId, action: "resolve", note: "" }, manager.cookie)).status, 400);
+    assert.equal((await patch(ticketPath, { tenantId, action: "resolve", note: "Delivery confirmed" }, manager.cookie)).status, 200);
+    assert.equal((await patch(ticketPath, { tenantId, action: "reopen" }, manager.cookie)).status, 200);
+    assert.equal((await patch(ticketPath, { tenantId, action: "resolve", note: "Confirmed again" }, manager.cookie)).status, 200);
+    assert.equal((await patch(ticketPath, { tenantId, action: "close" }, manager.cookie)).status, 200);
+    assert.equal((await patch(ticketPath, { tenantId, action: "reopen" }, manager.cookie)).status, 409);
+    assert.equal((await get(dashboardPath, accepted.cookie)).data.tickets.CLOSED, 1);
+    assert.equal((await get(dashboardPath, accepted.cookie)).data.tickets.OPEN, 0);
+    assert.equal((await get(dashboardPath, owner.cookie)).data.tickets.OPEN, 2);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);

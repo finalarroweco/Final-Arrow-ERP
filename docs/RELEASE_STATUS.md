@@ -8,10 +8,11 @@ This repository is an expanding product foundation. The public HTML preview cont
 | CRM & sales | Customers, leads, quotes, orders, internal invoices | Contacts, imports, tax, payments, legal documents |
 | Purchasing & inventory | Suppliers, purchase orders, full goods receipts, catalog and branch stock ledger | Partial receipts, returns, reservations, valuation |
 | Projects | Projects, tasks, employee assignments and status transitions | Dependencies, time tracking, budgets, resource planning |
+| Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory and manager-entered leave requests | Leave balance rules, payroll, attendance, separate fingerprint integration |
 | Accounting | Internal invoice and expense registers | General ledger, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
-| Other planned modules | Preview cards only | POS, subscriptions, helpdesk, documents, AI and automation |
+| Other planned modules | Preview cards only | POS, subscriptions, documents, AI and automation |
 | Localization | English working app | Complete Arabic interface, right-to-left layout and translation QA |
 
 ## Before a real deployment

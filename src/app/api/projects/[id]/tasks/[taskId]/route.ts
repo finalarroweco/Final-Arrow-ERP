@@ -3,7 +3,7 @@ import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
 import { db } from "@/lib/db";
-import { validateProjectAssignee } from "@/lib/project-assignee";
+import { validateEmployeeAssignment } from "@/lib/employee-assignment";
 
 const uuid = z.string().uuid();
 const schema = z.union([
@@ -26,8 +26,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     branchId: project.branchId ?? undefined, permission: "project-task:manage" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (action === "assign" && parsed.data.employeeId) {
-    const problem = await validateProjectAssignee({ userId: actor.id, tenantId,
-      companyId: project.companyId, projectBranchId: project.branchId, employeeId: parsed.data.employeeId });
+    const problem = await validateEmployeeAssignment({ userId: actor.id, tenantId,
+      companyId: project.companyId, recordBranchId: project.branchId, employeeId: parsed.data.employeeId });
     if (problem) return NextResponse.json({ error: problem.error }, { status: problem.status });
   }
   const expected: ("TODO" | "IN_PROGRESS")[] = action === "start" ? ["TODO"] : ["TODO", "IN_PROGRESS"];

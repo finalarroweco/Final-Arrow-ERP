@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   const candidates = memberships.flatMap(({ tenant }) => tenant.companies.map((company) => ({ tenant, company })));
   const options = (await Promise.all(candidates.map(async ({ tenant, company }) => {
     const access = await Promise.all(["customer:read", "lead:read", "quote:read", "order:read",
-      "project:read", "employee:read", "expense:read"].map((permission) =>
+      "project:read", "employee:read", "expense:read", "ticket:read"].map((permission) =>
       readableCompanyBranches({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission })));
     if (access.every((value) => value === false)) return null;
     return { tenantId: tenant.id, companyId: company.id, label: `${tenant.name} / ${company.name}` };

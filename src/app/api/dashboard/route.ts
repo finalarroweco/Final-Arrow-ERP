@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
   const scope = { userId: actor.id, tenantId: tenantId.data, companyId: companyId.data };
   const [customerBranches, leadBranches, quoteBranches, orderBranches,
-    projectBranches, employeeBranches, expenseBranches] = await Promise.all([
+    projectBranches, employeeBranches, expenseBranches, ticketBranches] = await Promise.all([
     readableCompanyBranches({ ...scope, permission: "customer:read" }),
     readableCompanyBranches({ ...scope, permission: "lead:read" }),
     readableCompanyBranches({ ...scope, permission: "quote:read" }),
@@ -24,13 +24,14 @@ export async function GET(request: Request) {
     readableCompanyBranches({ ...scope, permission: "project:read" }),
     readableCompanyBranches({ ...scope, permission: "employee:read" }),
     readableCompanyBranches({ ...scope, permission: "expense:read" }),
+    readableCompanyBranches({ ...scope, permission: "ticket:read" }),
   ]);
   if ([customerBranches, leadBranches, quoteBranches, orderBranches,
-    projectBranches, employeeBranches, expenseBranches].every((value) => value === false))
+    projectBranches, employeeBranches, expenseBranches, ticketBranches].every((value) => value === false))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const base = { tenantId: tenantId.data, companyId: companyId.data };
   const branchFilter = (branches: string[] | null) => branches === null ? {} : { branchId: { in: branches } };
-  const [customers, leads, quotes, orders, projects, employees, expenses, company] = await Promise.all([
+  const [customers, leads, quotes, orders, projects, employees, expenses, company, tickets] = await Promise.all([
     customerBranches === false ? null : db.customer.count({ where: { ...base, ...branchFilter(customerBranches), archivedAt: null } }),
     leadBranches === false ? null : db.lead.groupBy({ by: ["stage"], where: { ...base, ...branchFilter(leadBranches) }, _count: { _all: true } }),
     quoteBranches === false ? null : db.quote.groupBy({ by: ["status"], where: { ...base, ...branchFilter(quoteBranches) }, _count: { _all: true } }),
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
       status: "POSTED" }, _sum: { amount: true }, _count: { _all: true } }),
     expenseBranches === false ? null : db.company.findUnique({ where: { tenantId_id: { tenantId: tenantId.data,
       id: companyId.data } }, select: { baseCurrency: true } }),
+    ticketBranches === false ? null : db.ticket.groupBy({ by: ["status"], where: { ...base,
+      ...branchFilter(ticketBranches) }, _count: { _all: true } }),
   ]);
   const counts = <T extends string>(rows: { [key: string]: unknown; _count: { _all: number } }[] | null, key: string, statuses: readonly T[]) =>
     rows === null ? null : Object.fromEntries(statuses.map((status) => [status,
@@ -51,6 +54,7 @@ export async function GET(request: Request) {
     quotes: counts(quotes, "status", ["DRAFT", "SENT", "ACCEPTED", "REJECTED"]),
     orders: counts(orders, "status", ["NEW", "IN_PROGRESS", "COMPLETED", "CANCELLED"]),
     projects: counts(projects, "status", ["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]),
+    tickets: counts(tickets, "status", ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]),
     employees,
     expenses: expenses === null ? null : { currency: company?.baseCurrency ?? "",
       postedCount: expenses._count._all,

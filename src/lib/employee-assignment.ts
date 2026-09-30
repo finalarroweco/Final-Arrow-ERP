@@ -1,8 +1,8 @@
 import { canAccess } from "./access";
 import { db } from "./db";
 
-export async function validateProjectAssignee(input: { userId: string; tenantId: string;
-  companyId: string; projectBranchId: string | null; employeeId: string }) {
+export async function validateEmployeeAssignment(input: { userId: string; tenantId: string;
+  companyId: string; recordBranchId: string | null; employeeId: string }) {
   const employee = await db.employee.findUnique({ where: { tenantId_companyId_id: {
     tenantId: input.tenantId, companyId: input.companyId, id: input.employeeId } },
     select: { branchId: true, status: true } });
@@ -11,8 +11,8 @@ export async function validateProjectAssignee(input: { userId: string; tenantId:
     branchId: employee.branchId ?? undefined, permission: "employee:read" })))
     return { error: "Forbidden", status: 403 } as const;
   if (employee.status !== "ACTIVE" ||
-    (input.projectBranchId !== null && employee.branchId !== null &&
-      input.projectBranchId !== employee.branchId))
+    (input.recordBranchId !== null && employee.branchId !== null &&
+      input.recordBranchId !== employee.branchId))
     return { error: "Employee is inactive or belongs to another branch", status: 409 } as const;
   return null;
 }

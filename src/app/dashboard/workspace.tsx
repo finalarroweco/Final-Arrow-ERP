@@ -6,7 +6,8 @@ type Option = { tenantId: string; companyId: string; label: string };
 type Summary = { customers: number | null;
   leads: Record<string, number> | null; quotes: Record<string, number> | null;
   orders: Record<string, number> | null; projects: Record<string, number> | null;
-  employees: number | null; expenses: { currency: string; postedCount: number; postedAmount: string } | null };
+  employees: number | null; tickets: Record<string, number> | null;
+  expenses: { currency: string; postedCount: number; postedAmount: string } | null };
 
 export function DashboardWorkspace({ options }: { options: Option[] }) {
   const [selected, setSelected] = useState(0);
@@ -42,6 +43,8 @@ export function DashboardWorkspace({ options }: { options: Option[] }) {
         <p>Open orders · {summary.orders.COMPLETED} completed · {summary.orders.CANCELLED} cancelled</p><a href="/sales/orders">Open orders</a></article>}
       {summary.projects && <article><small>PROJECTS</small><h2>{summary.projects.PLANNED + summary.projects.ACTIVE + summary.projects.ON_HOLD}</h2>
         <p>Open projects · {summary.projects.COMPLETED} completed</p><a href="/projects">Open projects</a></article>}
+      {summary.tickets && <article><small>HELPDESK</small><h2>{summary.tickets.OPEN + summary.tickets.IN_PROGRESS}</h2>
+        <p>Active tickets · {summary.tickets.RESOLVED} resolved</p><a href="/helpdesk">Open tickets</a></article>}
       {summary.employees !== null && <article><small>HUMAN RESOURCES</small><h2>{summary.employees}</h2>
         <p>Active employees</p><a href="/hr/employees">Open employees</a></article>}
       {summary.expenses && <article><small>ACCOUNTING</small><h2>{summary.expenses.postedAmount} {summary.expenses.currency}</h2>

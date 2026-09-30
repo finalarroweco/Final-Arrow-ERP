@@ -22,11 +22,11 @@ header a:hover,article a:hover{text-decoration:underline}
 .panel form label{display:grid;align-content:start;gap:7px;color:#555;font-size:13px}
 .panel form input,.panel form select,.panel select{width:100%;padding:12px;border:1px solid #ccc;
   border-radius:8px;font:inherit;background:#fff}
-.panel form button{align-self:end}
+.panel form button{align-self:flex-end}
 .panel .card{margin:12px 0;min-height:0}
 .panel .card p{margin:10px 0;line-height:1.55;color:#666}
 .panel .card h3{margin:10px 0}
-.panel .card form{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:14px 0}
+.panel .card form{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin:14px 0}
 .panel .card form label{min-width:180px;flex:1}
 .panel .card .card{background:#fafafa}
 .panel button{font-size:13px;padding:10px 14px;margin:5px 7px 5px 0}
@@ -35,3 +35,4 @@ button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:720px){header{align-items:flex-start}header .account{justify-content:flex-start}
   .panel>form{grid-template-columns:1fr;padding:18px}.panel .card form{display:grid}
   .panel .card form label{min-width:0}.hero{padding:60px 0 45px}}
+.panel textarea{width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;font:inherit;resize:vertical}
