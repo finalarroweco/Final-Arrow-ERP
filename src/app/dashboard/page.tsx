@@ -24,6 +24,6 @@ export default async function DashboardPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="header-actions"><LanguageSwitcher locale={locale} /><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></div></header>
     <section className="hero"><p>{t("OVERVIEW", "نظرة عامة")}</p><h1>{t("Dashboard.", "لوحة المعلومات.")}</h1><p className="sub">{t("Live company activity within your access scope.", "نشاط الشركة المباشر ضمن صلاحياتك.")}</p></section>
-    <DashboardWorkspace options={options} />
+    <DashboardWorkspace options={options} locale={locale} />
   </main>;
 }

@@ -1,3 +1,6 @@
+import { getLocale } from "@/lib/server-locale";
+import { translate } from "@/lib/locale";
+import { LanguageSwitcher } from "../language-switcher";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { readableCompanyBranches } from "@/lib/access";
@@ -6,6 +9,8 @@ import { db } from "@/lib/db";
 import { ApprovalsWorkspace } from "./workspace";
 
 export default async function ApprovalsPage() {
+  const locale = await getLocale();
+  const t = (en: string, ar: string) => translate(locale, en, ar);
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({ where: { userId: user.id, status: "ACTIVE" },
@@ -20,8 +25,8 @@ export default async function ApprovalsPage() {
     return { tenantId: tenant.id, companyId: company.id, label: `${tenant.name} / ${company.name}`,
       branches: company.branches.map((branch) => ({ id: branch.id, name: branch.name })) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><a href="/workspace">Workspace</a></header>
-    <section className="hero"><p>APPROVALS</p><h1>Action inbox.</h1><p className="sub">Review leave, expense drafts and purchase orders from one place.</p></section>
-    <ApprovalsWorkspace options={options} />
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+    <section className="hero"><p>{t("APPROVALS", "الموافقات")}</p><h1>{t("Action inbox.", "صندوق الإجراءات.")}</h1><p className="sub">{t("Review leave, expense drafts and purchase orders from one place.", "راجع الإجازات ومسودات المصاريف وأوامر الشراء من مكان واحد.")}</p></section>
+    <ApprovalsWorkspace options={options} locale={locale} />
   </main>;
 }
