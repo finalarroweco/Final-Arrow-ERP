@@ -31,6 +31,6 @@ export default async function SuppliersPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("PURCHASING", "المشتريات")}</p><h1>{t("Suppliers.", "الموردون.")}</h1><p className="sub">{t("Company and branch supplier records.", "سجلات موردي الشركات والفروع.")}</p></section>
-    <SuppliersWorkspace options={options} />
+    <SuppliersWorkspace options={options} locale={locale} />
   </main>;
 }
