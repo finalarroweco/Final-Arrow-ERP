@@ -34,6 +34,6 @@ export default async function InvoicesPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/sales/orders">{t("Sales orders", "طلبات البيع")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("ACCOUNTING", "المحاسبة")}</p><h1>{t("Invoices.", "الفواتير.")}</h1><p className="sub">{t("Internal billing records from completed sales orders.", "سجلات الفوترة الداخلية للطلبات المكتملة.")}</p></section>
-    <InvoicesWorkspace options={options} />
+    <InvoicesWorkspace options={options} locale={locale} />
   </main>;
 }

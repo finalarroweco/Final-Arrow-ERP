@@ -31,6 +31,6 @@ export default async function ExpensesPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/accounting/invoices">{t("Invoices", "الفواتير")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("ACCOUNTING", "المحاسبة")}</p><h1>{t("Expenses.", "المصاريف.")}</h1><p className="sub">{t("Record and review internal company spending.", "سجّل وراجع مصاريف الشركة الداخلية.")}</p></section>
-    <ExpensesWorkspace options={options} />
+    <ExpensesWorkspace options={options} locale={locale} />
   </main>;
 }
