@@ -39,6 +39,6 @@ export default async function QuotesPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/sales/orders">{t("Orders", "الطلبات")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("SALES", "المبيعات")}</p><h1>{t("Quotes.", "عروض الأسعار.")}</h1><p className="sub">{t("Customer quotes with branch access and calculated totals.", "عروض العملاء مع صلاحيات الفروع والإجماليات المحسوبة.")}</p></section>
-    <QuotesWorkspace options={options} />
+    <QuotesWorkspace options={options} locale={locale} />
   </main>;
 }

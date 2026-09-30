@@ -1,5 +1,6 @@
 "use client";
 
+import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 
 type Permissions = { canCreate: boolean; canUpdate: boolean; canSend: boolean; canDecide: boolean; canOrder: boolean };
@@ -12,7 +13,8 @@ type Quote = { id: string; number: string; status: string; currency: string; sub
     unitPrice: string; amount: string }[] };
 type Line = { description: string; quantity: string; unitPrice: string };
 
-export function QuotesWorkspace({ options }: { options: Option[] }) {
+export function QuotesWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
+  const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0);
   const [branchId, setBranchId] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -35,7 +37,7 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
       fetch(`/api/quotes?${query}`), fetch(`/api/customers?${query}`),
     ]);
     const [quoteData, customerData] = await Promise.all([quoteResponse.json(), customerResponse.json()]);
-    if (!quoteResponse.ok) { setMessage(quoteData.error ?? "Could not load quotes"); return; }
+    if (!quoteResponse.ok) { setMessage(quoteData.error ?? t("Could not load quotes", "تعذر تحميل عروض الأسعار")); return; }
     setQuotes(quoteData.quotes); setPage(pageNumber); setNextPage(quoteData.nextPage);
     if (customerResponse.ok) {
       const allCustomers: Customer[] = [...customerData.customers];
@@ -51,7 +53,7 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
       }
       setCustomers(allCustomers);
     } else setCustomers([]);
-  }, [options]);
+  }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
   const createBranches = option?.branches.filter((branch) => branch.canCreate) ?? [];
   const effectiveBranchId = branchId || (!option?.companyPermissions.canCreate ? createBranches[0]?.id ?? "" : "");
@@ -66,7 +68,7 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
           notes: form.get("notes") || null,
           lines: lines.map((line) => ({ description: line.description, quantity: Number(line.quantity), unitPrice: line.unitPrice })) }) });
       const data = await response.json();
-      setMessage(response.ok ? "Quote created" : data.error ?? "Could not create quote");
+      setMessage(response.ok ? t("Quote created", "تم إنشاء عرض السعر") : data.error ?? t("Could not create quote", "تعذر إنشاء عرض السعر"));
       if (response.ok) { setLines([{ description: "", quantity: "1", unitPrice: "0.000" }]); await load(selected); }
     } finally { setBusy(false); }
   }
@@ -78,7 +80,7 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: option.tenantId, action }) });
       const data = await response.json();
-      setMessage(response.ok ? `Quote marked ${data.quote.status.toLowerCase()}` : data.error ?? "Action failed");
+      setMessage(response.ok ? `${t("Quote marked", "حالة العرض")}: ${t(data.quote.status, ({ DRAFT: "مسودة", SENT: "مرسل", ACCEPTED: "مقبول", REJECTED: "مرفوض" })[data.quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED"] ?? data.quote.status)}` : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
       if (response.ok) await load(selected, page);
     } finally { setBusy(false); }
   }
@@ -98,7 +100,7 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
           lines: editLines.map((line) => ({ description: line.description,
             quantity: Number(line.quantity), unitPrice: line.unitPrice })) }) });
       const data = await response.json();
-      setMessage(response.ok ? "Draft updated" : data.error ?? "Could not update draft");
+      setMessage(response.ok ? t("Draft updated", "تم تحديث المسودة") : data.error ?? t("Could not update draft", "تعذر تحديث المسودة"));
       if (response.ok) { setEditing(null); await load(selected, page); }
     } finally { setBusy(false); }
   }
@@ -110,85 +112,85 @@ export function QuotesWorkspace({ options }: { options: Option[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: option.tenantId, number: form.get("number") }) });
       const data = await response.json();
-      setMessage(response.ok ? "Sales order created" : data.error ?? "Could not create order");
+      setMessage(response.ok ? t("Sales order created", "تم إنشاء طلب البيع") : data.error ?? t("Could not create order", "تعذر إنشاء طلب البيع"));
       if (response.ok) { setOrdering(null); await load(selected, page); }
     } finally { setBusy(false); }
   }
-  if (!option) return <section><p>No accessible companies yet.</p></section>;
+  if (!option) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
   return <section>
-    <label>Company <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setBranchId(""); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setBranchId(""); setMessage(""); }}>
       {options.map((item, index) => <option key={`${item.tenantId}:${item.companyId}`} value={index}>{item.label}</option>)}
     </select></label>
     {(option.companyPermissions.canCreate || createBranches.length > 0) && <form action={create} className="quote-form">
-      <h2>New quote</h2>
-      <label>Number <input name="number" required pattern="[A-Z0-9-]{2,30}" placeholder="QT-001" /></label>
-      <label>Branch <select value={effectiveBranchId} onChange={(event) => setBranchId(event.target.value)}>
-        {option.companyPermissions.canCreate && <option value="">Company wide</option>}
+      <h2>{t("New quote", "عرض سعر جديد")}</h2>
+      <label>{t("Number", "الرقم")} <input name="number" required pattern="[A-Z0-9-]{2,30}" placeholder="QT-001" /></label>
+      <label>{t("Branch", "الفرع")} <select value={effectiveBranchId} onChange={(event) => setBranchId(event.target.value)}>
+        {option.companyPermissions.canCreate && <option value="">{t("Company wide", "على مستوى الشركة")}</option>}
         {createBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
       </select></label>
-      <label>Customer <select name="customerId" required defaultValue="" key={`${selected}:${effectiveBranchId}:${customers.length}`}>
-        <option value="" disabled>Choose customer</option>
+      <label>{t("Customer", "العميل")} <select name="customerId" required defaultValue="" key={`${selected}:${effectiveBranchId}:${customers.length}`}>
+        <option value="" disabled>{t("Choose customer", "اختر العميل")}</option>
         {availableCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customer.displayName}</option>)}
       </select></label>
-      <label>Notes <input name="notes" maxLength={2000} /></label>
-      <h3>Items · {option.currency}</h3>
+      <label>{t("Notes", "ملاحظات")} <input name="notes" maxLength={2000} /></label>
+      <h3>{t("Items", "البنود")} · {option.currency}</h3>
       {lines.map((line, index) => <div className="quote-line" key={index}>
-        <input aria-label={`Description ${index + 1}`} placeholder="Description" required minLength={2} maxLength={300}
+        <input aria-label={`${t("Description", "الوصف")} ${index + 1}`} placeholder={t("Description", "الوصف")} required minLength={2} maxLength={300}
           value={line.description} onChange={(event) => setLines((current) => current.map((item, i) => i === index ? { ...item, description: event.target.value } : item))} />
-        <input aria-label={`Quantity ${index + 1}`} type="number" min="1" max="100000" required value={line.quantity}
+        <input aria-label={`${t("Quantity", "الكمية")} ${index + 1}`} type="number" min="1" max="100000" required value={line.quantity}
           onChange={(event) => setLines((current) => current.map((item, i) => i === index ? { ...item, quantity: event.target.value } : item))} />
-        <input aria-label={`Unit price ${index + 1}`} placeholder="Unit price" inputMode="decimal" required
+        <input aria-label={`${t("Unit price", "سعر الوحدة")} ${index + 1}`} placeholder={t("Unit price", "سعر الوحدة")} inputMode="decimal" required
           pattern="(0|[1-9][0-9]{0,8})(\.[0-9]{1,3})?" value={line.unitPrice}
           onChange={(event) => setLines((current) => current.map((item, i) => i === index ? { ...item, unitPrice: event.target.value } : item))} />
-        {lines.length > 1 && <button type="button" onClick={() => setLines((current) => current.filter((_, i) => i !== index))}>Remove</button>}
+        {lines.length > 1 && <button type="button" onClick={() => setLines((current) => current.filter((_, i) => i !== index))}>{t("Remove", "حذف")}</button>}
       </div>)}
-      {lines.length < 50 && <button type="button" onClick={() => setLines((current) => [...current, { description: "", quantity: "1", unitPrice: "0.000" }])}>Add item</button>}
-      <button disabled={busy || availableCustomers.length === 0}>Create quote</button>
+      {lines.length < 50 && <button type="button" onClick={() => setLines((current) => [...current, { description: "", quantity: "1", unitPrice: "0.000" }])}>{t("Add item", "إضافة بند")}</button>}
+      <button disabled={busy || availableCustomers.length === 0}>{t("Create quote", "إنشاء عرض سعر")}</button>
     </form>}
     {message && <p role="status">{message}</p>}
-    <h2>Quotes</h2>
-    {quotes.length === 0 && <p>No quotes on this page.</p>}
+    <h2>{t("Quotes", "عروض الأسعار")}</h2>
+    {quotes.length === 0 && <p>{t("No quotes on this page.", "لا توجد عروض أسعار في هذه الصفحة.")}</p>}
     <div className="customer-list">{quotes.map((quote) => {
       const permissions = quote.branchId ? option.branches.find((branch) => branch.id === quote.branchId) : option.companyPermissions;
       return <article key={quote.id}>
-      <div><h3>{quote.number} · {quote.customer.displayName}</h3><p>{quote.status} · {quote.subtotal} {quote.currency}</p>
+      <div><h3>{quote.number} · {quote.customer.displayName}</h3><p>{t(quote.status, ({ DRAFT: "مسودة", SENT: "مرسل", ACCEPTED: "مقبول", REJECTED: "مرفوض" })[quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED"] ?? quote.status)} · {quote.subtotal} {quote.currency}</p>
         <ul>{quote.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
         {quote.status === "DRAFT" && permissions?.canUpdate && editing !== quote.id && <button disabled={busy}
-          onClick={() => startEdit(quote)}>Edit draft</button>}
+          onClick={() => startEdit(quote)}>{t("Edit draft", "تعديل المسودة")}</button>}
         {editing === quote.id && <form className="quote-form" onSubmit={(event) => { event.preventDefault(); void saveEdit(quote); }}>
-          <label>Notes <input value={editNotes} maxLength={2000} onChange={(event) => setEditNotes(event.target.value)} /></label>
+          <label>{t("Notes", "ملاحظات")} <input value={editNotes} maxLength={2000} onChange={(event) => setEditNotes(event.target.value)} /></label>
           {editLines.map((line, index) => <div className="quote-line" key={index}>
-            <input aria-label={`Edit description ${index + 1}`} required minLength={2} maxLength={300} value={line.description}
+            <input aria-label={`${t("Edit description", "تعديل الوصف")} ${index + 1}`} required minLength={2} maxLength={300} value={line.description}
               onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, description: event.target.value } : item))} />
-            <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" max="100000" required value={line.quantity}
+            <input aria-label={`${t("Edit quantity", "تعديل الكمية")} ${index + 1}`} type="number" min="1" max="100000" required value={line.quantity}
               onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, quantity: event.target.value } : item))} />
-            <input aria-label={`Edit price ${index + 1}`} required inputMode="decimal"
+            <input aria-label={`${t("Edit price", "تعديل السعر")} ${index + 1}`} required inputMode="decimal"
               pattern="(0|[1-9][0-9]{0,8})(\.[0-9]{1,3})?" value={line.unitPrice}
               onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, unitPrice: event.target.value } : item))} />
-            {editLines.length > 1 && <button type="button" onClick={() => setEditLines((current) => current.filter((_, i) => i !== index))}>Remove</button>}
+            {editLines.length > 1 && <button type="button" onClick={() => setEditLines((current) => current.filter((_, i) => i !== index))}>{t("Remove", "حذف")}</button>}
           </div>)}
           {editLines.length < 50 && <button type="button" onClick={() => setEditLines((current) => [...current,
-            { description: "", quantity: "1", unitPrice: "0.000" }])}>Add item</button>}
-          <div className="quote-actions"><button disabled={busy}>Save draft</button>
-            <button type="button" onClick={() => setEditing(null)}>Cancel</button></div>
+            { description: "", quantity: "1", unitPrice: "0.000" }])}>{t("Add item", "إضافة بند")}</button>}
+          <div className="quote-actions"><button disabled={busy}>{t("Save draft", "حفظ المسودة")}</button>
+            <button type="button" onClick={() => setEditing(null)}>{t("Cancel", "إلغاء")}</button></div>
         </form>}
         {quote.status === "DRAFT" && permissions?.canSend && <button disabled={busy}
-          onClick={() => void transition(quote, "send")}>Mark as sent</button>}
+          onClick={() => void transition(quote, "send")}>{t("Mark as sent", "تحديد كمرسل")}</button>}
         {quote.status === "SENT" && permissions?.canDecide && <div className="quote-actions">
-          <button disabled={busy} onClick={() => void transition(quote, "accept")}>Mark accepted</button>
-          <button disabled={busy} onClick={() => void transition(quote, "reject")}>Mark rejected</button>
+          <button disabled={busy} onClick={() => void transition(quote, "accept")}>{t("Mark accepted", "قبول العرض")}</button>
+          <button disabled={busy} onClick={() => void transition(quote, "reject")}>{t("Mark rejected", "رفض العرض")}</button>
         </div>}
-        {quote.order && <p>Sales order: {quote.order.number}</p>}
+        {quote.order && <p>{t("Sales order:", "طلب البيع:")} {quote.order.number}</p>}
         {quote.status === "ACCEPTED" && !quote.order && permissions?.canOrder && ordering !== quote.id &&
-          <button disabled={busy} onClick={() => setOrdering(quote.id)}>Create sales order</button>}
+          <button disabled={busy} onClick={() => setOrdering(quote.id)}>{t("Create sales order", "إنشاء طلب بيع")}</button>}
         {ordering === quote.id && <form className="quote-actions" action={(form) => void createOrder(quote, form)}>
-          <input name="number" aria-label="Sales order number" required pattern="[A-Z0-9-]{2,30}" placeholder="SO-001" />
-          <button disabled={busy}>Create</button>
-          <button type="button" onClick={() => setOrdering(null)}>Cancel</button>
+          <input name="number" aria-label={t("Sales order number", "رقم طلب البيع")} required pattern="[A-Z0-9-]{2,30}" placeholder="SO-001" />
+          <button disabled={busy}>{t("Create", "إنشاء")}</button>
+          <button type="button" onClick={() => setOrdering(null)}>{t("Cancel", "إلغاء")}</button>
         </form>}
       </div>
     </article>})}</div>
-    {page > 0 && <button onClick={() => void load(selected, page - 1)}>Previous</button>}
-    {nextPage !== null && <button onClick={() => void load(selected, nextPage)}>Next</button>}
+    {page > 0 && <button onClick={() => void load(selected, page - 1)}>{t("Previous", "السابق")}</button>}
+    {nextPage !== null && <button onClick={() => void load(selected, nextPage)}>{t("Next", "التالي")}</button>}
   </section>;
 }

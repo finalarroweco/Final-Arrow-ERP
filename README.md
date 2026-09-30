@@ -40,3 +40,4 @@ The current slice includes scoped workspaces, team permissions, CRM, sales quote
 
 See [implementation notes](docs/IMPLEMENTATION.md) for local setup and current limits.
 See [release status](docs/RELEASE_STATUS.md) for the module inventory and production gates.
+See [staging setup](docs/STAGING_SETUP.md) for the later database and hosting connection.

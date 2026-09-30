@@ -13,7 +13,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Accounting | Internal invoice and expense registers | General ledger, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
 | Other planned modules | Preview cards only | POS, subscriptions, documents, AI and automation |
-| Localization | AR/EN switch and RTL foundation; core entry pages, CRM, dashboard, approvals, helpdesk, HR, inventory, suppliers, invoices and expenses have translated UI text | Remaining sales, purchasing, projects and team workspaces; server error text, translation QA and fonts |
+| Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
 
 ## Before a real deployment
 

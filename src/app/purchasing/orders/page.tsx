@@ -34,6 +34,6 @@ export default async function PurchaseOrdersPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/purchasing/suppliers">{t("Suppliers", "الموردون")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("PURCHASING", "المشتريات")}</p><h1>{t("Purchase orders.", "أوامر الشراء.")}</h1><p className="sub">{t("Supplier orders with branch access and tracked status.", "أوامر الموردين مع صلاحيات الفروع ومتابعة الحالة.")}</p></section>
-    <PurchaseOrdersWorkspace options={options} />
+    <PurchaseOrdersWorkspace options={options} locale={locale} />
   </main>;
 }
