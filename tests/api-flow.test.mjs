@@ -480,6 +480,33 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await post(tasksPath, { tenantId, title: "Too late" }, manager.cookie)).status, 409);
     assert.deepEqual((await get(`${tasksPath}?tenantId=${tenantId}`, accepted.cookie)).data.tasks.map((item) => item.status), ["DONE"]);
 
+    const employeeBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
+      code: "EMP-A", fullName: "Branch A Employee", jobTitle: "Operations", startDate: "2026-09-01" };
+    const employeeListPath = `/api/employees?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.equal((await get(employeeListPath, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/employees", employeeBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/employees", { ...employeeBody,
+      branchId: branchB.data.branch.id }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/employees", { ...employeeBody,
+      startDate: "2026-02-30" }, manager.cookie)).status, 400);
+    const employeeA = await post("/api/employees", employeeBody, manager.cookie);
+    const employeeB = await post("/api/employees", { ...employeeBody, branchId: branchB.data.branch.id,
+      code: "EMP-B", fullName: "Branch B Employee" }, owner.cookie);
+    assert.equal(employeeA.status, 201);
+    assert.equal(employeeB.status, 201);
+    assert.equal((await post("/api/employees", employeeBody, manager.cookie)).status, 409);
+    assert.deepEqual((await get(employeeListPath, manager.cookie)).data.employees.map((item) => item.id), [employeeA.data.employee.id]);
+    const employeePath = `/api/employees/${employeeA.data.employee.id}`;
+    assert.equal((await patch(employeePath, { tenantId, action: "status", status: "INACTIVE" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(`/api/employees/${employeeB.data.employee.id}`,
+      { tenantId, action: "status", status: "INACTIVE" }, manager.cookie)).status, 403);
+    assert.equal((await patch(employeePath, { tenantId, action: "update", jobTitle: "Supervisor" }, manager.cookie)).status, 200);
+    assert.equal((await patch(employeePath, { tenantId, action: "status", status: "INACTIVE" }, manager.cookie)).status, 200);
+    assert.deepEqual((await get(employeeListPath, manager.cookie)).data.employees, []);
+    assert.deepEqual((await get(`${employeeListPath}&inactive=true`, manager.cookie)).data.employees.map((item) => item.id), [employeeA.data.employee.id]);
+    assert.equal((await patch(employeePath, { tenantId, action: "update", jobTitle: "Blocked" }, manager.cookie)).status, 409);
+    assert.equal((await patch(employeePath, { tenantId, action: "status", status: "ACTIVE" }, manager.cookie)).status, 200);
+
     const viewerTeam = await get(`/api/team?tenantId=${tenantId}`, accepted.cookie);
     assert.equal(viewerTeam.status, 403);
     const team = await get(`/api/team?tenantId=${tenantId}`, owner.cookie);

@@ -61,3 +61,7 @@ Owners can set a three-letter base currency when creating a company and update i
 ## Projects
 
 `/projects` manages company-wide or branch-specific projects and tasks. Projects move through planned, active, on-hold, completed and cancelled states. Tasks can be started, completed or cancelled while a project is active; a project cannot complete with open tasks. Read, create and manage permissions follow company and branch scopes. Changes are audited; due dates are optional.
+
+## Employee directory
+
+`/hr/employees` stores staff codes, names, job titles, contact information and optional start dates by company or branch. Owners and Managers can read, create and manage staff; Viewers do not receive employee access by default. Records can be deactivated and reactivated. This is a directory, not payroll, leave, attendance or fingerprint integration.
