@@ -36,3 +36,5 @@ button:disabled{opacity:.5;cursor:not-allowed}
   .panel>form{grid-template-columns:1fr;padding:18px}.panel .card form{display:grid}
   .panel .card form label{min-width:0}.hero{padding:60px 0 45px}}
 .panel textarea{width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;font:inherit;resize:vertical}
+
+.header-actions{display:flex;align-items:center;gap:20px}.language-switcher{background:transparent;color:#b80000;border:1px solid #ddd;padding:8px 12px;font-size:13px}html[dir="rtl"]{font-family:Tahoma,Arial,sans-serif}html[dir="rtl"] h1{letter-spacing:0}html[dir="rtl"] article ul{padding-left:0;padding-right:20px}html[dir="rtl"] .panel [role="status"]{border-left:0;border-right:3px solid #d60000}

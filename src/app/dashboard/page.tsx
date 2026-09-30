@@ -3,8 +3,13 @@ import { currentUser } from "@/lib/auth";
 import { readableCompanyBranches } from "@/lib/access";
 import { db } from "@/lib/db";
 import { DashboardWorkspace } from "./workspace";
+import { getLocale } from "@/lib/server-locale";
+import { translate } from "@/lib/locale";
+import { LanguageSwitcher } from "../language-switcher";
 
 export default async function DashboardPage() {
+  const locale = await getLocale();
+  const t = (en: string, ar: string) => translate(locale, en, ar);
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({ where: { userId: user.id, status: "ACTIVE" },
@@ -17,8 +22,8 @@ export default async function DashboardPage() {
     if (access.every((value) => value === false)) return null;
     return { tenantId: tenant.id, companyId: company.id, label: `${tenant.name} / ${company.name}` };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><a href="/workspace">Workspace</a></header>
-    <section className="hero"><p>OVERVIEW</p><h1>Dashboard.</h1><p className="sub">Live company activity within your access scope.</p></section>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="header-actions"><LanguageSwitcher locale={locale} /><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></div></header>
+    <section className="hero"><p>{t("OVERVIEW", "نظرة عامة")}</p><h1>{t("Dashboard.", "لوحة المعلومات.")}</h1><p className="sub">{t("Live company activity within your access scope.", "نشاط الشركة المباشر ضمن صلاحياتك.")}</p></section>
     <DashboardWorkspace options={options} />
   </main>;
 }

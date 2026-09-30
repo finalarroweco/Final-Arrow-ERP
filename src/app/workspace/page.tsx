@@ -6,8 +6,13 @@ import { createBranch, createCompany, createDepartment, updateCompany } from "./
 import { Logout } from "./logout";
 import { InviteForm } from "./invite-form";
 import { TeamPanel } from "./team-panel";
+import { getLocale } from "@/lib/server-locale";
+import { translate } from "@/lib/locale";
+import { LanguageSwitcher } from "../language-switcher";
 
 export default async function Workspace() {
+  const locale = await getLocale();
+  const t = (en: string, ar: string) => translate(locale, en, ar);
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({
@@ -42,48 +47,48 @@ export default async function Workspace() {
       })))).filter(({ allowed }) => allowed).map(({ department }) => department),
     })))).filter(({ allowed }) => allowed),
   })));
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="account"><a href="/hr/employees">Employees</a><a href="/hr/leave">Leave</a><a href="/projects">Projects</a><a href="/dashboard">Dashboard</a><a href="/approvals">Approvals</a><a href="/crm">CRM</a><a href="/helpdesk">Helpdesk</a><a href="/sales/quotes">Quotes</a><a href="/sales/orders">Orders</a><a href="/accounting/invoices">Invoices</a><a href="/accounting/expenses">Expenses</a><a href="/purchasing/suppliers">Suppliers</a><a href="/purchasing/orders">Purchase orders</a><a href="/inventory/items">Items</a><a href="/inventory/stock">Stock</a> {user.name} <Logout /></div></header>
-    <section className="hero"><p>WORKSPACE</p><h1>Your companies.</h1><p className="sub">Manage the company and branch hierarchy within your organization.</p></section>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><div className="account"><LanguageSwitcher locale={locale} /><a href="/hr/employees">{t("Employees", "الموظفون")}</a><a href="/hr/leave">{t("Leave", "الإجازات")}</a><a href="/projects">{t("Projects", "المشاريع")}</a><a href="/dashboard">{t("Dashboard", "لوحة المعلومات")}</a><a href="/approvals">{t("Approvals", "الموافقات")}</a><a href="/crm">CRM</a><a href="/helpdesk">{t("Helpdesk", "الدعم الفني")}</a><a href="/sales/quotes">{t("Quotes", "عروض الأسعار")}</a><a href="/sales/orders">{t("Orders", "الطلبات")}</a><a href="/accounting/invoices">{t("Invoices", "الفواتير")}</a><a href="/accounting/expenses">{t("Expenses", "المصاريف")}</a><a href="/purchasing/suppliers">{t("Suppliers", "الموردون")}</a><a href="/purchasing/orders">{t("Purchase orders", "أوامر الشراء")}</a><a href="/inventory/items">{t("Items", "الأصناف")}</a><a href="/inventory/stock">{t("Stock", "المخزون")}</a> {user.name} <Logout /></div></header>
+    <section className="hero"><p>{t("WORKSPACE", "مساحة العمل")}</p><h1>{t("Your companies.", "شركاتك.")}</h1><p className="sub">{t("Manage the company and branch hierarchy within your organization.", "إدارة الشركات والفروع والأقسام في مؤسستك.")}</p></section>
     {visible.map(({ tenant, companies, canCreate, canInvite, canManage }) => <section key={tenant.id}>
       <h2>{tenant.name}</h2>
       {canCreate && <form action={createCompany} className="formrow">
         <input type="hidden" name="tenantId" value={tenant.id} />
-        <input name="name" placeholder="Company name" required minLength={2} maxLength={120} />
-        <input name="code" placeholder="Code, e.g. FA01" required minLength={2} maxLength={20} />
+        <input name="name" placeholder={t("Company name", "اسم الشركة")} required minLength={2} maxLength={120} />
+        <input name="code" placeholder={t("Code, e.g. FA01", "الرمز، مثال FA01")} required minLength={2} maxLength={20} />
         <label>Currency <input name="baseCurrency" defaultValue="OMR" required pattern="[A-Z]{3}" maxLength={3} list="currencies" /></label>
-        <button type="submit">Add company</button>
+        <button type="submit">{t("Add company", "إضافة شركة")}</button>
       </form>}
       <datalist id="currencies"><option value="OMR" /><option value="JOD" /><option value="USD" /><option value="AED" /><option value="SAR" /></datalist>
       <div className="grid">{companies.map((company) => <article key={company.id}>
         <div className="icon">{company.code.slice(0, 2)}</div><h3>{company.name}</h3>
         <p>{company.code} · {company.baseCurrency}</p>
-        {company.canUpdate && <details><summary>Company settings</summary><form action={updateCompany} className="branchform">
+        {company.canUpdate && <details><summary>{t("Company settings", "إعدادات الشركة")}</summary><form action={updateCompany} className="branchform">
           <input type="hidden" name="tenantId" value={tenant.id} />
           <input type="hidden" name="companyId" value={company.id} />
           <label>Name <input name="name" defaultValue={company.name} required minLength={2} maxLength={120} /></label>
           <label>Legal name <input name="legalName" defaultValue={company.legalName ?? ""} maxLength={200} /></label>
           <label>Base currency <input name="baseCurrency" defaultValue={company.baseCurrency} required pattern="[A-Z]{3}" maxLength={3} list="currencies" /></label>
-          <button type="submit">Save settings</button>
+          <button type="submit">{t("Save settings", "حفظ الإعدادات")}</button>
         </form></details>}
         <ul>{company.branches.map((branch) => <li key={branch.id}>{branch.name} ({branch.code})</li>)}</ul>
-        {company.departments.length > 0 && <><h4>Departments</h4><ul>{company.departments.map((department) =>
-          <li key={department.id}>{department.name}{department.branchId ? " · branch" : " · company"}</li>)}</ul></>}
+        {company.departments.length > 0 && <><h4>{t("Departments", "الأقسام")}</h4><ul>{company.departments.map((department) =>
+          <li key={department.id}>{department.name}{department.branchId ? t(" · branch", " · فرع") : t(" · company", " · شركة")}</li>)}</ul></>}
         {company.canCreateBranch && <form action={createBranch} className="branchform">
           <input type="hidden" name="tenantId" value={tenant.id} />
           <input type="hidden" name="companyId" value={company.id} />
-          <input name="name" placeholder="Branch name" required minLength={2} maxLength={120} />
-          <input name="code" placeholder="Branch code" required minLength={2} maxLength={20} />
-          <button type="submit">Add branch</button>
+          <input name="name" placeholder={t("Branch name", "اسم الفرع")} required minLength={2} maxLength={120} />
+          <input name="code" placeholder={t("Branch code", "رمز الفرع")} required minLength={2} maxLength={20} />
+          <button type="submit">{t("Add branch", "إضافة فرع")}</button>
         </form>}
         {company.canCreateDepartment && <form action={createDepartment} className="branchform">
           <input type="hidden" name="tenantId" value={tenant.id} />
           <input type="hidden" name="companyId" value={company.id} />
-          <input name="name" placeholder="Department name" required minLength={2} maxLength={120} />
+          <input name="name" placeholder={t("Department name", "اسم القسم")} required minLength={2} maxLength={120} />
           <select name="branchId" defaultValue="">
-            <option value="">Company-wide department</option>
+            <option value="">{t("Company-wide department", "قسم على مستوى الشركة")}</option>
             {company.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
           </select>
-          <button type="submit">Add department</button>
+          <button type="submit">{t("Add department", "إضافة قسم")}</button>
         </form>}
       </article>)}</div>
       {canInvite && <InviteForm tenantId={tenant.id} companies={companies.map((company) => ({
