@@ -20,7 +20,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const entry = await tx.journalEntry.create({ data: { tenantId: original.tenantId, companyId: original.companyId, branchId: original.branchId,
         number: parsed.data.number, entryDate: new Date(`${parsed.data.entryDate}T00:00:00Z`), description: parsed.data.reason,
         currency: original.currency, total: original.total, reversalOf: original.id, createdBy: actor.id,
-        lines: { create: original.lines.map((line) => ({ tenantId: line.tenantId, companyId: line.companyId, accountId: line.accountId, position: line.position, debit: line.credit, credit: line.debit })) } } });
+        lines: { create: original.lines.map((line) => ({ accountId: line.accountId, position: line.position, debit: line.credit, credit: line.debit })) } } });
       await tx.auditLog.create({ data: { tenantId: original.tenantId, actorId: actor.id, action: "journal.reversed", entity: "JournalEntry", entityId: original.id, metadata: { reversalId: entry.id } } });
       return entry;
     }); return NextResponse.json({ entry }, { status: 201 });

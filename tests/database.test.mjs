@@ -159,12 +159,13 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   const cashAccount = await db.ledgerAccount.create({ data: { tenantId: a.id, companyId: companyA.id, code: "1000", name: "Cash", type: "ASSET", createdBy: randomUUID() } });
   const salesAccount = await db.ledgerAccount.create({ data: { tenantId: a.id, companyId: companyA.id, code: "4000", name: "Sales", type: "REVENUE", createdBy: randomUUID() } });
   const journalData = { tenantId: a.id, companyId: companyA.id, branchId: branchA.id, number: "JE-DB", entryDate: new Date("2026-10-01"), description: "DB journal", currency: "OMR", total: "1.001", createdBy: randomUUID(),
-    lines: { create: [{ tenantId: a.id, companyId: companyA.id, accountId: cashAccount.id, position: 0, debit: "1.001", credit: "0" }, { tenantId: a.id, companyId: companyA.id, accountId: salesAccount.id, position: 1, debit: "0", credit: "1.001" }] } };
+    lines: { create: [{ accountId: cashAccount.id, position: 0, debit: "1.001", credit: "0" }, { accountId: salesAccount.id, position: 1, debit: "0", credit: "1.001" }] } };
   await assert.rejects(db.journalEntry.create({ data: { ...journalData, total: "2.000" } }));
   await assert.rejects(db.journalEntry.create({ data: { ...journalData, branchId: branchB.id } }));
   await assert.rejects(db.journalEntry.create({ data: { ...journalData, lines: { create: [{ ...journalData.lines.create[0], credit: "1" }, journalData.lines.create[1]] } } }));
   await assert.rejects(db.journalEntry.create({ data: { ...journalData, lines: { create: [journalData.lines.create[0], { ...journalData.lines.create[1], credit: "1.000" }] } } }));
-  await assert.rejects(db.journalEntry.create({ data: { ...journalData, lines: { create: journalData.lines.create.map((line) => ({ ...line, tenantId: b.id, companyId: companyB.id })) } } }));
+  const foreignLedgerAccount = await db.ledgerAccount.create({ data: { tenantId: b.id, companyId: companyB.id, code: "1000", name: "Other Cash", type: "ASSET", createdBy: randomUUID() } });
+  await assert.rejects(db.journalEntry.create({ data: { ...journalData, lines: { create: [{ ...journalData.lines.create[0], accountId: foreignLedgerAccount.id }, journalData.lines.create[1]] } } }));
   const postedJournal = await db.journalEntry.create({ data: journalData, include: { lines: true } });
   await assert.rejects(db.journalEntry.update({ where: { id: postedJournal.id }, data: { description: "Changed" } }));
   await assert.rejects(db.journalEntry.delete({ where: { id: postedJournal.id } }));

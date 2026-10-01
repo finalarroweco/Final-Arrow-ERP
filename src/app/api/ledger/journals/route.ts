@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   try {
     const entry = await db.$transaction(async (tx) => {
       const entry = await tx.journalEntry.create({ data: { tenantId, companyId, branchId: branchId ?? null, ...data, entryDate: new Date(`${entryDate}T00:00:00Z`), currency: company.baseCurrency, total: debit, createdBy: actor.id,
-        lines: { create: lines.map((line, position) => ({ ...line, tenantId, companyId, position })) } }, include: { lines: true } });
+        lines: { create: lines.map((line, position) => ({ ...line, position })) } }, include: { lines: true } });
       await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: "journal.posted", entity: "JournalEntry", entityId: entry.id } });
       return entry;
     }); return NextResponse.json({ entry }, { status: 201 });
