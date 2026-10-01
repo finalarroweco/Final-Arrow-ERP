@@ -12,6 +12,8 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0); const [month, setMonth] = useState("");
   const [filters, setFilters] = useState({ q: "", status: "", branchId: "" });
+  const [summary, setSummary] = useState<{ status: Entry["status"]; currency: string; count: number; netPay: string }[]>([]);
+  const [reportReady, setReportReady] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]); const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeePage, setEmployeePage] = useState<number | null>(null);
   const [page, setPage] = useState(0); const [next, setNext] = useState<number | null>(null);
@@ -32,14 +34,14 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
       setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [option, t]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setSummary([]); setReportReady(false); void load(); }, [load]);
   useEffect(() => { void loadEmployees(); }, [loadEmployees]);
   async function mutate(url: string, method: "POST" | "PATCH", body: object) {
     setBusy(true); setMessage("");
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json(); setMessage(response.ok ? t("Payroll saved", "تم حفظ سجل الراتب") : data.error);
-      if (response.ok) await load(method === "POST" ? 0 : page);
+      if (response.ok) { setSummary([]); setReportReady(false); await load(method === "POST" ? 0 : page); }
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   if (!option) return <section className="panel"><p>{t("No accessible payroll records.", "لا توجد سجلات رواتب متاحة.")}</p></section>;
@@ -75,6 +77,22 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
     </form>
     <label>{t("Filter by month", "تصفية حسب الشهر")} <input type="month" value={month} onChange={(event) => { setMonth(event.target.value); setEntries([]); }} /></label>
     <button disabled={busy} onClick={() => { setMonth(""); setEntries([]); }}>{t("All months", "كل الأشهر")}</button>
+    <div>
+      <button disabled={busy || !month} onClick={async () => {
+        setBusy(true); setMessage(""); setReportReady(false);
+        try {
+          const response = await fetch(`/api/payroll/report?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, period: month, ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) })}`);
+          const data = await response.json();
+          if (response.ok) { setSummary(data.summary); setReportReady(true); } else { setSummary([]); setMessage(data.error); }
+        } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
+      }}>{t("Monthly totals", "إجماليات الشهر")}</button>
+      {month && <a href={`/api/payroll/report?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, period: month, format: "csv", ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) })}`}>{t("Download monthly CSV", "تنزيل CSV الشهري")}</a>}
+      <p>{t("Choose a month. Totals and export cover all matching records, including later pages. Each status and currency is reported separately; void entries are shown separately.", "اختر شهراً. الإجماليات والتصدير تشمل كل السجلات المطابقة، بما فيها الصفحات التالية. تُعرض كل حالة وعملة بشكل منفصل، والسجلات الملغاة في إجمالي مستقل.")}</p>
+      {reportReady && summary.length === 0 && <p>{t("No matching payroll records.", "لا توجد رواتب مطابقة.")}</p>}
+      {summary.map((group) => <p key={`${group.status}:${group.currency}`}>
+        {t(group.status, { DRAFT: "مسودة", APPROVED: "معتمد", PAID: "مصروف", VOID: "ملغى" }[group.status])} · {group.count} {t("entries", "سجلات")} · {t("Net pay", "صافي الرواتب")}: <strong>{group.netPay} {group.currency}</strong>
+      </p>)}
+    </div>
     {entries.length === 0 && <p>{t("No entries on this page.", "لا توجد سجلات في هذه الصفحة.")}</p>}
     {entries.map((entry) => {
       const rights = entry.branchId ? option.branches.find((branch) => branch.id === entry.branchId) : option.companyRights;

@@ -852,10 +852,29 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await get(`/api/payroll?${payrollQuery}&status=INVALID`, owner.cookie)).status, 400);
     assert.equal((await get(`/api/payroll?${payrollQuery}&status=PAID&status=DRAFT`, owner.cookie)).status, 400);
     assert.equal((await get(`/api/payroll?${payrollQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    const payrollReport = `/api/payroll/report?${payrollQuery}&q=att-a`;
+    const monthlyPayroll = await get(payrollReport, manager.cookie);
+    assert.equal(monthlyPayroll.status, 200);
+    assert.equal(monthlyPayroll.data.count, 1);
+    assert.equal(monthlyPayroll.data.summary[0].netPay, "360.174");
+    assert.equal(monthlyPayroll.data.summary[0].status, "PAID");
+    assert.equal((await get(payrollReport, accepted.cookie)).status, 403);
+    assert.equal((await get(`${payrollReport}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    assert.equal((await get(`${payrollReport}&period=2026-11`, owner.cookie)).status, 400);
+    const payrollCsv = await fetch(`${origin}${payrollReport}&format=csv`, { headers: { Cookie: manager.cookie } });
+    assert.equal(payrollCsv.status, 200);
+    assert.match(payrollCsv.headers.get("content-type"), /text\/csv/);
+    assert.match(await payrollCsv.text(), /360\.174/);
     assert.equal((await get(`/api/payroll?${payrollQuery}`, accepted.cookie)).status, 403);
     assert.deepEqual((await get(`/api/payroll?${payrollQuery}`, manager.cookie)).data.entries.map((entry) => entry.id), [payroll.data.entry.id]);
     assert.equal((await patch(`/api/payroll/${otherPayroll.data.entry.id}`, { tenantId, action: "void", reason: "Correct input" }, owner.cookie)).status, 200);
     assert.equal((await post("/api/payroll", { ...payrollBody, employeeId: attendanceEmployeeB.data.employee.id }, owner.cookie)).status, 201);
+    const allPayrollTotals = await get(`/api/payroll/report?${payrollQuery}`, owner.cookie);
+    assert.equal(allPayrollTotals.data.count, 3);
+    assert.deepEqual(allPayrollTotals.data.summary.map((group) => group.status).sort(), ["DRAFT", "PAID", "VOID"]);
+    assert.equal(allPayrollTotals.data.summary.every((group) => group.netPay === "360.174"), true);
+    assert.equal((await get(`/api/payroll/report?${payrollQuery}&status=PAID`, owner.cookie)).data.count, 1);
+
 
   } finally {
     server.kill("SIGTERM");

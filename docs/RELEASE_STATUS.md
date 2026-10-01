@@ -24,3 +24,5 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 5. Enable production registration only after account and abuse controls are ready.
 
 The CI workflow checks migrations, unit tests, database constraints, build and API flows against PostgreSQL. Passing CI means this code slice is internally verified; it does not mean the entire ERP is complete or production ready.
+
+Monthly payroll reports now summarize exact decimal amounts by status and currency across all matching pages, with scoped CSV export (maximum 5000 records). Void records have separate totals. Reports require a month and payroll read permission; no bank transfer is performed.
