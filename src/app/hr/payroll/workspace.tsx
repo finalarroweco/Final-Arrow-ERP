@@ -68,6 +68,7 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
     {entries.map((entry) => {
       const rights = entry.branchId ? option.branches.find((branch) => branch.id === entry.branchId) : option.companyRights;
       return <article className="card" key={entry.id}><strong>{entry.employeeName}</strong> · {entry.employeeCode}
+        <p><a href={`/hr/payroll/${entry.id}`}>{t("View / print statement", "عرض / طباعة الكشف")}</a></p>
         <p>{entry.period.slice(0, 7)} · {t(entry.status, { DRAFT: "مسودة", APPROVED: "معتمد", PAID: "مصروف", VOID: "ملغى" }[entry.status])}</p>
         <p>{t("Base", "الأساسي")}: {entry.baseSalary} · {t("Allowances", "البدلات")}: {entry.allowances} · {t("Deductions", "الخصومات")}: {entry.deductions}</p>
         <p><strong>{t("Net pay", "صافي الراتب")}: {entry.netPay} {entry.currency}</strong></p>

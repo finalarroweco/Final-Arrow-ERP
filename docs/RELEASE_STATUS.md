@@ -9,7 +9,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Purchasing & inventory | Suppliers, purchase orders, full goods receipts, catalog and branch stock ledger | Partial receipts, returns, reservations, valuation |
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
-| HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval and payment recording | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
+| HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
 | Accounting | Internal invoice and expense registers | General ledger, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
 | Other planned modules | Preview cards only | POS, subscriptions, documents, AI and automation |
