@@ -18,6 +18,7 @@ const minute = (value: FormDataEntryValue | null) => {
 export function AttendanceWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0);
+  const [filters, setFilters] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeNextPage, setEmployeeNextPage] = useState<number | null>(null);
@@ -29,13 +30,13 @@ export function AttendanceWorkspace({ options, locale }: { options: Option[]; lo
   const load = useCallback(async (index: number, number = 0) => {
     const option = options[index]; if (!option) return;
     try {
-      const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number) });
+      const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number), ...filters });
       const response = await fetch(`/api/attendance?${query}`);
       const data = await response.json();
       if (!response.ok) { setMessage(data.error ?? t("Could not load attendance", "تعذر تحميل الحضور")); return; }
       setRecords(data.records); setPage(number); setNextPage(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
-  }, [options, t]);
+  }, [options, t, filters]);
   const loadEmployees = useCallback(async (index: number, number = 0) => {
     const option = options[index];
     if (!option || !(option.companyCanManage || option.branches.some((branch) => branch.canManage))) return;
@@ -62,7 +63,7 @@ export function AttendanceWorkspace({ options, locale }: { options: Option[]; lo
   const eligible = employees.filter((employee) => employee.branchId
     ? scope.branches.find((branch) => branch.id === employee.branchId)?.canManage : scope.companyCanManage);
   return <><section className="panel">
-    <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setRecords([]); setEmployees([]); setEmployeeNextPage(null); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setFilters({}); setRecords([]); setEmployees([]); setEmployeeNextPage(null); setMessage(""); }}>
       {options.map((option, index) => <option key={`${option.tenantId}-${option.companyId}`} value={index}>{option.label}</option>)}
     </select></label>
     {(scope.companyCanManage || scope.branches.some((branch) => branch.canManage)) && <form action={(form) => mutate("/api/attendance", "POST", {
@@ -84,6 +85,23 @@ export function AttendanceWorkspace({ options, locale }: { options: Option[]; lo
     </form>}
     {message && <p role="status">{message}</p>}
     <h2>{t("Attendance records", "سجلات الحضور")}</h2>
+    <form onSubmit={(event) => { event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      setFilters(Object.fromEntries(["q", "from", "to", "branchId", "status"]
+        .map((key) => [key, String(form.get(key) ?? "").trim()]).filter(([, value]) => value)));
+      setRecords([]);
+    }} key={`filters-${selected}`}>
+      <label>{t("Name or employee code", "اسم الموظف أو رمزه")} <input name="q" maxLength={160} /></label>
+      <label>{t("From", "من")} <input name="from" type="date" /></label>
+      <label>{t("To", "إلى")} <input name="to" type="date" /></label>
+      <label>{t("Branch", "الفرع")} <select name="branchId"><option value="">{t("All visible branches", "كل الفروع المتاحة")}</option>
+        {scope.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+      </select></label>
+      <label>{t("Status", "الحالة")} <select name="status"><option value="all">{t("All", "الكل")}</option>
+        <option value="open">{t("Open", "مفتوح")}</option><option value="completed">{t("Completed", "مكتمل")}</option></select></label>
+      <button disabled={busy}>{t("Apply filters", "تطبيق التصفية")}</button>
+      <button type="reset" disabled={busy} onClick={() => { setFilters({}); setRecords([]); }}>{t("Clear filters", "مسح التصفية")}</button>
+    </form>
     {records.length === 0 && <p>{t("No records on this page.", "لا توجد سجلات في هذه الصفحة.")}</p>}
     {records.map((record) => {
       const rights = record.branchId ? scope.branches.find((branch) => branch.id === record.branchId)?.canManage : scope.companyCanManage;

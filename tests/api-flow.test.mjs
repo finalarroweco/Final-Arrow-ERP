@@ -746,6 +746,14 @@ test("invitation is single-use and a branch viewer sees only their company and b
       employeeId: attendanceEmployeeB.data.employee.id, workDate: "2026-09-30", startMinute: 540 }, owner.cookie);
     assert.equal(attendanceA.status, 201);
     assert.equal(attendanceB.status, 201);
+    const attendanceListQuery = `tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    const completedAttendance = await get(`/api/attendance?${attendanceListQuery}&status=completed&q=ATT-A`, manager.cookie);
+    assert.equal(completedAttendance.status, 200);
+    assert.deepEqual(completedAttendance.data.records.map((record) => record.id), [attendanceA.data.record.id]);
+    assert.deepEqual((await get(`/api/attendance?${attendanceListQuery}&status=open`, manager.cookie)).data.records, []);
+    assert.equal((await get(`/api/attendance?${attendanceListQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    assert.deepEqual((await get(`/api/attendance?${attendanceListQuery}&from=2026-10-01`, owner.cookie)).data.records, []);
+    assert.equal((await get(`/api/attendance?${attendanceListQuery}&from=2026-10-01&to=2026-09-01`, owner.cookie)).status, 400);
     const attendanceQuery = `tenantId=${tenantId}&companyId=${companyA.data.company.id}&from=2026-09-01&to=2026-09-30`;
     assert.equal((await get(`/api/attendance/report?${attendanceQuery}`, accepted.cookie)).status, 403);
     const managerReport = await get(`/api/attendance/report?${attendanceQuery}`, manager.cookie);

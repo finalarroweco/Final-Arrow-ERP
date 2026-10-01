@@ -20,11 +20,24 @@ export async function GET(request: Request) {
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
     return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+  const filters = z.object({ q: z.string().trim().max(160).optional(),
+    from: dueDate.optional(), to: dueDate.optional(), branchId: uuid.optional(),
+    status: z.enum(["all", "open", "completed"]).default("all") })
+    .refine((value) => !value.from || !value.to || value.from <= value.to)
+    .safeParse(Object.fromEntries(["q", "from", "to", "branchId", "status"]
+      .filter((key) => params.has(key)).map((key) => [key, params.get(key)])));
+  if (!filters.success) return NextResponse.json({ error: "Invalid attendance filters" }, { status: 400 });
+  const { q, from, to, branchId, status } = filters.data;
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permission: "attendance:read" });
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false || (branchId && branches !== null && !branches.includes(branchId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const records = await db.attendanceRecord.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
-    ...(branches === null ? {} : { branchId: { in: branches } }) },
+    ...(branchId ? { branchId } : branches === null ? {} : { branchId: { in: branches } }),
+    ...(from || to ? { workDate: { ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
+      ...(to ? { lte: new Date(`${to}T00:00:00.000Z`) } : {}) } } : {}),
+    ...(status === "open" ? { endMinute: null } : status === "completed" ? { endMinute: { not: null } } : {}),
+    ...(q ? { employee: { OR: [{ fullName: { contains: q, mode: "insensitive" } },
+      { code: { contains: q, mode: "insensitive" } }] } } : {}) },
     select: { id: true, employeeId: true, employee: { select: { fullName: true, code: true } },
       branchId: true, workDate: true, startMinute: true, endMinute: true, note: true, createdAt: true },
     orderBy: [{ workDate: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
