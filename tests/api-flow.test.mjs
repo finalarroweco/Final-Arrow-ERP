@@ -794,6 +794,15 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(timePath, voidTimeBody, accepted.cookie)).status, 403);
     assert.equal((await patch(timePath, voidTimeBody, manager.cookie)).status, 200);
     assert.equal((await patch(timePath, voidTimeBody, manager.cookie)).status, 409);
+    assert.equal((await get(`/api/audit?tenantId=${tenantId}`, manager.cookie)).status, 403);
+    assert.equal((await get(`/api/audit?tenantId=${tenantId}`, accepted.cookie)).status, 403);
+    const audit = await get(`/api/audit?tenantId=${tenantId}&action=project-time.voided&entity=ProjectTimeEntry`, owner.cookie);
+    assert.equal(audit.status, 200);
+    assert.equal(audit.data.entries.length, 1);
+    assert.equal(audit.data.entries[0].entityId, timeEntry.data.entry.id);
+    assert.equal(audit.data.entries[0].actorName, "Manager");
+    assert.equal("metadata" in audit.data.entries[0], false);
+    assert.equal((await get(`/api/audit?tenantId=${randomUUID()}`, owner.cookie)).status, 403);
     const correctedTimes = await get(`${timePath}?tenantId=${tenantId}`, manager.cookie);
     assert.equal(correctedTimes.data.totalMinutes, 0);
     assert.ok(correctedTimes.data.entries[0].voidedAt);

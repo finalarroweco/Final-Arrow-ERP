@@ -4,7 +4,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 
 | Area | Current implementation | Remaining work |
 | --- | --- | --- |
-| Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events | Custom role editor, account recovery, verified email, login throttling |
+| Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events and an organization administration activity viewer | Custom role editor, account recovery, verified email, login throttling |
 | CRM & sales | Customers, leads, quotes, orders, internal invoices | Contacts, imports, tax, payments, legal documents |
 | Purchasing & inventory | Suppliers, purchase orders, full goods receipts, catalog and branch stock ledger | Partial receipts, returns, reservations, valuation |
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections | Dependencies, time approval, billing, budgets, resource planning |
