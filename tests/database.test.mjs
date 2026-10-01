@@ -91,6 +91,18 @@ test("database enforces tenant hierarchy and scope shape", async () => {
     branchId: branchA.id, code: "EMP-DB", fullName: "Valid employee", createdBy: randomUUID() } });
   assert.equal(employee.branchId, branchA.id);
 
+  const payrollData = { tenantId: a.id, companyId: companyA.id, branchId: branchA.id,
+    employeeId: employee.id, employeeName: employee.fullName, employeeCode: employee.code,
+    period: new Date("2026-10-01"), baseSalary: "350", allowances: "20", deductions: "10",
+    netPay: "360", currency: "OMR", createdBy: randomUUID() };
+  const payroll = await db.payrollEntry.create({ data: payrollData });
+  await assert.rejects(db.payrollEntry.create({ data: payrollData }));
+  await assert.rejects(db.payrollEntry.create({ data: { ...payrollData, period: new Date("2026-11-01"), netPay: "400" } }));
+  await assert.rejects(db.payrollEntry.create({ data: { ...payrollData, tenantId: b.id, companyId: companyB.id, branchId: branchB.id } }));
+  await db.payrollEntry.update({ where: { id: payroll.id }, data: { status: "VOID" } });
+  assert.equal((await db.payrollEntry.create({ data: payrollData })).netPay.toString(), "360");
+
+
   const timeData = { tenantId: a.id, companyId: companyA.id, projectId: project.id,
     employeeId: employee.id, workDate: new Date("2026-10-01"), minutes: 60,
     description: "Database time entry", createdBy: randomUUID() };
