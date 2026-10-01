@@ -2,6 +2,7 @@
 
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
+import { AttendanceReport } from "./report";
 
 type Option = { tenantId: string; companyId: string; label: string; companyCanManage: boolean;
   branches: { id: string; name: string; canManage: boolean }[] };
@@ -60,7 +61,7 @@ export function AttendanceWorkspace({ options, locale }: { options: Option[]; lo
   if (!scope) return <section className="panel"><p>{t("No accessible attendance records.", "لا توجد سجلات حضور متاحة.")}</p></section>;
   const eligible = employees.filter((employee) => employee.branchId
     ? scope.branches.find((branch) => branch.id === employee.branchId)?.canManage : scope.companyCanManage);
-  return <section className="panel">
+  return <><section className="panel">
     <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setRecords([]); setEmployees([]); setEmployeeNextPage(null); setMessage(""); }}>
       {options.map((option, index) => <option key={`${option.tenantId}-${option.companyId}`} value={index}>{option.label}</option>)}
     </select></label>
@@ -100,5 +101,5 @@ export function AttendanceWorkspace({ options, locale }: { options: Option[]; lo
     })}
     {page > 0 && <button disabled={busy} onClick={() => void load(selected, page - 1)}>{t("Previous", "السابق")}</button>}
     {nextPage !== null && <button disabled={busy} onClick={() => void load(selected, nextPage)}>{t("Next", "التالي")}</button>}
-  </section>;
+  </section><AttendanceReport key={`${scope.tenantId}-${scope.companyId}`} scope={scope} employees={employees} locale={locale} /></>;
 }
