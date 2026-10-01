@@ -90,6 +90,14 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   const employee = await db.employee.create({ data: { tenantId: a.id, companyId: companyA.id,
     branchId: branchA.id, code: "EMP-DB", fullName: "Valid employee", createdBy: randomUUID() } });
   assert.equal(employee.branchId, branchA.id);
+
+  const timeData = { tenantId: a.id, companyId: companyA.id, projectId: project.id,
+    employeeId: employee.id, workDate: new Date("2026-10-01"), minutes: 60,
+    description: "Database time entry", createdBy: randomUUID() };
+  assert.equal((await db.projectTimeEntry.create({ data: timeData })).minutes, 60);
+  await assert.rejects(db.projectTimeEntry.create({ data: { ...timeData, minutes: 0 } }));
+  await assert.rejects(db.projectTimeEntry.create({ data: { ...timeData, tenantId: b.id, companyId: companyB.id } }));
+
   await assert.rejects(db.projectTask.create({ data: { tenantId: b.id, companyId: companyB.id,
     projectId: project.id, assigneeEmployeeId: employee.id, title: "Wrong assignment",
     createdBy: randomUUID() } }));

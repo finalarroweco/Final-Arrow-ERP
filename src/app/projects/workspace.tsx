@@ -103,6 +103,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
         <strong>{project.name}</strong> · {project.code}
         <p>{t(project.status, ({ PLANNED: "مخطط", ACTIVE: "نشط", ON_HOLD: "متوقف مؤقتاً", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[project.status])} · {project._count.tasks} {t("tasks", "مهام")} · {project.branchId ? option.branches.find((branch) => branch.id === project.branchId)?.name : t("Company wide", "على مستوى الشركة")}{project.dueDate && ` · ${t("Due", "الاستحقاق")} ${project.dueDate.slice(0, 10)}`}</p>
         {project.description && <p>{project.description}</p>}
+        {(permissions?.canManage || permissions?.canManageTask) && <p><a href={`/projects/${project.id}/time`}>{t("Time tracking", "تسجيل ساعات العمل")}</a></p>}
         {permissions?.canManage && <div>
           {(project.status === "PLANNED" || project.status === "ON_HOLD") && <button disabled={busy} onClick={() => projectAction("activate")}>{t("Activate", "تفعيل")}</button>}
           {project.status === "ACTIVE" && <><button disabled={busy} onClick={() => projectAction("pause")}>{t("Pause", "إيقاف مؤقت")}</button><button disabled={busy} onClick={() => projectAction("complete")}>{t("Complete project", "إكمال المشروع")}</button></>}

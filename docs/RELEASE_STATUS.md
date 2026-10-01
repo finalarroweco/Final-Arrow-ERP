@@ -1,13 +1,13 @@
 # Final Arrow ERP release status
 
-This repository is an expanding product foundation. The bilingual `/erp-preview-v2.html` preview contains sample data and does not save changes. It is a separately maintained interface walkthrough, so app changes do not appear there automatically. The authenticated app needs PostgreSQL and has not been deployed for public use.
+This repository is an expanding product foundation. The bilingual `/erp-preview-v3.html` preview contains sample data and does not save changes. It is a separately maintained interface walkthrough, so app changes do not appear there automatically. The authenticated app needs PostgreSQL and has not been deployed for public use.
 
 | Area | Current implementation | Remaining work |
 | --- | --- | --- |
 | Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events | Custom role editor, account recovery, verified email, login throttling |
 | CRM & sales | Customers, leads, quotes, orders, internal invoices | Contacts, imports, tax, payments, legal documents |
 | Purchasing & inventory | Suppliers, purchase orders, full goods receipts, catalog and branch stock ledger | Partial receipts, returns, reservations, valuation |
-| Projects | Projects, tasks, employee assignments and status transitions | Dependencies, time tracking, budgets, resource planning |
+| Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, and scoped CSV reporting | Leave balance rules, payroll, overnight shifts and separate fingerprint integration |
 | Accounting | Internal invoice and expense registers | General ledger, bank reconciliation, taxes, accounts payable and receivable |
