@@ -13,14 +13,22 @@ const schema = z.object({ tenantId: uuid, companyId: uuid, employeeId: uuid, per
 export async function GET(request: Request) {
   const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   const query = new URL(request.url).searchParams;
-  const parsed = z.object({ tenantId: uuid, companyId: uuid, period: period.optional(), page: z.coerce.number().int().min(0).max(100000).default(0) })
-    .safeParse(Object.fromEntries(["tenantId", "companyId", "period", "page"].filter((key) => query.has(key)).map((key) => [key, query.get(key)])));
+  const keys = ["tenantId", "companyId", "period", "page", "q", "status", "branchId"];
+  if (keys.some((key) => query.getAll(key).length > 1)) return NextResponse.json({ error: "Duplicate payroll filter" }, { status: 400 });
+  const parsed = z.object({ tenantId: uuid, companyId: uuid, period: period.optional(),
+    q: z.string().trim().max(120).optional(), status: z.enum(["DRAFT", "APPROVED", "PAID", "VOID"]).optional(), branchId: uuid.optional(), page: z.coerce.number().int().min(0).max(100000).default(0) })
+    .safeParse(Object.fromEntries(keys.filter((key) => query.has(key)).map((key) => [key, query.get(key)])));
   if (!parsed.success) return NextResponse.json({ error: "Invalid payroll scope" }, { status: 400 });
-  const { tenantId, companyId, period: month, page } = parsed.data;
+  const { tenantId, companyId, period: month, page, q, status, branchId } = parsed.data;
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId, companyId, permission: "payroll:read" });
   if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branchId && branches !== null && !branches.includes(branchId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const entries = await db.payrollEntry.findMany({ where: { tenantId, companyId,
-    ...(branches === null ? {} : { branchId: { in: branches } }), ...(month ? { period: new Date(`${month}-01T00:00:00.000Z`) } : {}) },
+    ...(branchId ? { branchId } : branches === null ? {} : { branchId: { in: branches } }),
+    ...(status ? { status } : {}), ...(q ? { OR: [
+      { employeeName: { contains: q, mode: "insensitive" as const } },
+      { employeeCode: { contains: q, mode: "insensitive" as const } }
+    ] } : {}), ...(month ? { period: new Date(`${month}-01T00:00:00.000Z`) } : {}) },
     orderBy: [{ period: "desc" }, { createdAt: "desc" }, { id: "asc" }], skip: page * 50, take: 51 });
   return NextResponse.json({ entries: entries.slice(0, 50), nextPage: entries.length > 50 ? page + 1 : null });
 }

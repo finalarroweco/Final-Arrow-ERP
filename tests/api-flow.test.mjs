@@ -846,6 +846,12 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(otherPayroll.status, 201);
     assert.equal((await fetch(`${origin}/hr/payroll/${otherPayroll.data.entry.id}`, { headers: { Cookie: manager.cookie } })).status, 404);
     const payrollQuery = `tenantId=${tenantId}&companyId=${companyA.data.company.id}&period=2026-10`;
+    assert.equal((await get(`/api/payroll?${payrollQuery}&status=PAID&q=att-a`, owner.cookie)).data.entries.length, 1);
+    assert.equal((await get(`/api/payroll?${payrollQuery}&status=DRAFT&q=att-a`, owner.cookie)).data.entries.length, 0);
+    assert.equal((await get(`/api/payroll?${payrollQuery}&q=no-match`, owner.cookie)).data.entries.length, 0);
+    assert.equal((await get(`/api/payroll?${payrollQuery}&status=INVALID`, owner.cookie)).status, 400);
+    assert.equal((await get(`/api/payroll?${payrollQuery}&status=PAID&status=DRAFT`, owner.cookie)).status, 400);
+    assert.equal((await get(`/api/payroll?${payrollQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
     assert.equal((await get(`/api/payroll?${payrollQuery}`, accepted.cookie)).status, 403);
     assert.deepEqual((await get(`/api/payroll?${payrollQuery}`, manager.cookie)).data.entries.map((entry) => entry.id), [payroll.data.entry.id]);
     assert.equal((await patch(`/api/payroll/${otherPayroll.data.entry.id}`, { tenantId, action: "void", reason: "Correct input" }, owner.cookie)).status, 200);
