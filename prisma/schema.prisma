@@ -144,6 +144,7 @@ model Company {
   baseCurrency   String          @default("OMR") @db.VarChar(3)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  ledgerAccounts LedgerAccount[]
   branches       Branch[]
   departments    Department[]
   scopes         AccessScope[]
@@ -163,6 +164,7 @@ model Company {
   expenses       Expense[]
   leaveRequests  LeaveRequest[]
   payrollEntries PayrollEntry[]
+  journalEntries JournalEntry[]
   attendanceRecords AttendanceRecord[]
   tickets        Ticket[]
 
@@ -198,6 +200,7 @@ model Branch {
   expenses       Expense[]
   leaveRequests  LeaveRequest[]
   payrollEntries PayrollEntry[]
+  journalEntries JournalEntry[]
   attendanceRecords AttendanceRecord[]
   tickets        Ticket[]
 
@@ -936,4 +939,66 @@ model PayrollEntry {
 
   @@unique([tenantId, id])
   @@index([tenantId, companyId, branchId, period, status])
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+model LedgerAccount {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  companyId String @db.Uuid
+  code String
+  name String
+  type LedgerAccountType
+  createdAt DateTime @default(now())
+  createdBy String @db.Uuid
+  company Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  lines JournalLine[]
+  @@unique([tenantId, companyId, id])
+  @@unique([companyId, code])
+}
+
+model JournalEntry {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  companyId String @db.Uuid
+  branchId String? @db.Uuid
+  number String
+  entryDate DateTime @db.Date
+  description String
+  currency String @db.VarChar(3)
+  total Decimal @db.Decimal(18, 3)
+  reversalOf String? @unique @db.Uuid
+  original JournalEntry? @relation("JournalReversal", fields: [tenantId, companyId, reversalOf], references: [tenantId, companyId, id], onDelete: Restrict)
+  reversal JournalEntry? @relation("JournalReversal")
+  createdAt DateTime @default(now())
+  createdBy String @db.Uuid
+  company Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
+  branch Branch? @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  lines JournalLine[]
+  @@unique([tenantId, companyId, id])
+  @@unique([tenantId, companyId, reversalOf])
+  @@unique([companyId, number])
+  @@index([tenantId, companyId, branchId, entryDate])
+}
+
+model JournalLine {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  companyId String @db.Uuid
+  entryId String @db.Uuid
+  accountId String @db.Uuid
+  position Int
+  debit Decimal @db.Decimal(18, 3)
+  credit Decimal @db.Decimal(18, 3)
+  entry JournalEntry @relation(fields: [tenantId, companyId, entryId], references: [tenantId, companyId, id], onDelete: Restrict)
+  account LedgerAccount @relation(fields: [tenantId, companyId, accountId], references: [tenantId, companyId, id], onDelete: Restrict)
+  @@unique([entryId, position])
+  @@index([tenantId, companyId, accountId])
 }

@@ -10,7 +10,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
-| Accounting | Internal invoice and expense registers | General ledger, bank reconciliation, taxes, accounts payable and receivable |
+| Accounting | Internal invoice and expense registers, company chart of accounts, immutable balanced manual journals, dated reversals and scoped trial balance | Automatic document posting, periods/closing, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
 | Other planned modules | Preview cards only | POS, subscriptions, documents, AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
@@ -26,3 +26,5 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 The CI workflow checks migrations, unit tests, database constraints, build and API flows against PostgreSQL. Passing CI means this code slice is internally verified; it does not mean the entire ERP is complete or production ready.
 
 Monthly payroll reports now summarize exact decimal amounts by status and currency across all matching pages, with scoped CSV export (maximum 5000 records). Void records have separate totals. Reports require a month and payroll read permission; no bank transfer is performed.
+
+General ledger journals post manually in company currency, without tax or automatic document posting. Deferred database constraints verify line balance and header totals; posted headers and lines reject edits and deletion. Corrections create a unique linked reversal. Trial balance reports movements and ending debit/credit balances for the selected dates and scope, grouped by account and currency (maximum 20000 lines). A start date excludes prior balances.

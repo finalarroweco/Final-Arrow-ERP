@@ -876,6 +876,51 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await get(`/api/payroll/report?${payrollQuery}&status=PAID`, owner.cookie)).data.count, 1);
 
 
+    const accountScope = { tenantId, companyId: companyA.data.company.id };
+    assert.equal((await post("/api/ledger/accounts", { ...accountScope, code: "1000", name: "Cash", type: "ASSET" }, manager.cookie)).status, 403);
+    const cash = await post("/api/ledger/accounts", { ...accountScope, code: "1000", name: "Cash", type: "ASSET" }, owner.cookie);
+    const revenue = await post("/api/ledger/accounts", { ...accountScope, code: "4000", name: "Revenue", type: "REVENUE" }, owner.cookie);
+    assert.equal(cash.status, 201); assert.equal(revenue.status, 201);
+    assert.equal((await post("/api/ledger/accounts", { ...accountScope, code: "1000", name: "Duplicate", type: "ASSET" }, owner.cookie)).status, 409);
+    const foreignAccount = await post("/api/ledger/accounts", { tenantId, companyId: companyB.data.company.id, code: "1000", name: "Other cash", type: "ASSET" }, owner.cookie);
+    const journalBody = { ...accountScope, branchId: branchA.data.branch.id, number: "JE-001", entryDate: "2026-10-01", description: "Manual cash revenue",
+      lines: [{ accountId: cash.data.account.id, debit: "12.345", credit: "0" }, { accountId: revenue.data.account.id, debit: "0", credit: "12.345" }] };
+    assert.equal((await post("/api/ledger/journals", journalBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/ledger/journals", { ...journalBody, branchId: branchB.data.branch.id }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/ledger/journals", { ...journalBody, branchId: null }, manager.cookie)).status, 403);
+    assert.equal((await post("/api/ledger/journals", { ...journalBody, lines: [journalBody.lines[0], { ...journalBody.lines[1], credit: "12.344" }] }, owner.cookie)).status, 400);
+    assert.equal((await post("/api/ledger/journals", { ...journalBody, lines: [{ ...journalBody.lines[0], accountId: foreignAccount.data.account.id }, journalBody.lines[1]] }, owner.cookie)).status, 400);
+    assert.equal((await post("/api/ledger/journals", { ...journalBody, lines: [{ ...journalBody.lines[0], credit: "1" }, journalBody.lines[1]] }, owner.cookie)).status, 400);
+    const journal = await post("/api/ledger/journals", journalBody, manager.cookie);
+    assert.equal(journal.status, 201); assert.equal(journal.data.entry.total, "12.345");
+    assert.equal((await post("/api/ledger/journals", journalBody, owner.cookie)).status, 409);
+    const ledgerQuery = `tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.equal((await get(`/api/ledger/accounts?${ledgerQuery}`, accepted.cookie)).status, 403);
+    assert.equal((await get(`/api/ledger/journals?${ledgerQuery}`, manager.cookie)).data.entries.length, 1);
+    assert.equal((await get(`/api/ledger/trial-balance?${ledgerQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    assert.equal((await get(`/api/ledger/trial-balance?${ledgerQuery}&from=2026-10-10&to=2026-10-01`, owner.cookie)).status, 400);
+    const trial = await get(`/api/ledger/trial-balance?${ledgerQuery}`, manager.cookie);
+    assert.equal(trial.status, 200); assert.equal(trial.data.scope, "BRANCHES");
+    assert.equal(trial.data.rows.find((row) => row.code === "1000").debitBalance, "12.345");
+    assert.equal(trial.data.rows.find((row) => row.code === "4000").creditBalance, "12.345");
+    const reversalBody = { tenantId, number: "JE-REV-001", entryDate: "2026-10-02", reason: "Correct manual journal" };
+    const reversalPath = `/api/ledger/journals/${journal.data.entry.id}/reverse`;
+    assert.equal((await post(reversalPath, reversalBody, accepted.cookie)).status, 403);
+    assert.equal((await post(reversalPath, { ...reversalBody, entryDate: "2026-09-30" }, manager.cookie)).status, 409);
+    const reversal = await post(reversalPath, reversalBody, manager.cookie);
+    assert.equal(reversal.status, 201); assert.equal(reversal.data.entry.reversalOf, journal.data.entry.id);
+    assert.equal((await post(reversalPath, { ...reversalBody, number: "JE-REV-002" }, manager.cookie)).status, 409);
+    assert.equal((await post(`/api/ledger/journals/${reversal.data.entry.id}/reverse`, { ...reversalBody, number: "JE-REV-003" }, owner.cookie)).status, 409);
+    const clearedTrial = await get(`/api/ledger/trial-balance?${ledgerQuery}`, manager.cookie);
+    assert.equal(clearedTrial.data.lineCount, 4);
+    assert.equal(clearedTrial.data.rows.every((row) => row.debitBalance === "0.000" && row.creditBalance === "0.000"), true);
+    const earlierTrial = await get(`/api/ledger/trial-balance?${ledgerQuery}&to=2026-10-01`, manager.cookie);
+    assert.equal(earlierTrial.data.rows.find((row) => row.code === "1000").debitBalance, "12.345");
+    assert.equal((await post("/api/ledger/journals", { ...journalBody, number: "JE-B", branchId: branchB.data.branch.id }, owner.cookie)).status, 201);
+    assert.equal((await get(`/api/ledger/journals?${ledgerQuery}`, manager.cookie)).data.entries.length, 2);
+    const ledgerPage = await fetch(`${origin}/accounting/ledger`, { headers: { Cookie: owner.cookie } });
+    assert.equal(ledgerPage.status, 200);
+
   } finally {
     server.kill("SIGTERM");
   }
