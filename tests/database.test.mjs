@@ -171,6 +171,19 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   await assert.rejects(db.journalEntry.delete({ where: { id: postedJournal.id } }));
   await assert.rejects(db.journalLine.update({ where: { id: postedJournal.lines[0].id }, data: { debit: "2.000" } }));
   await assert.rejects(db.journalLine.delete({ where: { id: postedJournal.lines[0].id } }));
+
+  const posDbItem = await db.posItem.create({ data: { tenantId: a.id, companyId: companyA.id, branchId: branchA.id, code: "POS-DB", name: "Coffee", category: "Drinks", price: "1.125", currency: "OMR", createdBy: randomUUID() } });
+  const posDbData = { tenantId: a.id, companyId: companyA.id, branchId: branchA.id, number: "POS-DB", type: "TAKEAWAY", total: "3.375", currency: "OMR", createdBy: randomUUID(), lines: { create: [{ itemId: posDbItem.id, itemName: "Coffee", position: 0, quantity: 3, unitPrice: "1.125", amount: "3.375" }] } };
+  await assert.rejects(db.posOrder.create({ data: { ...posDbData, total: "3.000" } }));
+  await assert.rejects(db.posOrder.create({ data: { ...posDbData, branchId: branchB.id } }));
+  await assert.rejects(db.posOrder.create({ data: { ...posDbData, lines: { create: [{ ...posDbData.lines.create[0], amount: "3.000" }] } } }));
+  const dbPosOrder = await db.posOrder.create({ data: posDbData, include: { lines: true } });
+  await assert.rejects(db.posOrderLine.update({ where: { id: dbPosOrder.lines[0].id }, data: { itemName: "Changed" } }));
+  await assert.rejects(db.posOrder.update({ where: { id: dbPosOrder.id }, data: { total: "4.000" } }));
+  await assert.rejects(db.posOrder.update({ where: { id: dbPosOrder.id }, data: { status: "PAID", paymentMethod: "CASH", paidAt: new Date(), tendered: "3.000", change: "0" } }));
+  await db.posOrder.update({ where: { id: dbPosOrder.id }, data: { status: "PAID", paymentMethod: "CASH", paidAt: new Date(), tendered: "5.000", change: "1.625" } });
+  await assert.rejects(db.posOrder.update({ where: { id: dbPosOrder.id }, data: { status: "OPEN" } }));
+  await assert.rejects(db.posOrder.delete({ where: { id: dbPosOrder.id } }));
   const user = await db.user.create({
     data: { email: `test-${unique()}@example.invalid`, name: "Test", passwordHash: "test-only" },
   });

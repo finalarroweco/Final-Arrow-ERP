@@ -921,6 +921,53 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const ledgerPage = await fetch(`${origin}/accounting/ledger`, { headers: { Cookie: owner.cookie } });
     assert.equal(ledgerPage.status, 200);
 
+    const posScope = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id };
+    const menuBody = { ...posScope, code: "MENU-A", name: "Coffee", category: "Drinks", price: "1.125" };
+    assert.equal((await post("/api/pos/items", menuBody, accepted.cookie)).status, 403);
+    const menuItem = await post("/api/pos/items", menuBody, manager.cookie);
+    assert.equal(menuItem.status, 201);
+    const sharedMenu = await post("/api/pos/items", { ...menuBody, code: "MENU-SHARED", branchId: null }, owner.cookie);
+    assert.equal(sharedMenu.status, 201);
+    const otherMenu = await post("/api/pos/items", { ...menuBody, code: "MENU-B", branchId: branchB.data.branch.id }, owner.cookie);
+    assert.equal(otherMenu.status, 201);
+    assert.equal((await post("/api/pos/items", { ...menuBody, code: "MENU-DENIED", branchId: null }, manager.cookie)).status, 403);
+    const posQuery = new URLSearchParams(posScope);
+    const visibleMenu = await get(`/api/pos/items?${posQuery}`, accepted.cookie);
+    assert.deepEqual(visibleMenu.data.items.map((item) => item.id).sort(), [menuItem.data.item.id, sharedMenu.data.item.id].sort());
+    const posBody = { ...posScope, number: "POS-001", type: "DINE_IN", tableLabel: "Table 4", lines: [{ itemId: menuItem.data.item.id, quantity: 3 }] };
+    assert.equal((await post("/api/pos/orders", posBody, accepted.cookie)).status, 403);
+    assert.equal((await post("/api/pos/orders", { ...posBody, tableLabel: null }, manager.cookie)).status, 400);
+    assert.equal((await post("/api/pos/orders", { ...posBody, lines: [{ itemId: otherMenu.data.item.id, quantity: 1 }] }, manager.cookie)).status, 409);
+    assert.equal((await post("/api/pos/orders", { ...posBody, lines: [posBody.lines[0], posBody.lines[0]] }, manager.cookie)).status, 400);
+    const posOrder = await post("/api/pos/orders", posBody, manager.cookie);
+    assert.equal(posOrder.status, 201); assert.equal(posOrder.data.order.total, "3.375");
+    assert.equal((await post("/api/pos/orders", posBody, manager.cookie)).status, 409);
+    const posOrderPath = `/api/pos/orders/${posOrder.data.order.id}`;
+    assert.equal((await patch(posOrderPath, { tenantId, action: "pay", method: "CASH", tendered: "3" }, manager.cookie)).status, 400);
+    assert.equal((await patch(posOrderPath, { tenantId, action: "pay", method: "CASH", tendered: "5" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(posOrderPath, { tenantId, action: "pay", method: "CASH", tendered: "5" }, manager.cookie)).status, 200);
+    assert.equal((await patch(posOrderPath, { tenantId, action: "pay-card", reference: "CARD-001" }, manager.cookie)).status, 409);
+    assert.equal((await patch(posOrderPath, { tenantId, action: "cancel", reason: "Cannot cancel paid" }, owner.cookie)).status, 409);
+    const paidPos = await get(`/api/pos/orders?${posQuery}&status=PAID`, accepted.cookie);
+    assert.equal(paidPos.data.orders[0].change, "1.625");
+    const posReceipt = await fetch(`${origin}/pos/${posOrder.data.order.id}`, { headers: { Cookie: accepted.cookie } });
+    assert.equal(posReceipt.status, 200); assert.match(await posReceipt.text(), /3\.375/);
+    const branchBPos = await post("/api/pos/orders", { ...posBody, branchId: branchB.data.branch.id, number: "POS-B", lines: [{ itemId: otherMenu.data.item.id, quantity: 1 }] }, owner.cookie);
+    assert.equal(branchBPos.status, 201);
+    assert.equal((await fetch(`${origin}/pos/${branchBPos.data.order.id}`, { headers: { Cookie: manager.cookie } })).status, 404);
+    assert.equal((await get(`/api/pos/orders?${posQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 400);
+    assert.equal((await get(`/api/pos/orders?${new URLSearchParams({ ...posScope, branchId: branchB.data.branch.id })}`, manager.cookie)).status, 403);
+    const cardOrder = await post("/api/pos/orders", { ...posBody, number: "POS-CARD", type: "TAKEAWAY", tableLabel: null }, manager.cookie);
+    assert.equal(cardOrder.status, 201);
+    const competingPayments = await Promise.all(["CARD-002", "CARD-003"].map((reference) => patch(`/api/pos/orders/${cardOrder.data.order.id}`, { tenantId, action: "pay-card", reference }, manager.cookie)));
+    assert.deepEqual(competingPayments.map((result) => result.status).sort(), [200, 409]);
+    const cancelledPosOrder = await post("/api/pos/orders", { ...posBody, number: "POS-CANCEL" }, manager.cookie);
+    assert.equal((await patch(`/api/pos/orders/${cancelledPosOrder.data.order.id}`, { tenantId, action: "cancel", reason: "Customer changed plans" }, manager.cookie)).status, 200);
+    assert.equal((await patch(`/api/pos/items/${menuItem.data.item.id}`, { tenantId, active: false }, manager.cookie)).status, 200);
+    assert.equal((await post("/api/pos/orders", { ...posBody, number: "POS-INACTIVE" }, manager.cookie)).status, 409);
+    assert.equal((await get(`/api/pos/items?${posQuery}`, manager.cookie)).data.items.some((item) => item.id === menuItem.data.item.id), false);
+    assert.equal((await get(`/api/pos/orders?${posQuery}`, manager.cookie)).data.orders.find((order) => order.id === posOrder.data.order.id).lines[0].itemName, "Coffee");
+
   } finally {
     server.kill("SIGTERM");
   }
