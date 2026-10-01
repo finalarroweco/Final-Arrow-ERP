@@ -23,12 +23,18 @@ export async function GET(request: Request) {
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
     return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+  const filters = z.object({ q: z.string().trim().max(160).optional(), branchId: uuid.optional() })
+    .safeParse(Object.fromEntries(["q", "branchId"].filter((key) => params.has(key)).map((key) => [key, params.get(key)])));
+  if (!filters.success) return NextResponse.json({ error: "Invalid employee filters" }, { status: 400 });
+  const { q, branchId } = filters.data;
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permission: "employee:read" });
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false || (branchId && branches !== null && !branches.includes(branchId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const employees = await db.employee.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     status: params.get("inactive") === "true" ? "INACTIVE" : "ACTIVE",
-    ...(branches === null ? {} : { branchId: { in: branches } }) },
+    ...(branchId ? { branchId } : branches === null ? {} : { branchId: { in: branches } }),
+    ...(q ? { OR: [{ fullName: { contains: q, mode: "insensitive" } },
+      { code: { contains: q, mode: "insensitive" } }] } : {}) },
     select: { id: true, code: true, fullName: true, jobTitle: true, email: true,
       phone: true, startDate: true, status: true, branchId: true },
     orderBy: [{ fullName: "asc" }, { id: "asc" }], skip: page.data * 50, take: 51 });

@@ -746,6 +746,10 @@ test("invitation is single-use and a branch viewer sees only their company and b
       employeeId: attendanceEmployeeB.data.employee.id, workDate: "2026-09-30", startMinute: 540 }, owner.cookie);
     assert.equal(attendanceA.status, 201);
     assert.equal(attendanceB.status, 201);
+    const directoryQuery = `tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    assert.deepEqual((await get(`/api/employees?${directoryQuery}&q=att-a`, manager.cookie)).data.employees.map((employee) => employee.id), [attendanceEmployeeA.data.employee.id]);
+    assert.equal((await get(`/api/employees?${directoryQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    assert.deepEqual((await get(`/api/employees?${directoryQuery}&q=NO-SUCH-EMPLOYEE`, owner.cookie)).data.employees, []);
     const attendanceListQuery = `tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
     const completedAttendance = await get(`/api/attendance?${attendanceListQuery}&status=completed&q=ATT-A`, manager.cookie);
     assert.equal(completedAttendance.status, 200);

@@ -12,6 +12,7 @@ type Employee = { id: string; code: string; fullName: string; jobTitle: string |
 export function EmployeesWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0);
+  const [filters, setFilters] = useState<Record<string, string>>({});
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [inactive, setInactive] = useState(false);
   const [page, setPage] = useState(0);
@@ -23,12 +24,12 @@ export function EmployeesWorkspace({ options, locale }: { options: Option[]; loc
     const scope = options[index];
     if (!scope) return;
     const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId,
-      page: String(number), inactive: String(showInactive) });
+      page: String(number), inactive: String(showInactive), ...filters });
     const response = await fetch(`/api/employees?${query}`);
     const data = await response.json();
     if (!response.ok) { setMessage(data.error ?? t("Could not load employees", "تعذر تحميل الموظفين")); return; }
     setEmployees(data.employees); setPage(number); setNextPage(data.nextPage);
-  }, [options, t]);
+  }, [options, t, filters]);
   useEffect(() => { void load(selected, inactive); }, [load, selected, inactive]);
   async function mutate(url: string, body: object, method: "POST" | "PATCH", success: string) {
     setBusy(true); setMessage("");
@@ -42,7 +43,7 @@ export function EmployeesWorkspace({ options, locale }: { options: Option[]; loc
   if (!option) return <section className="panel"><p>{t("No accessible employee records.", "لا توجد سجلات موظفين متاحة.")}</p></section>;
   const createBranches = option.branches.filter((branch) => branch.canCreate);
   return <section className="panel">
-    <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setEmployees([]); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setFilters({}); setEmployees([]); setMessage(""); }}>
       {options.map((item, index) => <option key={item.companyId} value={index}>{item.label}</option>)}
     </select></label>
     {(option.companyPermissions.canCreate || createBranches.length > 0) && <form action={(form) => mutate("/api/employees",
@@ -66,6 +67,18 @@ export function EmployeesWorkspace({ options, locale }: { options: Option[]; loc
     {message && <p role="status">{message}</p>}
     <label><input type="checkbox" checked={inactive} onChange={(event) => { setInactive(event.target.checked); setEmployees([]); }} /> {t("Show inactive employees", "عرض الموظفين غير النشطين")}</label>
     <h2>{inactive ? t("Inactive employees", "الموظفون غير النشطين") : t("Employees", "الموظفون")}</h2>
+    <form key={`filters-${selected}`} onSubmit={(event) => { event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      setFilters(Object.fromEntries(["q", "branchId"].map((key) => [key, String(form.get(key) ?? "").trim()]).filter(([, value]) => value)));
+      setEmployees([]);
+    }}>
+      <label>{t("Name or employee code", "اسم الموظف أو رمزه")} <input name="q" maxLength={160} /></label>
+      <label>{t("Branch", "الفرع")} <select name="branchId"><option value="">{t("All visible branches", "كل الفروع المتاحة")}</option>
+        {option.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+      </select></label>
+      <button disabled={busy}>{t("Search", "بحث")}</button>
+      <button type="reset" disabled={busy} onClick={() => { setFilters({}); setEmployees([]); }}>{t("Clear filters", "مسح التصفية")}</button>
+    </form>
     {employees.length === 0 && <p>{t("No employees on this page.", "لا يوجد موظفون في هذه الصفحة.")}</p>}
     {employees.map((employee) => {
       const permissions = employee.branchId ? option.branches.find((branch) => branch.id === employee.branchId) : option.companyPermissions;
