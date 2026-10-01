@@ -22,6 +22,8 @@ export async function GET(request: Request) {
   const actor = await currentUser();
   if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
+  if (["tenantId", "companyId", "from", "to", "branchId", "employeeId", "format"].some((key) => params.getAll(key).length > 1))
+    return NextResponse.json({ error: "Duplicate report parameter" }, { status: 400 });
   const parsed = querySchema.safeParse(Object.fromEntries(["tenantId", "companyId", "from", "to", "branchId", "employeeId", "format"]
     .filter((key) => params.has(key)).map((key) => [key, params.get(key)])));
   if (!parsed.success) return NextResponse.json({ error: "Invalid report scope or date range (maximum 31 days)" }, { status: 400 });

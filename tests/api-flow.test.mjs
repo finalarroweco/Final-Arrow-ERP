@@ -171,6 +171,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.deepEqual(managerReport.data.rows.map((row) => row.employeeCode), ["EMP-A"]);
     assert.equal(managerReport.data.summary.completedMinutes, 540);
     assert.equal((await get(`/api/attendance/report?${attendanceQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    assert.equal((await get(`/api/attendance/report?tenantId=${tenantId}&companyId=${companyA.data.company.id}&from=2026-09-01&to=2026-10-02`, owner.cookie)).status, 400);
     assert.equal((await get(`/api/attendance/report?${attendanceQuery}&to=2026-10-02`, owner.cookie)).status, 400);
     const csvReport = await fetch(`${origin}/api/attendance/report?${attendanceQuery}&format=csv`,
       { headers: { Cookie: manager.cookie } });
