@@ -968,6 +968,26 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await get(`/api/pos/items?${posQuery}`, manager.cookie)).data.items.some((item) => item.id === menuItem.data.item.id), false);
     assert.equal((await get(`/api/pos/orders?${posQuery}`, manager.cookie)).data.orders.find((order) => order.id === posOrder.data.order.id).lines[0].itemName, "Coffee");
 
+    const reportPosOrder = await post("/api/pos/orders", { ...posBody, number: "POS-REPORT", type: "TAKEAWAY", tableLabel: null, lines: [{ itemId: sharedMenu.data.item.id, quantity: 1 }] }, manager.cookie);
+    assert.equal(reportPosOrder.status, 201);
+    assert.equal((await patch(`/api/pos/orders/${reportPosOrder.data.order.id}`, { tenantId, action: "pay-card", reference: "=1+1" }, manager.cookie)).status, 200);
+    const muscatToday = new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
+    const posReportQuery = new URLSearchParams({ ...posScope, from: muscatToday, to: muscatToday, timeZone: "Asia/Muscat" });
+    const salesReport = await get(`/api/pos/report?${posReportQuery}`, manager.cookie);
+    assert.equal(salesReport.status, 200); assert.equal(salesReport.data.count, 3);
+    const cashSales = salesReport.data.summary.find((group) => group.method === "CASH");
+    assert.equal(cashSales.total, "3.375"); assert.equal(cashSales.cashReceived, "5.000"); assert.equal(cashSales.change, "1.625");
+    assert.equal(salesReport.data.summary.find((group) => group.method === "CARD").total, "4.500");
+    assert.equal((await get(`/api/pos/report?${new URLSearchParams({ ...posScope, branchId: branchB.data.branch.id, from: muscatToday, to: muscatToday })}`, manager.cookie)).status, 403);
+    assert.equal((await get(`/api/pos/report?${posReportQuery}&timeZone=UTC`, manager.cookie)).status, 400);
+    assert.equal((await get(`/api/pos/report?${new URLSearchParams({ ...posScope, from: "2026-10-01", to: "2026-11-01" })}`, owner.cookie)).status, 400);
+    assert.equal((await get(`/api/pos/report?${new URLSearchParams({ ...posScope, from: "2000-01-01", to: "2000-01-01" })}`, manager.cookie)).data.count, 0);
+    const posReportCsv = await fetch(`${origin}/api/pos/report?${posReportQuery}&format=csv`, { headers: { Cookie: accepted.cookie } });
+    assert.equal(posReportCsv.status, 200); assert.match(posReportCsv.headers.get("content-type"), /text\/csv/);
+    const salesCsvText = await posReportCsv.text();
+    assert.match(salesCsvText, /"'=1\+1"/); assert.match(salesCsvText, /"3\.375"/);
+    assert.equal(salesCsvText.includes("POS-CANCEL"), false); assert.equal(salesCsvText.includes('"POS-B"'), false);
+
   } finally {
     server.kill("SIGTERM");
   }

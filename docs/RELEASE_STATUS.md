@@ -12,7 +12,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
 | Accounting | Internal invoice and expense registers, company chart of accounts, immutable balanced manual journals, dated reversals and scoped trial balance | Automatic document posting, periods/closing, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
-| POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation and printable internal receipts | Shifts, refunds, tax, kitchen workflow, device payment, stock recipes and ledger posting |
+| POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts and scoped paid-sales reports with CSV | Shifts, refunds, tax, kitchen workflow, device payment, stock recipes and ledger posting |
 | Other planned modules | Preview cards only | Subscriptions, documents, AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
 
@@ -29,3 +29,5 @@ The CI workflow checks migrations, unit tests, database constraints, build and A
 Monthly payroll reports now summarize exact decimal amounts by status and currency across all matching pages, with scoped CSV export (maximum 5000 records). Void records have separate totals. Reports require a month and payroll read permission; no bank transfer is performed.
 
 General ledger journals post manually in company currency, without tax or automatic document posting. Deferred database constraints verify line balance and header totals; posted headers and lines reject edits and deletion. Corrections create a unique linked reversal. Trial balance reports movements and ending debit/credit balances for the selected dates and scope, grouped by account and currency (maximum 20000 lines). A start date excludes prior balances.
+
+POS reports use paidAt and a selected UTC or Muscat date range (maximum 31 days, 5000 paid orders). Summaries separate currencies and cash/card methods, show cash tendered and change separately, and exclude open/cancelled orders. Card entries remain manually recorded payments.
