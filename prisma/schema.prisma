@@ -1007,6 +1007,13 @@ model JournalLine {
   @@index([tenantId, companyId, accountId])
 }
 
+enum PosKitchenStatus {
+  WAITING
+  PREPARING
+  READY
+  SERVED
+}
+
 enum PosOrderStatus {
   OPEN
   PAID
@@ -1050,6 +1057,10 @@ model PosOrder {
   tableLabel String?
   note String?
   status PosOrderStatus @default(OPEN)
+  kitchenStatus PosKitchenStatus @default(WAITING)
+  prepStartedAt DateTime?
+  readyAt DateTime?
+  servedAt DateTime?
   total Decimal @db.Decimal(18,3)
   currency String @db.VarChar(3)
   paymentMethod PosPaymentMethod?

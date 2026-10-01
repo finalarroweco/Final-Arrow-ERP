@@ -184,6 +184,13 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   await db.posOrder.update({ where: { id: dbPosOrder.id }, data: { status: "PAID", paymentMethod: "CASH", paidAt: new Date(), tendered: "5.000", change: "1.625" } });
   await assert.rejects(db.posOrder.update({ where: { id: dbPosOrder.id }, data: { status: "OPEN" } }));
   await assert.rejects(db.posOrder.delete({ where: { id: dbPosOrder.id } }));
+
+  await assert.rejects(db.posOrder.update({ where: { id: dbPosOrder.id }, data: { kitchenStatus: "READY", prepStartedAt: new Date(), readyAt: new Date() } }));
+  await assert.rejects(db.posOrder.update({ where: { id: dbPosOrder.id }, data: { kitchenStatus: "PREPARING", prepStartedAt: new Date(), total: "4.000" } }));
+  await db.posOrder.update({ where: { id: dbPosOrder.id }, data: { kitchenStatus: "PREPARING", prepStartedAt: new Date() } });
+  await db.posOrder.update({ where: { id: dbPosOrder.id }, data: { kitchenStatus: "READY", readyAt: new Date() } });
+  await db.posOrder.update({ where: { id: dbPosOrder.id }, data: { kitchenStatus: "SERVED", servedAt: new Date() } });
+  await assert.rejects(db.posOrder.update({ where: { id: dbPosOrder.id }, data: { kitchenStatus: "WAITING", prepStartedAt: null, readyAt: null, servedAt: null } }));
   const user = await db.user.create({
     data: { email: `test-${unique()}@example.invalid`, name: "Test", passwordHash: "test-only" },
   });

@@ -1001,6 +1001,29 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const historicPos = (await get(`/api/pos/orders?${posQuery}`, manager.cookie)).data.orders.find((order) => order.id === posOrder.data.order.id);
     assert.equal(historicPos.total, "3.375"); assert.equal(historicPos.lines[0].itemName, "Coffee"); assert.equal(historicPos.lines[0].unitPrice, "1.125");
 
+    const kitchenOrderPath = `/api/pos/orders/${posOrder.data.order.id}/kitchen`;
+    assert.equal((await patch(kitchenOrderPath, { tenantId, status: "PREPARING" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(`/api/pos/orders/${branchBPos.data.order.id}/kitchen`, { tenantId, status: "PREPARING" }, manager.cookie)).status, 403);
+    assert.equal((await patch(kitchenOrderPath, { tenantId, status: "READY" }, manager.cookie)).status, 409);
+    const kitchenStarts = await Promise.all([1,2].map(() => patch(kitchenOrderPath, { tenantId, status: "PREPARING" }, manager.cookie)));
+    assert.deepEqual(kitchenStarts.map((result) => result.status).sort(), [200,409]);
+    assert.equal((await patch(kitchenOrderPath, { tenantId, status: "READY" }, manager.cookie)).status, 200);
+    const readyKitchen = await get(`/api/pos/kitchen?${posQuery}&status=READY`, accepted.cookie);
+    assert.equal(readyKitchen.status, 200); assert.equal(readyKitchen.data.orders[0].id, posOrder.data.order.id);
+    assert.equal(readyKitchen.data.orders[0].status, "PAID");
+    assert.equal(readyKitchen.data.orders[0].lines[0].itemName, "Coffee");
+    assert.equal("total" in readyKitchen.data.orders[0], false);
+    assert.equal((await patch(kitchenOrderPath, { tenantId, status: "SERVED" }, manager.cookie)).status, 200);
+    assert.equal((await patch(kitchenOrderPath, { tenantId, status: "PREPARING" }, manager.cookie)).status, 409);
+    assert.equal((await get(`/api/pos/kitchen?${posQuery}`, manager.cookie)).data.orders.some((order) => order.id === posOrder.data.order.id || order.id === cancelledPosOrder.data.order.id), false);
+    assert.equal((await get(`/api/pos/kitchen?${posQuery}&status=SERVED`, manager.cookie)).data.orders[0].id, posOrder.data.order.id);
+    assert.equal((await patch(`/api/pos/orders/${cancelledPosOrder.data.order.id}/kitchen`, { tenantId, status: "PREPARING" }, manager.cookie)).status, 409);
+    assert.equal((await get(`/api/pos/kitchen?${new URLSearchParams({...posScope,branchId:branchB.data.branch.id})}`, manager.cookie)).status, 403);
+    const posAfterPreparation = (await get(`/api/pos/orders?${posQuery}`, manager.cookie)).data.orders.find((order) => order.id === posOrder.data.order.id);
+    assert.equal(posAfterPreparation.total, "3.375"); assert.equal(posAfterPreparation.change, "1.625"); assert.equal(posAfterPreparation.paymentMethod, "CASH");
+    assert.ok(posAfterPreparation.prepStartedAt && posAfterPreparation.readyAt && posAfterPreparation.servedAt);
+    assert.equal((await fetch(`${origin}/pos/kitchen`, { headers: { Cookie: accepted.cookie } })).status, 200);
+
   } finally {
     server.kill("SIGTERM");
   }
