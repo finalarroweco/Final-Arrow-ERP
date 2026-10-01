@@ -628,7 +628,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await get(inboxPath, accepted.cookie)).status, 403);
     const managerInbox = await get(inboxPath, manager.cookie);
     assert.equal(managerInbox.status, 200);
-    assert.deepEqual(managerInbox.data.counts, { leave: 1, expense: 1, purchase: 1 });
+    assert.deepEqual(managerInbox.data.counts, { leave: 1, expense: 1, purchase: 1, payroll: 0 });
     assert.deepEqual(new Set(managerInbox.data.items.map((item) => item.id)),
       new Set([inboxLeave.data.request.id, inboxExpense.data.expense.id, inboxPurchase.data.order.id]));
     assert.equal((await get(inboxPath.replace(companyA.data.company.id, companyB.data.company.id), manager.cookie)).status, 403);
@@ -643,7 +643,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(`/api/purchase-orders/${inboxPurchase.data.order.id}/status`,
       { tenantId, action: "issue" }, manager.cookie)).status, 200);
     assert.deepEqual((await get(inboxPath, manager.cookie)).data.counts,
-      { leave: 0, expense: 0, purchase: 0 });
+      { leave: 0, expense: 0, purchase: 0, payroll: 0 });
 
     const ticketBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
       customerId: customerA.data.customer.id, assigneeEmployeeId: employeeA.data.employee.id,
@@ -822,10 +822,18 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(payroll.status, 201);
     assert.equal(payroll.data.entry.netPay, "360.174");
     assert.equal((await post("/api/payroll", payrollBody, owner.cookie)).status, 409);
+    const payrollInboxPath = `/api/approvals?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
+    const payrollInbox = await get(payrollInboxPath, owner.cookie);
+    assert.equal(payrollInbox.data.counts.payroll, 1);
+    assert.equal(payrollInbox.data.items.some((item) => item.type === "PAYROLL" && item.id === payroll.data.entry.id), true);
+    const managerPayrollInbox = await get(payrollInboxPath, manager.cookie);
+    assert.equal(managerPayrollInbox.data.counts.payroll, 0);
+    assert.equal(managerPayrollInbox.data.items.some((item) => item.type === "PAYROLL"), false);
     const payrollPath = `/api/payroll/${payroll.data.entry.id}`;
     assert.equal((await patch(payrollPath, { tenantId, action: "approve" }, manager.cookie)).status, 403);
     assert.equal((await patch(payrollPath, { tenantId, action: "pay", reference: "BANK-001" }, owner.cookie)).status, 409);
     assert.equal((await patch(payrollPath, { tenantId, action: "approve" }, owner.cookie)).status, 200);
+    assert.equal((await get(payrollInboxPath, owner.cookie)).data.counts.payroll, 0);
     assert.equal((await patch(payrollPath, { tenantId, action: "pay", reference: "BANK-001" }, manager.cookie)).status, 403);
     assert.equal((await patch(payrollPath, { tenantId, action: "pay", reference: "BANK-001" }, owner.cookie)).status, 200);
     assert.equal((await patch(payrollPath, { tenantId, action: "pay", reference: "BANK-002" }, owner.cookie)).status, 409);

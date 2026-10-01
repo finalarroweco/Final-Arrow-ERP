@@ -5,15 +5,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Option = { tenantId: string; companyId: string; label: string;
   branches: { id: string; name: string }[] };
-type Item = { type: "LEAVE" | "EXPENSE" | "PURCHASE"; id: string; branchId: string | null;
+type Item = { type: "LEAVE" | "EXPENSE" | "PURCHASE" | "PAYROLL"; id: string; branchId: string | null;
   createdAt: string; title: string; detail: string };
-type Counts = { leave: number; expense: number; purchase: number };
+type Counts = { leave: number; expense: number; purchase: number; payroll: number };
 
 export function ApprovalsWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
-  const [counts, setCounts] = useState<Counts>({ leave: 0, expense: 0, purchase: 0 });
+  const [counts, setCounts] = useState<Counts>({ leave: 0, expense: 0, purchase: 0, payroll: 0 });
   const [hasMore, setHasMore] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,7 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
     if (!scope) return;
     const url = item.type === "LEAVE" ? `/api/leave-requests/${item.id}`
       : item.type === "EXPENSE" ? `/api/expenses/${item.id}/status`
-        : `/api/purchase-orders/${item.id}/status`;
+        : item.type === "PAYROLL" ? `/api/payroll/${item.id}` : `/api/purchase-orders/${item.id}/status`;
     setBusy(true); setMessage("");
     try {
       const response = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -48,24 +48,25 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
   if (!scope) return <section className="panel"><p>{t("No actionable records within your access.", "لا توجد سجلات قابلة للإجراء ضمن صلاحياتك.")}</p></section>;
   return <section className="panel">
     <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => {
-      setSelected(Number(event.target.value)); setItems([]); setCounts({ leave: 0, expense: 0, purchase: 0 }); setMessage("");
+      setSelected(Number(event.target.value)); setItems([]); setCounts({ leave: 0, expense: 0, purchase: 0, payroll: 0 }); setMessage("");
     }}>{options.map((option, index) => <option key={option.companyId} value={index}>{option.label}</option>)}</select></label>
-    <p>{t("Pending leave:", "إجازات معلّقة:")} {counts.leave} · {t("Expense drafts:", "مسودات مصاريف:")} {counts.expense} · {t("Purchase order drafts:", "مسودات أوامر شراء:")} {counts.purchase}</p>
+    <p>{t("Pending leave:", "إجازات معلّقة:")} {counts.leave} · {t("Expense drafts:", "مسودات مصاريف:")} {counts.expense} · {t("Purchase order drafts:", "مسودات أوامر شراء:")} {counts.purchase} · {t("Payroll drafts:", "مسودات رواتب:")} {counts.payroll}</p>
     {message && <p role="status">{message}</p>}
     {items.length === 0 && <p>{t("No actions waiting.", "لا توجد إجراءات بانتظارك.")}</p>}
     {items.map((item) => <article key={`${item.type}:${item.id}`} className="card">
-      <small>{t(item.type, ({ LEAVE: "إجازة", EXPENSE: "مصروف", PURCHASE: "شراء" })[item.type])} · {item.branchId ? scope.branches.find((branch) => branch.id === item.branchId)?.name : t("Company wide", "على مستوى الشركة")}</small>
+      <small>{t(item.type, ({ LEAVE: "إجازة", EXPENSE: "مصروف", PURCHASE: "شراء", PAYROLL: "راتب" })[item.type])} · {item.branchId ? scope.branches.find((branch) => branch.id === item.branchId)?.name : t("Company wide", "على مستوى الشركة")}</small>
       <h3>{item.title}</h3><p>{item.detail}</p>
       {item.type === "LEAVE" && <button disabled={busy} onClick={() => void act(item, "approve")}>{t("Approve leave", "الموافقة على الإجازة")}</button>}
       {item.type === "EXPENSE" && <button disabled={busy} onClick={() => void act(item, "post")}>{t("Post expense", "ترحيل المصروف")}</button>}
+      {item.type === "PAYROLL" && <button disabled={busy} onClick={() => void act(item, "approve")}>{t("Approve payroll", "اعتماد الراتب")}</button>}
       {item.type === "PURCHASE" && <button disabled={busy} onClick={() => void act(item, "issue")}>{t("Issue purchase order", "إصدار أمر الشراء")}</button>}
-      {item.type !== "PURCHASE" && <form action={(form) => act(item,
+      {(item.type === "LEAVE" || item.type === "EXPENSE") && <form action={(form) => act(item,
         item.type === "LEAVE" ? "reject" : "void", String(form.get("note")))}>
         <label>{t("Reason", "السبب")} <input name="note" required minLength={3} maxLength={300} /></label>
         <button disabled={busy}>{item.type === "LEAVE" ? t("Reject leave", "رفض الإجازة") : t("Void expense", "إلغاء المصروف")}</button>
       </form>}
       <p><a href={item.type === "LEAVE" ? "/hr/leave"
-        : item.type === "EXPENSE" ? "/accounting/expenses" : "/purchasing/orders"}>{t("Open module", "فتح الوحدة")}</a></p>
+        : item.type === "EXPENSE" ? "/accounting/expenses" : item.type === "PAYROLL" ? `/hr/payroll/${item.id}` : "/purchasing/orders"}>{t("Open module", "فتح الوحدة")}</a></p>
     </article>)}
     {hasMore && <p>{t("Showing the latest 25 actions. Open a module to review its full list.", "تظهر آخر 25 إجراء. افتح الوحدة لمراجعة القائمة كاملة.")}</p>}
     <button disabled={busy} onClick={() => void load(selected)}>{t("Refresh", "تحديث")}</button>
