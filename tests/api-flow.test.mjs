@@ -988,6 +988,19 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.match(salesCsvText, /"'=1\+1"/); assert.match(salesCsvText, /"3\.375"/);
     assert.equal(salesCsvText.includes("POS-CANCEL"), false); assert.equal(salesCsvText.includes('"POS-B"'), false);
 
+    const menuEditPath = `/api/pos/items/${menuItem.data.item.id}`;
+    assert.equal((await patch(menuEditPath, { tenantId, name: "New coffee" }, accepted.cookie)).status, 403);
+    assert.equal((await patch(`/api/pos/items/${otherMenu.data.item.id}`, { tenantId, price: "2.125" }, manager.cookie)).status, 403);
+    assert.equal((await patch(menuEditPath, { tenantId }, manager.cookie)).status, 400);
+    assert.equal((await patch(menuEditPath, { tenantId, price: "0" }, manager.cookie)).status, 400);
+    assert.equal((await patch(menuEditPath, { tenantId, companyId: companyB.data.company.id }, manager.cookie)).status, 400);
+    assert.equal((await patch(menuEditPath, { tenantId, active: true, name: "New coffee", category: "Hot drinks", price: "2.125" }, manager.cookie)).status, 200);
+    const repricedPos = await post("/api/pos/orders", { ...posBody, number: "POS-REPRICED" }, manager.cookie);
+    assert.equal(repricedPos.status, 201); assert.equal(repricedPos.data.order.total, "6.375");
+    assert.equal(repricedPos.data.order.lines[0].itemName, "New coffee");
+    const historicPos = (await get(`/api/pos/orders?${posQuery}`, manager.cookie)).data.orders.find((order) => order.id === posOrder.data.order.id);
+    assert.equal(historicPos.total, "3.375"); assert.equal(historicPos.lines[0].itemName, "Coffee"); assert.equal(historicPos.lines[0].unitPrice, "1.125");
+
   } finally {
     server.kill("SIGTERM");
   }
