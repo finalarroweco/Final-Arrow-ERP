@@ -231,4 +231,10 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   }));
 });
 
+test("login attempt buckets reject invalid counters and identifiers", async () => {
+  const keyHash = randomUUID().replaceAll("-", "").padEnd(64,"0");
+  await assert.rejects(db.loginThrottle.create({data:{keyHash,attempts:0,expiresAt:new Date()}}));
+  await assert.rejects(db.loginThrottle.create({data:{keyHash,attempts:7,expiresAt:new Date()}}));
+  await assert.rejects(db.loginThrottle.create({data:{keyHash:"bad",attempts:1,expiresAt:new Date()}}));
+});
 test.after(async () => db.$disconnect());

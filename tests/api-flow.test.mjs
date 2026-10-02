@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { randomUUID } from "node:crypto";
+import { randomUUID,createHash } from "node:crypto";
+import {PrismaClient} from "@prisma/client";
 import { spawn } from "node:child_process";
 
 const origin = "http://127.0.0.1:3217";
@@ -1085,6 +1086,29 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.ok(posAfterPreparation.prepStartedAt && posAfterPreparation.readyAt && posAfterPreparation.servedAt);
     assert.equal((await fetch(`${origin}/pos/kitchen`, { headers: { Cookie: accepted.cookie } })).status, 200);
 
+    const throttleEmail = `throttle-${suffix()}@example.invalid`;
+    const throttleActor = await post("/api/auth/register", {name:"Throttle test",email:throttleEmail,password,organization:"Throttle test",slug:`throttle-${suffix()}`});
+    assert.equal(throttleActor.status, 201);
+    const firstLogin = await post("/api/auth/login", {email:throttleEmail,password});
+    assert.equal(firstLogin.status, 200);
+    assert.ok(firstLogin.cookie);
+    const failedLogins = await Promise.all(Array.from({length:4},()=>post("/api/auth/login",{email:throttleEmail.toUpperCase(),password:"wrong"})));
+    assert.ok(failedLogins.every(result=>result.status===401));
+    const blockedLogin = await fetch(`${origin}/api/auth/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:throttleEmail,password})});
+    assert.equal(blockedLogin.status, 429);
+    assert.ok(Number(blockedLogin.headers.get("retry-after"))>0);
+    assert.equal(blockedLogin.headers.get("set-cookie"), null);
+    const throttleDb = new PrismaClient();
+    try {
+      const throttleKey = createHash("sha256").update(`login:${throttleEmail.toLowerCase()}`).digest("hex");
+      assert.equal((await throttleDb.loginThrottle.findUnique({where:{keyHash:throttleKey}})).attempts, 6);
+      await throttleDb.loginThrottle.update({where:{keyHash:throttleKey},data:{expiresAt:new Date(Date.now()-1000)}});
+      assert.equal((await post("/api/auth/login",{email:throttleEmail,password})).status, 200);
+      assert.equal((await throttleDb.loginThrottle.findUnique({where:{keyHash:throttleKey}})).attempts, 1);
+    } finally {await throttleDb.$disconnect();}
+    const unknownEmail = `unknown-${suffix()}@example.invalid`;
+    const unknownLogins = await Promise.all(Array.from({length:6},()=>post("/api/auth/login",{email:unknownEmail,password:"wrong"})));
+    assert.deepEqual(unknownLogins.map(result=>result.status).sort(),[401,401,401,401,401,429]);
   } finally {
     server.kill("SIGTERM");
   }

@@ -1094,3 +1094,11 @@ model PosOrderLine {
   item PosItem @relation(fields: [tenantId,companyId,itemId], references: [tenantId,companyId,id], onDelete: Restrict)
   @@unique([orderId,position])
 }
+
+model LoginThrottle {
+  keyHash   String   @id @db.VarChar(64)
+  attempts  Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
