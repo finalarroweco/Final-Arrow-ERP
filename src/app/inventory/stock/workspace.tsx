@@ -1,5 +1,6 @@
 "use client";
 
+import {StockReport} from "./report";
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
@@ -12,6 +13,7 @@ type Movement = { id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT"; delta: s
 
 export function StockWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
+  const [reportVersion,setReportVersion]=useState(0);
   const [selected, setSelected] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -43,7 +45,7 @@ export function StockWorkspace({ options, locale }: { options: Option[]; locale:
           reason: values.get("reason") }) });
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not adjust stock", "تعذر تعديل المخزون"));
-      else { form.reset(); await load(selected); }
+      else {setReportVersion(value=>value+1); form.reset(); await load(selected); }
     } finally { setBusy(false); }
   }
   if (!options.length) return <section><p>{t("No accessible branches yet. Create a branch and assign stock permissions first.", "لا توجد فروع متاحة. أنشئ فرعاً وامنح صلاحيات المخزون أولاً.")}</p></section>;
@@ -61,6 +63,7 @@ export function StockWorkspace({ options, locale }: { options: Option[]; locale:
       <button disabled={busy || !items.length}>{t("Record adjustment", "تسجيل التسوية")}</button>
     </form>}
     {error && <p role="alert">{error}</p>}
+    <StockReport key={`${scope.branchId}:${reportVersion}`} scope={{tenantId:scope.tenantId,companyId:scope.companyId,branchId:scope.branchId}} items={[...new Map([...items,...balances.map(balance=>({id:balance.itemId,...balance.item}))].map(item=>[item.id,item])).values()]} locale={locale}/>
     <h2>{t("Balances", "الأرصدة")}</h2><div className="customer-list">{balances.map((balance) => <article key={balance.itemId}>
       <div><h3>{balance.item.name}</h3><p>{balance.item.sku}{balance.item.archivedAt ? t(" · archived", " · مؤرشف") : ""}</p></div>
       <strong>{balance.quantity} {balance.item.unit}</strong>

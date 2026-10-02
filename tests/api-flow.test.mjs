@@ -464,6 +464,42 @@ test("invitation is single-use and a branch viewer sees only their company and b
       balance.itemId === itemA.data.item.id).quantity, "6.375");
     assert.equal((await get(stockPath, accepted.cookie)).data.movements.length, 4);
 
+    const stockReportDay = (await get(stockPath, accepted.cookie)).data.movements[0].createdAt.slice(0,10);
+    const stockReportQuery = new URLSearchParams({tenantId,companyId:companyA.data.company.id,branchId:branchA.data.branch.id,itemId:itemA.data.item.id,from:stockReportDay,to:stockReportDay,timeZone:"UTC"});
+    const stockMovementReport = await get(`/api/inventory/stock/report?${stockReportQuery}`, accepted.cookie);
+    assert.equal(stockMovementReport.status, 200);
+    assert.deepEqual(stockMovementReport.data.summary,{opening:"0.000",incoming:"8.500",outgoing:"2.125",closing:"6.375",count:3});
+    assert.equal(stockMovementReport.data.rows.at(-1).balance, "6.375");
+    assert.ok(stockMovementReport.data.rows.some(row=>row.type==="PURCHASE_RECEIPT"));
+    assert.equal((await get(`/api/inventory/stock/report?${stockReportQuery.toString().replace(branchA.data.branch.id,branchB.data.branch.id)}`, accepted.cookie)).status, 403);
+    assert.equal((await get(`/api/inventory/stock/report?${stockReportQuery.toString().replace(itemA.data.item.id,itemB.data.item.id)}`, owner.cookie)).status, 404);
+    assert.equal((await get(`/api/inventory/stock/report?${stockReportQuery}&from=2026-09-30`, manager.cookie)).status, 400);
+    const stockNextDay = new Date(Date.parse(`${stockReportDay}T00:00:00Z`)+86400000).toISOString().slice(0,10);
+    const carriedStockQuery = new URLSearchParams(stockReportQuery);carriedStockQuery.set("from",stockNextDay);carriedStockQuery.set("to",stockNextDay);
+    const carriedStock = await get(`/api/inventory/stock/report?${carriedStockQuery}`, manager.cookie);
+    assert.deepEqual(carriedStock.data.summary,{opening:"6.375",incoming:"0.000",outgoing:"0.000",closing:"6.375",count:0});
+    const stockReportCsv = await fetch(`${origin}/api/inventory/stock/report?${stockReportQuery}&format=csv`,{headers:{Cookie:manager.cookie}});
+    assert.equal(stockReportCsv.status, 200);
+    const stockCsvText = await stockReportCsv.text();
+    assert.match(stockCsvText, /OPENING/);assert.match(stockCsvText, /CLOSING/);assert.match(stockCsvText, /6.375/);
+    assert.equal((await patch(itemPath,{tenantId,action:"archive",archived:true},manager.cookie)).status, 200);
+    assert.ok((await get(`/api/inventory/stock/report?${stockReportQuery}`,manager.cookie)).data.item.archivedAt);
+    assert.equal((await patch(itemPath,{tenantId,action:"archive",archived:false},manager.cookie)).status, 200);
+    const stockDateDb = new PrismaClient();
+    try {
+      const sharedStockMovement = stock.data.movements.find(movement=>movement.delta==="1.25");
+      await stockDateDb.stockMovement.update({where:{id:sharedStockMovement.id},data:{createdAt:new Date("2026-09-30T21:30:00Z"),reason:"=Boundary test"}});
+      const boundaryStockQuery = new URLSearchParams({...Object.fromEntries(stockReportQuery),itemId:sharedItem.data.item.id,from:"2026-10-01",to:"2026-10-01",timeZone:"Asia/Muscat"});
+      const muscatStock = await get(`/api/inventory/stock/report?${boundaryStockQuery}`,manager.cookie);
+      assert.equal(muscatStock.data.summary.opening, "0.000");assert.equal(muscatStock.data.summary.incoming, "1.250");
+      assert.equal(muscatStock.data.rows[0].timestamp,"2026-10-01 01:30:00");
+      boundaryStockQuery.set("timeZone","UTC");
+      const utcStock = await get(`/api/inventory/stock/report?${boundaryStockQuery}`,manager.cookie);
+      assert.equal(utcStock.data.summary.opening,"1.250");assert.equal(utcStock.data.summary.count,0);
+      boundaryStockQuery.set("timeZone","Asia/Muscat");
+      const boundaryStockCsv = await fetch(`${origin}/api/inventory/stock/report?${boundaryStockQuery}&format=csv`,{headers:{Cookie:manager.cookie}});
+      assert.ok((await boundaryStockCsv.text()).includes("'=Boundary test"));
+    } finally {await stockDateDb.$disconnect();}
     const projectBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
       code: "PRJ-A", name: "Branch A project", dueDate: "2026-12-31" };
     assert.equal((await post("/api/projects", projectBody, accepted.cookie)).status, 403);
