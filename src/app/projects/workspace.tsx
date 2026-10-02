@@ -1,7 +1,7 @@
 "use client";
 
 import { translate, type Locale } from "@/lib/locale";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 
 type Permissions = { canCreate: boolean; canManage: boolean; canCreateTask: boolean; canManageTask: boolean };
 type Option = { tenantId: string; companyId: string; label: string; companyPermissions: Permissions;
@@ -10,7 +10,7 @@ type Project = { id: string; code: string; name: string; description: string | n
   status: "PLANNED" | "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED"; dueDate: string | null;
   _count: { tasks: number } };
 type Task = { id: string; title: string; status: "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
-  dueDate: string | null; assigneeEmployeeId: string | null; assigneeName: string | null };
+  dueDate: string | null; dueBucket: "OVERDUE"|"DUE_SOON"|"UNDATED"|null; assigneeEmployeeId: string | null; assigneeName: string | null };
 type Employee = { id: string; fullName: string; code: string; branchId: string | null };
 
 export function ProjectsWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
@@ -20,6 +20,9 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
   const [page, setPage] = useState(0);
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const taskRequest=useRef(0);
+  const [taskFilters,setTaskFilters]=useState({q:"",status:"",due:""});
+  const [taskSummary,setTaskSummary]=useState<{today:string;nearEnd:string;active:number;overdue:number;dueSoon:number;undated:number}|null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskPage, setTaskPage] = useState(0);
   const [nextTaskPage, setNextTaskPage] = useState<number | null>(null);
@@ -40,12 +43,15 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
   const loadTasks = useCallback(async (index: number, projectId: string, number = 0) => {
     const scope = options[index];
     if (!scope) return;
-    const query = new URLSearchParams({ tenantId: scope.tenantId, page: String(number) });
-    const response = await fetch(`/api/projects/${projectId}/tasks?${query}`);
-    const data = await response.json();
-    if (!response.ok) { setMessage(data.error ?? t("Could not load tasks", "تعذر تحميل المهام")); return; }
-    setTasks(data.tasks); setTaskPage(number); setNextTaskPage(data.nextPage);
-  }, [options, t]);
+    const version=++taskRequest.current;
+    const query = new URLSearchParams({ tenantId: scope.tenantId, page: String(number),...Object.fromEntries(Object.entries(taskFilters).filter(([,value])=>value)) });
+    try {
+      const response = await fetch(`/api/projects/${projectId}/tasks?${query}`);
+      const data = await response.json();if(version!==taskRequest.current)return;
+      if (!response.ok) { setMessage(data.error ?? t("Could not load tasks", "تعذر تحميل المهام")); return; }
+      setTasks(data.tasks);setTaskSummary(data.summary);setTaskPage(number);setNextTaskPage(data.nextPage);
+    } catch {if(version===taskRequest.current)setMessage(t("Network request failed","فشل الاتصال بالشبكة"));}
+  }, [options, t,taskFilters]);
   const loadEmployees = useCallback(async (index: number, number = 0) => {
     const scope = options[index];
     if (!scope || !(scope.companyPermissions.canCreateTask || scope.companyPermissions.canManageTask ||
@@ -71,7 +77,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
   if (!option) return <section className="panel"><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
   const createBranches = option.branches.filter((branch) => branch.canCreate);
   return <section className="panel">
-    <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setOpenId(null); setTasks([]); setProjects([]); setEmployees([]); setNextEmployeePage(null); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select value={selected} disabled={busy} onChange={(event) => { taskRequest.current++;setTaskSummary(null);setSelected(Number(event.target.value)); setOpenId(null); setTasks([]); setProjects([]); setEmployees([]); setNextEmployeePage(null); setMessage(""); }}>
       {options.map((item, index) => <option key={item.companyId} value={index}>{item.label}</option>)}
     </select></label>
     {(option.companyPermissions.canCreate || createBranches.length > 0) && <form action={(form) => mutate("/api/projects", "POST",
@@ -109,8 +115,11 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
           {project.status === "ACTIVE" && <><button disabled={busy} onClick={() => projectAction("pause")}>{t("Pause", "إيقاف مؤقت")}</button><button disabled={busy} onClick={() => projectAction("complete")}>{t("Complete project", "إكمال المشروع")}</button></>}
           {project.status !== "COMPLETED" && project.status !== "CANCELLED" && <button disabled={busy} onClick={() => projectAction("cancel")}>{t("Cancel project", "إلغاء المشروع")}</button>}
         </div>}
-        <button disabled={busy} onClick={() => { setOpenId(expanded ? null : project.id); setTasks([]); }}>{expanded ? t("Hide tasks", "إخفاء المهام") : t("View tasks", "عرض المهام")}</button>
+        <button disabled={busy} onClick={() => { taskRequest.current++;setTaskSummary(null);setTaskFilters({q:"",status:"",due:""});setTaskPage(0);setNextTaskPage(null);setOpenId(expanded ? null : project.id); setTasks([]); }}>{expanded ? t("Hide tasks", "إخفاء المهام") : t("View tasks", "عرض المهام")}</button>
         {expanded && <div>
+          {taskSummary&&<><h3>{t("Open task deadlines","مواعيد المهام المفتوحة")}</h3><p>{t("As of Muscat date","حسب تاريخ مسقط")}: {taskSummary.today} · {t("Due soon covers today and the next three days. Completed and cancelled tasks are excluded from these counts.","القريبة تشمل اليوم والأيام الثلاثة القادمة. تُستبعد المهام المكتملة والملغاة من هذه الأعداد.")}</p><div className="cards">{(["active","overdue","dueSoon","undated"] as const).map(key=><article className="card" key={key}><strong>{t({active:"Open tasks",overdue:"Overdue",dueSoon:"Due soon",undated:"No due date"}[key],{active:"المهام المفتوحة",overdue:"متأخرة",dueSoon:"قريبة الاستحقاق",undated:"بدون موعد"}[key])}: {taskSummary[key]}</strong></article>)}</div><p>{t("Counts cover all project tasks, regardless of page or filters.","الأعداد تشمل كل مهام المشروع بغض النظر عن الصفحة أو الفلاتر.")}</p></>}
+          <form key={JSON.stringify(taskFilters)} action={form=>{taskRequest.current++;setTasks([]);setTaskSummary(null);setTaskPage(0);setNextTaskPage(null);setTaskFilters({q:String(form.get("q")||""),status:String(form.get("status")||""),due:String(form.get("due")||"")});}}><label>{t("Search title","بحث في العنوان")} <input name="q" maxLength={120} defaultValue={taskFilters.q}/></label><label>{t("Status","الحالة")} <select name="status" defaultValue={taskFilters.status}><option value="">{t("All statuses","كل الحالات")}</option>{(["TODO","IN_PROGRESS","DONE","CANCELLED"] as const).map(status=><option key={status} value={status}>{t(status,{TODO:"للعمل",IN_PROGRESS:"قيد التنفيذ",DONE:"مكتملة",CANCELLED:"ملغاة"}[status])}</option>)}</select></label><label>{t("Deadline","الموعد")} <select name="due" defaultValue={taskFilters.due}><option value="">{t("All deadlines","كل المواعيد")}</option><option value="OVERDUE">{t("Overdue","متأخرة")}</option><option value="DUE_SOON">{t("Due soon","قريبة الاستحقاق")}</option><option value="UNDATED">{t("No due date","بدون موعد")}</option></select></label><button disabled={busy}>{t("Apply filters","تطبيق الفلاتر")}</button><button type="button" disabled={busy} onClick={()=>{taskRequest.current++;setTasks([]);setTaskSummary(null);setTaskPage(0);setNextTaskPage(null);setTaskFilters({q:"",status:"",due:""});}}>{t("Reset","إعادة ضبط")}</button></form>
+          <button disabled={busy} onClick={()=>void loadTasks(selected,project.id,taskPage)}>{t("Refresh tasks","تحديث المهام")}</button>
           {permissions?.canCreateTask && (project.status === "PLANNED" || project.status === "ACTIVE") && <form action={(form) => mutate(
             `/api/projects/${project.id}/tasks`, "POST",
             { tenantId: option.tenantId, title: form.get("title"), dueDate: form.get("dueDate") || null,
@@ -127,6 +136,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
           {tasks.length === 0 && <p>{t("No tasks on this page.", "لا توجد مهام في هذه الصفحة.")}</p>}
           {tasks.map((task) => <div key={task.id} className="card">
             <strong>{task.title}</strong> · {t(task.status, ({ TODO: "للعمل", IN_PROGRESS: "قيد التنفيذ", DONE: "مكتملة", CANCELLED: "ملغاة" })[task.status])}{task.dueDate && ` · ${t("Due", "الاستحقاق")} ${task.dueDate.slice(0, 10)}`}
+            {task.dueBucket&&<p><strong>{t({OVERDUE:"Overdue",DUE_SOON:"Due soon",UNDATED:"No due date"}[task.dueBucket],{OVERDUE:"متأخرة",DUE_SOON:"قريبة الاستحقاق",UNDATED:"بدون موعد"}[task.dueBucket])}</strong></p>}
             {task.assigneeEmployeeId && <p>{t("Assigned to", "مكلف بها")} {task.assigneeName ?? t("employee", "موظف")}</p>}
             {permissions?.canManageTask && (project.status === "PLANNED" || project.status === "ACTIVE") &&
               (task.status === "TODO" || task.status === "IN_PROGRESS") && <form action={(form) => mutate(

@@ -567,6 +567,38 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const assignedProject = await post("/api/projects", { tenantId, companyId: companyA.data.company.id,
       branchId: branchA.data.branch.id, code: "PRJ-TEAM", name: "Team project" }, manager.cookie);
     assert.equal(assignedProject.status, 201);
+    const deadlineProject = await post("/api/projects",{tenantId,companyId:companyA.data.company.id,branchId:branchA.data.branch.id,code:"PRJ-DEADLINE",name:"Deadline tracking"},manager.cookie);
+    assert.equal(deadlineProject.status,201);
+    assert.equal((await patch(`/api/projects/${deadlineProject.data.project.id}`,{tenantId,action:"activate"},manager.cookie)).status,200);
+    const deadlinePath = `/api/projects/${deadlineProject.data.project.id}/tasks`;
+    const deadlineBase = await get(`${deadlinePath}?tenantId=${tenantId}`,accepted.cookie);
+    const deadlineToday = deadlineBase.data.summary.today;
+    const deadlineDay = offset=>new Date(Date.parse(`${deadlineToday}T00:00:00Z`)+offset*86400000).toISOString().slice(0,10);
+    const lateDeadline = await post(deadlinePath,{tenantId,title:"Deadline late",dueDate:deadlineDay(-1)},manager.cookie);
+    await post(deadlinePath,{tenantId,title:"Deadline today",dueDate:deadlineToday},manager.cookie);
+    await post(deadlinePath,{tenantId,title:"Deadline third day",dueDate:deadlineDay(3)},manager.cookie);
+    await post(deadlinePath,{tenantId,title:"Deadline fourth day",dueDate:deadlineDay(4)},manager.cookie);
+    await post(deadlinePath,{tenantId,title:"Deadline undated"},manager.cookie);
+    const allDeadlines = await get(`${deadlinePath}?tenantId=${tenantId}`,accepted.cookie);
+    assert.deepEqual(allDeadlines.data.summary,{today:deadlineToday,nearEnd:deadlineDay(3),active:5,overdue:1,dueSoon:2,undated:1});
+    assert.deepEqual((await get(`${deadlinePath}?tenantId=${tenantId}&due=OVERDUE`,accepted.cookie)).data.tasks.map(task=>task.title),["Deadline late"]);
+    assert.equal((await get(`${deadlinePath}?tenantId=${tenantId}&due=DUE_SOON`,accepted.cookie)).data.tasks.length,2);
+    assert.equal((await get(`${deadlinePath}?tenantId=${tenantId}&due=UNDATED`,accepted.cookie)).data.tasks[0].title,"Deadline undated");
+    const searchedDeadlines = await get(`${deadlinePath}?tenantId=${tenantId}&q=TODAY&status=TODO`,accepted.cookie);
+    assert.equal(searchedDeadlines.data.tasks.length,1);
+    assert.deepEqual(searchedDeadlines.data.summary,allDeadlines.data.summary);
+    const emptyDeadlinePage = await get(`${deadlinePath}?tenantId=${tenantId}&page=1`,accepted.cookie);
+    assert.equal(emptyDeadlinePage.data.tasks.length,0);
+    assert.deepEqual(emptyDeadlinePage.data.summary,allDeadlines.data.summary);
+    assert.equal((await get(`${deadlinePath}?tenantId=${tenantId}&page=0&page=1`,accepted.cookie)).status,400);
+    assert.equal((await get(`${deadlinePath}?tenantId=${tenantId}&due=INVALID`,accepted.cookie)).status,400);
+    assert.equal((await get(`${deadlinePath}?tenantId=${randomUUID()}`,accepted.cookie)).status,404);
+    assert.equal((await patch(`${deadlinePath}/${lateDeadline.data.task.id}`,{tenantId,action:"complete"},manager.cookie)).status,200);
+    const finishedDeadline = await get(`${deadlinePath}?tenantId=${tenantId}&status=DONE`,accepted.cookie);
+    assert.equal(finishedDeadline.data.tasks[0].dueBucket,null);
+    assert.equal(finishedDeadline.data.summary.overdue,0);
+    assert.equal(finishedDeadline.data.summary.active,4);
+    assert.equal((await get(`${deadlinePath}?tenantId=${tenantId}&status=DONE&due=OVERDUE`,accepted.cookie)).data.tasks.length,0);
     const assignedTasksPath = `/api/projects/${assignedProject.data.project.id}/tasks`;
     assert.equal((await post(assignedTasksPath, { tenantId, title: "Wrong company",
       assigneeEmployeeId: randomUUID() }, manager.cookie)).status, 404);
