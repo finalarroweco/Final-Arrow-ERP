@@ -1,5 +1,6 @@
 "use client";
 
+import {FinancialReport} from "../financial-report";
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
@@ -15,6 +16,7 @@ type Invoice = { id: string; number: string; orderId: string; customerName: stri
 
 export function InvoicesWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
+  const [reportVersion,setReportVersion]=useState(0);
   const [selected, setSelected] = useState(0);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -53,7 +55,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         body: JSON.stringify({ tenantId: scope.tenantId, number: values.get("number") }) });
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not create invoice", "تعذر إنشاء الفاتورة"));
-      else { form.reset(); await Promise.all([load(selected), loadOrders(selected)]); }
+      else { setReportVersion(value=>value+1);form.reset(); await Promise.all([load(selected), loadOrders(selected)]); }
     } finally { setBusy(false); }
   }
   async function change(invoice: Invoice, action: "issue" | "void", reason?: string) {
@@ -65,7 +67,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         body: JSON.stringify({ tenantId: scope.tenantId, action, ...(action === "void" ? { reason } : {}) }) });
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not update invoice", "تعذر تحديث الفاتورة"));
-      else await load(selected, page);
+      else {setReportVersion(value=>value+1);await load(selected, page);}
     } finally { setBusy(false); }
   }
   if (!options.length) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
@@ -84,11 +86,13 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         <button disabled={busy || !eligibleOrders.length}>{t("Create draft", "إنشاء مسودة")}</button>
       </form>}
     {error && <p role="alert">{error}</p>}
+    <FinancialReport key={`${scope.companyId}:${reportVersion}`} kind="invoices" scope={scope} locale={locale}/>
     <div className="customer-list">{invoices.map((invoice) => {
       const rights = invoice.branchId ? scope.branches.find((branch) => branch.id === invoice.branchId)
         : scope.companyPermissions;
       return <article key={invoice.id}><div><h3>{invoice.number} · {invoice.customerName}</h3>
         <p>{t(invoice.status, ({ DRAFT: "مسودة", ISSUED: "مصدرة", VOID: "ملغاة" })[invoice.status])} · {invoice.subtotal} {invoice.currency}</p>
+        <a href={`/accounting/invoices/${invoice.id}`}>{t("View / print invoice", "عرض / طباعة الفاتورة")}</a>
         <ul>{invoice.lines.map((line, index) => <li key={index}>
           {line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
         {invoice.voidReason && <p>{t("Void reason:", "سبب الإلغاء:")} {invoice.voidReason}</p>}

@@ -281,6 +281,24 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const invoiceListPath = `/api/invoices?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
     assert.deepEqual((await get(invoiceListPath, accepted.cookie)).data.invoices.map((item) => item.id), [invoice.data.invoice.id]);
     assert.equal((await get(`/api/invoices?tenantId=${tenantId}&companyId=${companyB.data.company.id}`, accepted.cookie)).status, 403);
+    const invoiceReportDay = invoice.data.invoice.createdAt.slice(0,10);
+    const invoiceReportQuery = new URLSearchParams({tenantId,companyId:companyA.data.company.id,from:invoiceReportDay,to:invoiceReportDay});
+    const invoiceRegisterReport = await get(`/api/invoices/report?${invoiceReportQuery}`, accepted.cookie);
+    assert.equal(invoiceRegisterReport.status, 200);
+    assert.equal(invoiceRegisterReport.data.dateBasis, "createdAtUTC");
+    assert.equal(invoiceRegisterReport.data.summary[0].amount, "6.375");
+    assert.equal(invoiceRegisterReport.data.summary[0].status, "DRAFT");
+    assert.equal((await get(`/api/invoices/report?${invoiceReportQuery}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    assert.equal((await get(`/api/invoices/report?${invoiceReportQuery}&status=POSTED`, manager.cookie)).status, 400);
+    const invoiceRegisterCsv = await fetch(`${origin}/api/invoices/report?${invoiceReportQuery}&format=csv`,{headers:{Cookie:manager.cookie}});
+    assert.equal(invoiceRegisterCsv.status, 200);
+    assert.match(await invoiceRegisterCsv.text(), /INV-001/);
+    const printableInvoice = await fetch(`${origin}/accounting/invoices/${invoice.data.invoice.id}`, {headers:{Cookie:manager.cookie}});
+    assert.equal(printableInvoice.status, 200);
+    assert.match(await printableInvoice.text(), /INV-001/);
+    const isolatedInvoiceActor = await post("/api/auth/register", {name:"Isolated invoice reader",email:`invoice-isolated-${suffix()}@example.invalid`,password,organization:"Isolated invoices",slug:`invoice-isolated-${suffix()}`});
+    assert.equal(isolatedInvoiceActor.status, 201);
+    assert.equal((await fetch(`${origin}/accounting/invoices/${invoice.data.invoice.id}`, {headers:{Cookie:isolatedInvoiceActor.cookie}})).status, 404);
     const invoiceStatusPath = `/api/invoices/${invoice.data.invoice.id}/status`;
     assert.equal((await patch(invoiceStatusPath, { tenantId, action: "issue" }, accepted.cookie)).status, 403);
     assert.equal((await patch(invoiceStatusPath, { tenantId, action: "void" }, manager.cookie)).status, 400);
@@ -289,6 +307,8 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(invoiceStatusPath, { tenantId, action: "void", reason: "Entry correction" }, manager.cookie)).status, 200);
     assert.equal((await patch(invoiceStatusPath, { tenantId, action: "issue" }, manager.cookie)).status, 409);
     assert.equal((await patch(invoiceStatusPath, { tenantId, action: "void", reason: "Again" }, manager.cookie)).status, 409);
+    assert.equal((await get(`/api/invoices/report?${invoiceReportQuery}&status=VOID`, manager.cookie)).data.summary[0].amount, "6.375");
+    assert.equal((await get(`/api/invoices/report?${invoiceReportQuery}&status=ISSUED`, manager.cookie)).data.count, 0);
     const companySettingsPath = `/api/companies/${companyA.data.company.id}`;
     const settings = { tenantId, name: "Company A Updated", legalName: "Company A LLC", baseCurrency: "JOD" };
     assert.equal((await patch(companySettingsPath, settings, accepted.cookie)).status, 403);
@@ -568,7 +588,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
       { tenantId, action: "reject", note: "Staffing constraint" }, manager.cookie)).status, 200);
 
     const expenseBody = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id,
-      number: "EXP-A", description: "Branch supplies", category: "Operations",
+      number: "EXP-A", description: "=Branch supplies", category: "Operations",
       amount: "12.375", expenseDate: "2026-09-30" };
     assert.equal((await post("/api/expenses", expenseBody, accepted.cookie)).status, 403);
     assert.equal((await post("/api/expenses", { ...expenseBody, branchId: branchB.data.branch.id }, manager.cookie)).status, 403);
@@ -588,12 +608,30 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const expensesPath = `/api/expenses?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
     assert.deepEqual((await get(expensesPath, accepted.cookie)).data.expenses.map((item) => item.id), [expenseA.data.expense.id]);
     assert.equal((await get(expensesPath.replace(companyA.data.company.id, companyB.data.company.id), accepted.cookie)).status, 403);
+    const expenseReportQuery = new URLSearchParams({tenantId,companyId:companyA.data.company.id,from:"2026-09-30",to:"2026-09-30"});
+    const scopedExpenseReport = await get(`/api/expenses/report?${expenseReportQuery}`, accepted.cookie);
+    assert.equal(scopedExpenseReport.status, 200);
+    assert.equal(scopedExpenseReport.data.count, 1);
+    assert.equal(scopedExpenseReport.data.summary[0].amount, "12.375");
+    assert.equal(scopedExpenseReport.data.categories[0].category, "Operations");
+    assert.equal((await get(`/api/expenses/report?${expenseReportQuery}`, owner.cookie)).data.summary[0].amount, "37.125");
+    assert.equal((await get(`/api/expenses/report?${expenseReportQuery}&branchId=${branchB.data.branch.id}`, accepted.cookie)).status, 403);
+    assert.equal((await get(`/api/expenses/report?${expenseReportQuery}&q=missing`, manager.cookie)).data.count, 0);
+    assert.equal((await get(`/api/expenses/report?${expenseReportQuery}&from=2026-09-29`, manager.cookie)).status, 400);
+    assert.equal((await get(`/api/expenses/report?tenantId=${tenantId}&companyId=${companyA.data.company.id}&from=2026-10-01&to=2026-09-30`, manager.cookie)).status, 400);
+    const expenseRegisterCsv = await fetch(`${origin}/api/expenses/report?${expenseReportQuery}&format=csv`,{headers:{Cookie:manager.cookie}});
+    assert.equal(expenseRegisterCsv.status, 200);
+    const expenseRegisterText = await expenseRegisterCsv.text();
+    assert.match(expenseRegisterText, /EXP-A/);
+    assert.ok(expenseRegisterText.includes("'=Branch supplies"));
+    assert.doesNotMatch(expenseRegisterText, /EXP-B|EXP-C/);
     const expenseStatusPath = `/api/expenses/${expenseA.data.expense.id}/status`;
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, accepted.cookie)).status, 403);
     assert.equal((await patch(`/api/expenses/${expenseB.data.expense.id}/status`,
       { tenantId, action: "post" }, manager.cookie)).status, 403);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "void", reason: "" }, manager.cookie)).status, 400);
     assert.equal((await patch(expenseStatusPath, { tenantId, action: "post" }, manager.cookie)).status, 200);
+    assert.equal((await get(`/api/expenses/report?${expenseReportQuery}&status=POSTED`, manager.cookie)).data.summary[0].amount, "12.375");
     const scopedDashboard = await get(dashboardPath, accepted.cookie);
     assert.equal(scopedDashboard.status, 200);
     assert.equal(scopedDashboard.data.projects.COMPLETED, 1);
@@ -615,6 +653,8 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.deepEqual((await get(dashboardPath, accepted.cookie)).data.expenses,
       { currency: "JOD", postedCount: 0, postedAmount: "0" });
 
+    assert.equal((await get(`/api/expenses/report?${expenseReportQuery}&status=POSTED`, manager.cookie)).data.count, 0);
+    assert.equal((await get(`/api/expenses/report?${expenseReportQuery}&status=VOID`, manager.cookie)).data.summary[0].amount, "12.375");
     const inboxLeave = await post("/api/leave-requests", { ...leaveBody,
       startDate: "2027-01-04", endDate: "2027-01-05" }, manager.cookie);
     const inboxExpense = await post("/api/expenses", { ...expenseBody,

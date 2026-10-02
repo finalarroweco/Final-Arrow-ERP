@@ -1,5 +1,6 @@
 "use client";
 
+import {FinancialReport} from "../financial-report";
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 
@@ -12,6 +13,7 @@ type Expense = { id: string; number: string; description: string; category: stri
 
 export function ExpensesWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
+  const [reportVersion,setReportVersion]=useState(0);
   const [selected, setSelected] = useState(0);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [page, setPage] = useState(0);
@@ -35,7 +37,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json();
       setMessage(response.ok ? success : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
-      if (response.ok) await load(selected, pageNumber);
+      if (response.ok) {setReportVersion(value=>value+1);await load(selected, pageNumber);}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   if (!scope) return <section className="panel"><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
@@ -61,6 +63,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
       <button disabled={busy}>{t("Create draft", "إنشاء مسودة")}</button>
     </form>}
     {message && <p role="status">{message}</p>}
+    <FinancialReport key={`${scope.companyId}:${reportVersion}`} kind="expenses" scope={scope} locale={locale}/>
     <h2>{t("Expenses", "المصاريف")}</h2>
     {expenses.length === 0 && <p>{t("No expenses on this page.", "لا توجد مصاريف في هذه الصفحة.")}</p>}
     {expenses.map((expense) => {
