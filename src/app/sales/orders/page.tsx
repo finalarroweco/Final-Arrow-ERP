@@ -23,7 +23,7 @@ export default async function OrdersPage() {
       canManageCompanyWide: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id,
         permission: "order:manage" }),
       branches: await Promise.all(company.branches.filter((branch) => visible === null || visible.includes(branch.id))
-        .map(async (branch) => ({ id: branch.id, canManage: await canAccess({ userId: user.id,
+        .map(async (branch) => ({ id: branch.id, name: branch.name, canManage: await canAccess({ userId: user.id,
           tenantId: tenant.id, companyId: company.id, branchId: branch.id, permission: "order:manage" }) }))) };
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/sales/quotes">{t("Quotes", "عروض الأسعار")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>

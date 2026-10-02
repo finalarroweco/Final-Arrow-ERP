@@ -269,6 +269,53 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(orderBStatus, { tenantId, action: "start" }, owner.cookie)).status, 409);
     const visibleOrders = await get(`/api/orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`, accepted.cookie);
     assert.deepEqual(visibleOrders.data.orders.map((item) => item.id), [order.data.order.id]);
+    const salesReportDay = new Date().toISOString().slice(0, 10);
+    const salesReportScope = `tenantId=${tenantId}&companyId=${companyA.data.company.id}&from=${salesReportDay}&to=${salesReportDay}`;
+    const quoteReportPath = `/api/quotes/report?${salesReportScope}`;
+    const orderReportPath = `/api/orders/report?${salesReportScope}`;
+    const quoteReport = await get(quoteReportPath, accepted.cookie);
+    assert.equal(quoteReport.status, 200);
+    assert.equal(quoteReport.data.count, 1);
+    assert.equal(quoteReport.data.customerNameBasis, "current");
+    assert.deepEqual(quoteReport.data.summary.map(({status,amount})=>({status,amount})), [{status:"ACCEPTED",amount:"6.375"}]);
+    assert.equal((await get(`${quoteReportPath}&q=Renamed`, accepted.cookie)).data.count, 1);
+    assert.equal((await get(`${quoteReportPath}&q=Branch%20A%20Customer`, accepted.cookie)).data.count, 0);
+    const orderReport = await get(orderReportPath, accepted.cookie);
+    assert.equal(orderReport.status, 200);
+    assert.equal(orderReport.data.count, 1);
+    assert.equal(orderReport.data.customerNameBasis, "snapshot");
+    assert.equal(orderReport.data.summary[0].status, "COMPLETED");
+    assert.equal(orderReport.data.summary[0].amount, "6.375");
+    assert.equal((await get(`${orderReportPath}&q=Renamed`, accepted.cookie)).data.count, 0);
+    const ownerOrdersReport = await get(orderReportPath, owner.cookie);
+    assert.equal(ownerOrdersReport.data.count, 2);
+    assert.equal(ownerOrdersReport.data.summary.find(group=>group.status==="CANCELLED").amount, "5.500");
+    for (const path of [quoteReportPath, orderReportPath]) {
+      assert.equal((await get(`${path}&branchId=${branchB.data.branch.id}`, accepted.cookie)).status, 403);
+      assert.equal((await get(`${path}&status=POSTED`, owner.cookie)).status, 400);
+      assert.equal((await get(`${path}&from=2020-01-01`, owner.cookie)).status, 400);
+      const csv = await fetch(`${origin}${path}&format=csv`, {headers:{Cookie:accepted.cookie}});
+      assert.equal(csv.status, 200);
+      assert.equal(csv.headers.get("cache-control"), "private, no-store");
+      assert.match(await csv.text(), /6\.375/);
+    }
+    assert.equal((await patch(`/api/customers/${customerA.data.customer.id}`, {tenantId,action:"update",displayName:"=Report customer"}, manager.cookie)).status, 200);
+    const formulaQuoteCsv = await fetch(`${origin}${quoteReportPath}&format=csv`, {headers:{Cookie:accepted.cookie}});
+    assert.match(await formulaQuoteCsv.text(), /'=Report customer/);
+    assert.equal((await patch(`/api/customers/${customerA.data.customer.id}`, {tenantId,action:"update",displayName:"Renamed Customer"}, manager.cookie)).status, 200);
+    const salesRangePath = `/api/orders/report?tenantId=${tenantId}&companyId=${companyA.data.company.id}&from=2020-01-01&to=2022-01-01`;
+    assert.equal((await get(salesRangePath, owner.cookie)).status, 400);
+    assert.equal((await fetch(`${origin}${orderReportPath}`)).status, 401);
+    for (const [kind,allowedId,forbiddenId,customer] of [["quotes",quote.data.quote.id,quoteB.data.quote.id,"Renamed Customer"],["orders",order.data.order.id,orderB.data.order.id,"Branch A Customer"]]) {
+      const document = await fetch(`${origin}/sales/${kind}/${allowedId}`, {headers:{Cookie:accepted.cookie}});
+      assert.equal(document.status, 200);
+      const html = await document.text();
+      assert.match(html, new RegExp(customer));
+      assert.match(html, /Revised service/);
+      assert.match(html, /6\.375/);
+      const forbiddenDocument = await fetch(`${origin}/sales/${kind}/${forbiddenId}`, {headers:{Cookie:accepted.cookie}});
+      assert.equal(forbiddenDocument.status, 404);
+    }
     const invoicePath = `/api/orders/${order.data.order.id}/invoice`;
     assert.equal((await post(invoicePath, { tenantId, number: "INV-001" }, accepted.cookie)).status, 403);
     assert.equal((await post(`/api/orders/${orderB.data.order.id}/invoice`, { tenantId, number: "INV-002" }, manager.cookie)).status, 403);

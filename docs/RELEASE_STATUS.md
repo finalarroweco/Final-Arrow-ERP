@@ -59,3 +59,8 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Purchase order reporting and print
 - Scoped UTC creation-date reports (up to 366 days / 5000 documents), saved supplier search, status/currency totals and supplier breakdown, CSV export.
 - Authorized internal purchase-order print/PDF view with saved prices and lifecycle timestamps. Not supplier payments, tax or payable recognition.
+
+### Sales registers and documents
+- Quote / sales-order reports scoped by company and branch, UTC creation date, status and customer/number search; exact status/currency totals and CSV (366 days, 5000 documents). Quote customer names are current, order names are saved snapshots.
+- Authorized bilingual print/PDF views preserve document statuses, line prices, notes and lifecycle timestamps. No email delivery, taxes or collections.
+- Sales lists discard stale responses on company changes; quote customer choices always load from page zero.

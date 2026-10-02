@@ -1,7 +1,8 @@
 "use client";
 
+import {FinancialReport} from "@/app/accounting/financial-report";
 import { translate, type Locale } from "@/lib/locale";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Permissions = { canCreate: boolean; canUpdate: boolean; canSend: boolean; canDecide: boolean; canOrder: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string;
@@ -15,6 +16,7 @@ type Line = { description: string; quantity: string; unitPrice: string };
 
 export function QuotesWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
+  const requestVersion=useRef(0);
   const [selected, setSelected] = useState(0);
   const [branchId, setBranchId] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -23,6 +25,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [lines, setLines] = useState<Line[]>([{ description: "", quantity: "1", unitPrice: "0.000" }]);
   const [message, setMessage] = useState("");
+  const [reportVersion,setReportVersion]=useState(0);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
@@ -30,13 +33,15 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
   const [ordering, setOrdering] = useState<string | null>(null);
   const option = options[selected];
   const load = useCallback(async (index: number, pageNumber = 0) => {
+    const generation=++requestVersion.current;
     const scope = options[index];
     if (!scope) return;
     const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, page: String(pageNumber) });
     const [quoteResponse, customerResponse] = await Promise.all([
-      fetch(`/api/quotes?${query}`), fetch(`/api/customers?${query}`),
+      fetch(`/api/quotes?${query}`), fetch(`/api/customers?${new URLSearchParams({tenantId:scope.tenantId,companyId:scope.companyId,page:"0"})}`),
     ]);
     const [quoteData, customerData] = await Promise.all([quoteResponse.json(), customerResponse.json()]);
+    if(generation!==requestVersion.current)return;
     if (!quoteResponse.ok) { setMessage(quoteData.error ?? t("Could not load quotes", "تعذر تحميل عروض الأسعار")); return; }
     setQuotes(quoteData.quotes); setPage(pageNumber); setNextPage(quoteData.nextPage);
     if (customerResponse.ok) {
@@ -48,9 +53,11 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
         const nextResponse = await fetch(`/api/customers?${nextQuery}`);
         if (!nextResponse.ok) break;
         const nextData = await nextResponse.json();
+        if(generation!==requestVersion.current)return;
         allCustomers.push(...nextData.customers);
         customerPage = nextData.nextPage;
       }
+      if(generation!==requestVersion.current)return;
       setCustomers(allCustomers);
     } else setCustomers([]);
   }, [options, t]);
@@ -69,7 +76,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
           lines: lines.map((line) => ({ description: line.description, quantity: Number(line.quantity), unitPrice: line.unitPrice })) }) });
       const data = await response.json();
       setMessage(response.ok ? t("Quote created", "تم إنشاء عرض السعر") : data.error ?? t("Could not create quote", "تعذر إنشاء عرض السعر"));
-      if (response.ok) { setLines([{ description: "", quantity: "1", unitPrice: "0.000" }]); await load(selected); }
+      if (response.ok) { setLines([{ description: "", quantity: "1", unitPrice: "0.000" }]); setReportVersion(value=>value+1); await load(selected); }
     } finally { setBusy(false); }
   }
   async function transition(quote: Quote, action: "send" | "accept" | "reject") {
@@ -81,7 +88,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
         body: JSON.stringify({ tenantId: option.tenantId, action }) });
       const data = await response.json();
       setMessage(response.ok ? `${t("Quote marked", "حالة العرض")}: ${t(data.quote.status, ({ DRAFT: "مسودة", SENT: "مرسل", ACCEPTED: "مقبول", REJECTED: "مرفوض" })[data.quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED"] ?? data.quote.status)}` : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
-      if (response.ok) await load(selected, page);
+      if (response.ok) {setReportVersion(value=>value+1); await load(selected, page);}
     } finally { setBusy(false); }
   }
   function startEdit(quote: Quote) {
@@ -101,7 +108,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
             quantity: Number(line.quantity), unitPrice: line.unitPrice })) }) });
       const data = await response.json();
       setMessage(response.ok ? t("Draft updated", "تم تحديث المسودة") : data.error ?? t("Could not update draft", "تعذر تحديث المسودة"));
-      if (response.ok) { setEditing(null); await load(selected, page); }
+      if (response.ok) { setEditing(null); setReportVersion(value=>value+1); await load(selected, page); }
     } finally { setBusy(false); }
   }
   async function createOrder(quote: Quote, form: FormData) {
@@ -113,12 +120,12 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
         body: JSON.stringify({ tenantId: option.tenantId, number: form.get("number") }) });
       const data = await response.json();
       setMessage(response.ok ? t("Sales order created", "تم إنشاء طلب البيع") : data.error ?? t("Could not create order", "تعذر إنشاء طلب البيع"));
-      if (response.ok) { setOrdering(null); await load(selected, page); }
+      if (response.ok) { setOrdering(null); setReportVersion(value=>value+1); await load(selected, page); }
     } finally { setBusy(false); }
   }
   if (!option) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
   return <section>
-    <label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setBranchId(""); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select disabled={busy} value={selected} onChange={(event) => { requestVersion.current++;setQuotes([]);setCustomers([]);setEditing(null);setOrdering(null);setSelected(Number(event.target.value)); setBranchId(""); setMessage(""); }}>
       {options.map((item, index) => <option key={`${item.tenantId}:${item.companyId}`} value={index}>{item.label}</option>)}
     </select></label>
     {(option.companyPermissions.canCreate || createBranches.length > 0) && <form action={create} className="quote-form">
@@ -147,13 +154,13 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
       {lines.length < 50 && <button type="button" onClick={() => setLines((current) => [...current, { description: "", quantity: "1", unitPrice: "0.000" }])}>{t("Add item", "إضافة بند")}</button>}
       <button disabled={busy || availableCustomers.length === 0}>{t("Create quote", "إنشاء عرض سعر")}</button>
     </form>}
-    {message && <p role="status">{message}</p>}
+    {message && <p role="status">{message}</p>}<FinancialReport key={`${option.companyId}:${reportVersion}`} kind="quotes" scope={option} locale={locale}/>
     <h2>{t("Quotes", "عروض الأسعار")}</h2>
     {quotes.length === 0 && <p>{t("No quotes on this page.", "لا توجد عروض أسعار في هذه الصفحة.")}</p>}
     <div className="customer-list">{quotes.map((quote) => {
       const permissions = quote.branchId ? option.branches.find((branch) => branch.id === quote.branchId) : option.companyPermissions;
       return <article key={quote.id}>
-      <div><h3>{quote.number} · {quote.customer.displayName}</h3><p>{t(quote.status, ({ DRAFT: "مسودة", SENT: "مرسل", ACCEPTED: "مقبول", REJECTED: "مرفوض" })[quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED"] ?? quote.status)} · {quote.subtotal} {quote.currency}</p>
+      <div><h3>{quote.number} · {quote.customer.displayName}</h3><a href={`/sales/quotes/${quote.id}`}>{t("View / print quote","عرض / طباعة عرض السعر")}</a><p>{t(quote.status, ({ DRAFT: "مسودة", SENT: "مرسل", ACCEPTED: "مقبول", REJECTED: "مرفوض" })[quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED"] ?? quote.status)} · {quote.subtotal} {quote.currency}</p>
         <ul>{quote.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
         {quote.status === "DRAFT" && permissions?.canUpdate && editing !== quote.id && <button disabled={busy}
           onClick={() => startEdit(quote)}>{t("Edit draft", "تعديل المسودة")}</button>}
