@@ -388,6 +388,23 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const purchaseOrdersPath = `/api/purchase-orders?tenantId=${tenantId}&companyId=${companyA.data.company.id}`;
     assert.deepEqual((await get(purchaseOrdersPath, accepted.cookie)).data.orders.map((item) => item.id),
       [purchaseOrder.data.order.id]);
+    const purchaseReportDay = new Date().toISOString().slice(0, 10);
+    const purchaseReportPath = `/api/purchase-orders/report?tenantId=${tenantId}&companyId=${companyA.data.company.id}&from=${purchaseReportDay}&to=${purchaseReportDay}`;
+    const purchaseReport = await get(purchaseReportPath, accepted.cookie);
+    assert.equal(purchaseReport.status, 200);
+    assert.equal(purchaseReport.data.count, 1);
+    assert.equal(purchaseReport.data.summary[0].amount, "6.375");
+    assert.equal(purchaseReport.data.summary[0].status, "DRAFT");
+    assert.equal(purchaseReport.data.suppliers[0].supplierName, "Updated Supplier");
+    assert.equal((await get(`${purchaseReportPath}&q=missing`, accepted.cookie)).data.count, 0);
+    assert.equal((await get(`${purchaseReportPath}&branchId=${branchB.data.branch.id}`, accepted.cookie)).status, 403);
+    assert.equal((await get(`${purchaseReportPath}&status=POSTED`, owner.cookie)).status, 400);
+    const purchaseCsv = await fetch(`${origin}${purchaseReportPath}&format=csv`, { headers: { Cookie: accepted.cookie } });
+    assert.equal(purchaseCsv.status, 200);
+    assert.match(await purchaseCsv.text(), /Updated Supplier/);
+    const purchasePrint = await fetch(`${origin}/purchasing/orders/${purchaseOrder.data.order.id}`, { headers: { Cookie: accepted.cookie } });
+    assert.equal(purchasePrint.status, 200);
+    assert.match(await purchasePrint.text(), /PO-001/);
     const purchaseStatusPath = `/api/purchase-orders/${purchaseOrder.data.order.id}/status`;
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "issue" }, accepted.cookie)).status, 403);
     assert.equal((await patch(purchaseStatusPath, { tenantId, action: "receive" }, manager.cookie)).status, 400);

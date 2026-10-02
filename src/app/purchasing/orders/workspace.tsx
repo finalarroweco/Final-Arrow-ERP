@@ -1,5 +1,6 @@
 "use client";
 
+import {FinancialReport} from "@/app/accounting/financial-report";
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 
@@ -23,6 +24,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
   const [page, setPage] = useState(0);
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [reportVersion,setReportVersion]=useState(0);
   const [busy, setBusy] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [receiptBranchId, setReceiptBranchId] = useState("");
@@ -65,7 +67,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not create purchase order", "تعذر إنشاء أمر الشراء"));
       else { (event.target as HTMLFormElement).reset(); setLines([{ description: "", quantity: 1, unitPrice: "0.000" }]);
-        await load(selected); }
+        setReportVersion(value=>value+1); await load(selected); }
     } finally { setBusy(false); }
   }
   async function change(order: Order, action: "issue" | "cancel") {
@@ -76,7 +78,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenantId: scope.tenantId, action }) });
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not update purchase order", "تعذر تحديث أمر الشراء"));
-      else await load(selected, page);
+      else {setReportVersion(value=>value+1); await load(selected, page);}
     } finally { setBusy(false); }
   }
   async function selectReceiptBranch(order: Order, targetBranchId: string) {
@@ -101,11 +103,11 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
           lines: order.lines.map((line) => ({ orderLineId: line.id, itemId: values.get(line.id) })) }) });
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not receive purchase order", "تعذر استلام أمر الشراء"));
-      else { setReceivingId(null); setReceiptItems([]); await load(selected, page); }
+      else { setReceivingId(null); setReceiptItems([]); setReportVersion(value=>value+1); await load(selected, page); }
     } finally { setBusy(false); }
   }
   if (!options.length) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
-  return <section><label>{t("Company", "الشركة")} <select value={selected} onChange={(event) => {
+  return <section><label>{t("Company", "الشركة")} <select disabled={busy} value={selected} onChange={(event) => {
     setSelected(Number(event.target.value)); setBranchId(""); setSupplierId(""); setSuppliers([]); setOrders([]);
     setReceivingId(null); setReceiptItems([]);
   }}>{options.map((option, index) => <option key={`${option.tenantId}:${option.companyId}`} value={index}>{option.label}</option>)}</select></label>
@@ -133,13 +135,14 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       <button type="submit" disabled={busy || !supplierId}>{t("Create draft", "إنشاء مسودة")} · {scope.currency}</button>
     </form>}
     {error && <p role="alert">{error}</p>}
+    {scope&&<FinancialReport key={`${scope.companyId}:${reportVersion}`} kind="purchase-orders" scope={scope} locale={locale}/>}
     <div className="customer-list">{orders.map((order) => {
       const canManage = order.branchId ? scope.branches.find((branch) => branch.id === order.branchId)?.canManage
         : scope.companyPermissions.canManage;
       const receiptBranches = scope.branches.filter((branch) => branch.canStockAdjust);
       const canReceive = canManage && (order.branchId
         ? receiptBranches.some((branch) => branch.id === order.branchId) : receiptBranches.length > 0);
-      return <article key={order.id}><div><h3>{order.number} · {order.supplierName}</h3>
+      return <article key={order.id}><div><h3>{order.number} · {order.supplierName}</h3><a href={`/purchasing/orders/${order.id}`}>{t("View / print purchase order","عرض / طباعة أمر الشراء")}</a>
         <p>{t(order.status, ({ DRAFT: "مسودة", ISSUED: "مصدر", RECEIVED: "مستلم", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
         <ul>{order.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
         {order.receipt && <p>{t("Received into", "تم الاستلام في")} {scope.branches.find((branch) => branch.id === order.receipt?.branchId)?.name ?? t("branch", "فرع")}</p>}
