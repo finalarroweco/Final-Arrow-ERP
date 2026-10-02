@@ -1010,6 +1010,12 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await patch(kitchenOrderPath, { tenantId, status: "READY" }, manager.cookie)).status, 200);
     const readyKitchen = await get(`/api/pos/kitchen?${posQuery}&status=READY`, accepted.cookie);
     assert.ok(Number.isFinite(Date.parse(readyKitchen.data.serverTime)));
+    const readyGroup = readyKitchen.data.summary.find(group => group.status === "READY");
+    assert.equal(readyGroup.count, 1);
+    assert.equal(readyGroup.oldestStageAt, readyKitchen.data.orders[0].readyAt);
+    const kitchenBeyondPage = await get(`/api/pos/kitchen?${posQuery}&status=READY&page=1`, accepted.cookie);
+    assert.equal(kitchenBeyondPage.data.orders.length, 0);
+    assert.deepEqual(kitchenBeyondPage.data.summary, readyKitchen.data.summary);
     assert.equal(readyKitchen.status, 200); assert.equal(readyKitchen.data.orders[0].id, posOrder.data.order.id);
     assert.equal(readyKitchen.data.orders[0].status, "PAID");
     assert.equal(readyKitchen.data.orders[0].lines[0].itemName, "Coffee");
