@@ -1109,6 +1109,30 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const unknownEmail = `unknown-${suffix()}@example.invalid`;
     const unknownLogins = await Promise.all(Array.from({length:6},()=>post("/api/auth/login",{email:unknownEmail,password:"wrong"})));
     assert.deepEqual(unknownLogins.map(result=>result.status).sort(),[401,401,401,401,401,429]);
+    const securityEmail = `security-${suffix()}@example.invalid`;
+    const securityActor = await post("/api/auth/register", {name:"Security test",email:securityEmail,password,organization:"Security test",slug:`security-${suffix()}`});
+    assert.equal(securityActor.status, 201);
+    const extraSecuritySession = await post("/api/auth/login",{email:securityEmail,password});
+    assert.equal(extraSecuritySession.status, 200);
+    const newSecurityPassword = "New-secure-password-2026";
+    assert.equal((await post("/api/auth/password",{currentPassword:password,newPassword:newSecurityPassword})).status, 401);
+    assert.equal((await post("/api/auth/password",{currentPassword:password,newPassword:"short"},securityActor.cookie)).status, 400);
+    assert.equal((await post("/api/auth/password",{currentPassword:password,newPassword:password},securityActor.cookie)).status, 400);
+    assert.equal((await post("/api/auth/password",{currentPassword:"incorrect",newPassword:newSecurityPassword},securityActor.cookie)).status, 403);
+    const securityPage = await fetch(`${origin}/settings/security`,{headers:{Cookie:securityActor.cookie}});
+    assert.equal(securityPage.status, 200);
+    assert.match(await securityPage.text(), /security-/);
+    const securityChanges = await Promise.all(Array.from({length:2},()=>post("/api/auth/password",{currentPassword:password,newPassword:newSecurityPassword},securityActor.cookie)));
+    assert.equal(securityChanges.filter(result=>result.status===200).length, 1);
+    assert.ok(securityChanges.every(result=>[200,401,403,409].includes(result.status)));
+    assert.equal((await get(`/api/companies?tenantId=${securityActor.data.tenantId}`,securityActor.cookie)).status, 401);
+    assert.equal((await get(`/api/companies?tenantId=${securityActor.data.tenantId}`,extraSecuritySession.cookie)).status, 401);
+    assert.equal((await get(`/api/companies?tenantId=${tenantId}`,owner.cookie)).status, 200);
+    assert.equal((await post("/api/auth/login",{email:securityEmail,password})).status, 401);
+    const newSecuritySession = await post("/api/auth/login",{email:securityEmail,password:newSecurityPassword});
+    assert.equal(newSecuritySession.status, 200);
+    assert.ok(newSecuritySession.cookie);
+    assert.equal((await get(`/api/companies?tenantId=${securityActor.data.tenantId}`,newSecuritySession.cookie)).status, 200);
   } finally {
     server.kill("SIGTERM");
   }

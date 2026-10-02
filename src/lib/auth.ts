@@ -22,14 +22,20 @@ export async function verifyPassword(password: string, encoded: string): Promise
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
-export async function createSession(userId: string) {
+export async function createSession(userId: string, expectedPasswordHash?: string) {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + DAYS * 86400_000);
-  await db.session.create({ data: { userId, tokenHash: digest(token), expiresAt } });
+  const created=await db.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId}::uuid FOR UPDATE`;
+    if(expectedPasswordHash){const user=await tx.user.findUnique({where:{id:userId},select:{passwordHash:true}});if(user?.passwordHash!==expectedPasswordHash)return false;}
+    await tx.session.create({data:{userId,tokenHash:digest(token),expiresAt}});return true;
+  });
+  if(!created)return false;
   (await cookies()).set(COOKIE, token, {
     httpOnly: true, secure: process.env.NODE_ENV === "production",
     sameSite: "lax", path: "/", expires: expiresAt,
   });
+  return true;
 }
 
 export async function currentUser() {

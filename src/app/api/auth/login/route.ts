@@ -17,6 +17,6 @@ export async function POST(request: Request) {
   const valid=await verifyPassword(parsed.data.password,user?.passwordHash??dummyHash);
   if (!user || !valid)
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-  await createSession(user.id);
+  if(!(await createSession(user.id,user.passwordHash)))return NextResponse.json({error:"Invalid credentials"},{status:401});
   return NextResponse.json({ ok: true });
 }
