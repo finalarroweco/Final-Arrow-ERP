@@ -778,7 +778,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(timedProject.status, 201);
     const timePath = `/api/projects/${timedProject.data.project.id}/time`;
     const timeBody = { tenantId, employeeId: attendanceEmployeeA.data.employee.id,
-      workDate: "2026-10-01", minutes: 90, description: "Prepare project deliverables" };
+      workDate: "2026-10-01", minutes: 90, description: "=Prepare project deliverables" };
     assert.equal((await post(timePath, timeBody, manager.cookie)).status, 409);
     assert.equal((await patch(`/api/projects/${timedProject.data.project.id}`, { tenantId, action: "activate" }, manager.cookie)).status, 200);
     assert.equal((await post(timePath, timeBody, accepted.cookie)).status, 403);
@@ -790,6 +790,18 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(times.status, 200);
     assert.equal(times.data.totalMinutes, 90);
     assert.equal(times.data.entries[0].employeeName, "Branch A Employee");
+    const projectReportQuery = new URLSearchParams({tenantId,from:"2026-10-01",to:"2026-10-01"});
+    const projectTimeReport = await get(`${timePath}/report?${projectReportQuery}`, manager.cookie);
+    assert.equal(projectTimeReport.status, 200);
+    assert.equal(projectTimeReport.data.summary.totalMinutes, 90);
+    assert.equal(projectTimeReport.data.summary.employees[0].employeeName, "Branch A Employee");
+    assert.equal((await get(`${timePath}/report?${projectReportQuery}&from=2026-09-01`, manager.cookie)).status, 400);
+    assert.equal((await get(`${timePath}/report?tenantId=${tenantId}&from=2026-10-02&to=2026-10-01`, manager.cookie)).status, 400);
+    const projectTimeCsv = await fetch(`${origin}${timePath}/report?${projectReportQuery}&format=csv`, {headers:{Cookie:manager.cookie}});
+    assert.equal(projectTimeCsv.status, 200);
+    assert.match(await projectTimeCsv.text(), /'\=Prepare project deliverables/);
+    assert.equal((await get(`${timePath}/report?tenantId=${tenantId}&from=2026-10-02&to=2026-10-03`, manager.cookie)).data.summary.totalMinutes, 0);
+    assert.equal((await get(`${timePath}/report?tenantId=${randomUUID()}&from=2026-10-01&to=2026-10-01`, owner.cookie)).status, 404);
     const voidTimeBody = { tenantId, entryId: timeEntry.data.entry.id, reason: "Incorrect duration" };
     assert.equal((await patch(timePath, voidTimeBody, accepted.cookie)).status, 403);
     assert.equal((await patch(timePath, voidTimeBody, manager.cookie)).status, 200);
@@ -805,10 +817,12 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal((await get(`/api/audit?tenantId=${randomUUID()}`, owner.cookie)).status, 403);
     const correctedTimes = await get(`${timePath}?tenantId=${tenantId}`, manager.cookie);
     assert.equal(correctedTimes.data.totalMinutes, 0);
+    assert.equal((await get(`${timePath}/report?${projectReportQuery}`, manager.cookie)).data.summary.totalMinutes, 0);
     assert.ok(correctedTimes.data.entries[0].voidedAt);
     const otherTimedProject = await post("/api/projects", { tenantId, companyId: companyA.data.company.id,
       branchId: branchB.data.branch.id, code: "PRJ-TIME-B", name: "Other branch time" }, owner.cookie);
     assert.equal(otherTimedProject.status, 201);
+    assert.equal((await get(`/api/projects/${otherTimedProject.data.project.id}/time/report?${projectReportQuery}`, manager.cookie)).status, 403);
     assert.equal((await get(`/api/projects/${otherTimedProject.data.project.id}/time?tenantId=${tenantId}`, manager.cookie)).status, 403);
 
 

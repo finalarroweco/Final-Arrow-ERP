@@ -1,11 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { translate, type Locale } from "@/lib/locale";
+import {TimeReport} from "./report";
 type Project = { id: string; tenantId: string; companyId: string; branchId: string | null; status: string };
 type Employee = { id: string; code: string; fullName: string; branchId: string | null };
 type Entry = { id: string; workDate: string; minutes: number; description: string; employeeName: string | null; employeeCode: string | null; voidedAt: string | null; voidReason: string | null };
 export function TimeWorkspace({ project, canManage, locale }: { project: Project; canManage: boolean; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
+  const [reportVersion,setReportVersion]=useState(0);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeePage, setEmployeePage] = useState<number | null>(null);
@@ -35,7 +37,7 @@ export function TimeWorkspace({ project, canManage, locale }: { project: Project
         body: JSON.stringify({ tenantId: project.tenantId, employeeId: form.get("employeeId"), workDate: form.get("workDate"),
           minutes: Number(form.get("minutes")), description: form.get("description") }) });
       const data = await response.json(); setMessage(response.ok ? t("Time recorded", "تم تسجيل الوقت") : data.error);
-      if (response.ok) await load();
+      if (response.ok) {setReportVersion(value=>value+1);await load();}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   async function voidEntry(entryId: string, form: FormData) {
@@ -44,7 +46,7 @@ export function TimeWorkspace({ project, canManage, locale }: { project: Project
       const response = await fetch(`/api/projects/${project.id}/time`, { method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: project.tenantId, entryId, reason: form.get("reason") }) });
       const data = await response.json(); setMessage(response.ok ? t("Entry voided", "تم إلغاء السجل") : data.error);
-      if (response.ok) await load(page);
+      if (response.ok) {setReportVersion(value=>value+1);await load(page);}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   const eligible = employees.filter((employee) => !project.branchId || !employee.branchId || employee.branchId === project.branchId);
@@ -58,6 +60,7 @@ export function TimeWorkspace({ project, canManage, locale }: { project: Project
       <label>{t("Work description", "وصف العمل")} <input name="description" minLength={3} maxLength={1000} required /></label>
       <button disabled={busy || !eligible.length}>{t("Record time", "تسجيل الوقت")}</button></form>}
     {message && <p role="status">{message}</p>}
+    <TimeReport key={reportVersion} projectId={project.id} tenantId={project.tenantId} locale={locale}/>
     <h2>{t("Time entries", "سجلات الوقت")}</h2>
     {entries.length === 0 && <p>{t("No entries on this page.", "لا توجد سجلات في هذه الصفحة.")}</p>}
     {entries.map((entry) => <article key={entry.id} className="card"><strong>{entry.employeeName ?? t("Employee details restricted", "بيانات الموظف مقيّدة")}</strong> {entry.employeeCode}
