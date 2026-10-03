@@ -64,3 +64,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 - Quote / sales-order reports scoped by company and branch, UTC creation date, status and customer/number search; exact status/currency totals and CSV (366 days, 5000 documents). Quote customer names are current, order names are saved snapshots.
 - Authorized bilingual print/PDF views preserve document statuses, line prices, notes and lifecycle timestamps. No email delivery, taxes or collections.
 - Sales lists discard stale responses on company changes; quote customer choices always load from page zero.
+
+### Ledger account statements
+- Branch-scoped account statements include earlier opening, debit/credit movements, running and closing balances per currency. Reversals remain included; balance sign is debit minus credit.
+- Repeatable-read snapshot, period limit 366 days / 5000 lines, earlier-history cap 20000 lines; explicit CSV opening/closing rows. Current account names; manual journals only.

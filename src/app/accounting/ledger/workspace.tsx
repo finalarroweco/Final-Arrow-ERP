@@ -1,4 +1,5 @@
 "use client";
+import {AccountStatement} from "./statement";
 import { useCallback, useEffect, useState } from "react";
 import { translate, type Locale } from "@/lib/locale";
 type Option = { tenantId: string; companyId: string; label: string; currency: string; canManageAccounts: boolean; canPost: boolean; branches: { id: string; name: string; canPost: boolean }[] };
@@ -12,6 +13,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   const [entries,setEntries] = useState<Entry[]>([]); const [page,setPage] = useState(0); const [next,setNext] = useState<number|null>(null);
   const [lineCount,setLineCount] = useState(2); const [filters,setFilters] = useState({ from: "", to: "", branchId: "" });
   const [rows,setRows] = useState<Row[]>([]); const [report,setReport] = useState(false);
+  const [statementVersion,setStatementVersion]=useState(0);
   const [busy,setBusy] = useState(false); const [message,setMessage] = useState("");
   const query = useCallback((extra: Record<string,string> = {}) => new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, ...Object.fromEntries(Object.entries(filters).filter(([,value]) => value)), ...extra }),[option,filters]);
   const load = useCallback(async (number = 0) => {
@@ -28,7 +30,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   useEffect(() => { void loadAccounts(); },[loadAccounts]);
   async function save(url: string, body: object) {
     setBusy(true); setMessage("");
-    try { const response = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data = await response.json(); setMessage(response.ok ? t("Saved", "تم الحفظ") : data.error); if(response.ok) { setRows([]); setReport(false); await load(); if(url.endsWith("accounts")) await loadAccounts(); } }
+    try { const response = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data = await response.json(); setMessage(response.ok ? t("Saved", "تم الحفظ") : data.error); if(response.ok) { setStatementVersion(n=>n+1); setRows([]); setReport(false); await load(); if(url.endsWith("accounts")) await loadAccounts(); } }
     catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   if(!option) return <section className="panel"><p>{t("No accessible ledger.", "لا يوجد دفتر أستاذ متاح.")}</p></section>;
@@ -53,7 +55,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
       {Array.from({length:lineCount},(_,i) => <fieldset key={i}><legend>{t("Line", "السطر")} {i+1}</legend><label>{t("Account", "الحساب")} <select name={`account-${i}`} required defaultValue=""><option value="">{t("Select account", "اختر الحساب")}</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code} · {account.name}</option>)}</select></label>
         <label>{t("Debit", "مدين")} <input name={`debit-${i}`} type="number" min={0} max={999999999999} step="0.001" required defaultValue="0" /></label><label>{t("Credit", "دائن")} <input name={`credit-${i}`} type="number" min={0} max={999999999999} step="0.001" required defaultValue="0" /></label></fieldset>)}
       <button type="button" disabled={busy || lineCount >= 100} onClick={() => setLineCount((count) => count+1)}>{t("Add line", "إضافة سطر")}</button><button type="button" disabled={busy || lineCount <= 2} onClick={() => setLineCount((count) => count-1)}>{t("Remove last line", "إزالة آخر سطر")}</button><button disabled={busy || accounts.length === 0}>{t("Post journal", "ترحيل القيد")}</button></form>}
-    <h2>{t("Journals and trial balance", "القيود وميزان المراجعة")}</h2>
+    <AccountStatement key={`${option.companyId}:${statementVersion}`} scope={option} accounts={accounts} locale={locale}/><h2>{t("Journals and trial balance", "القيود وميزان المراجعة")}</h2>
     <form key={`filters-${option.companyId}`} action={(form) => setFilters({from:String(form.get("from") || ""),to:String(form.get("to") || ""),branchId:String(form.get("branchId") || "")})}>
       <label>{t("From", "من")} <input name="from" type="date" /></label><label>{t("To", "إلى")} <input name="to" type="date" /></label><label>{t("Branch", "الفرع")} <select name="branchId"><option value="">{t("All accessible records", "كل السجلات المتاحة")}</option>{option.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><button disabled={busy}>{t("Apply", "تطبيق")}</button>
       <button type="reset" disabled={busy} onClick={() => setFilters({from:"",to:"",branchId:""})}>{t("Reset", "إعادة الضبط")}</button></form>

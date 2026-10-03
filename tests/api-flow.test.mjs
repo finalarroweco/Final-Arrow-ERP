@@ -1105,6 +1105,28 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(earlierTrial.data.rows.find((row) => row.code === "1000").debitBalance, "12.345");
     assert.equal((await post("/api/ledger/journals", { ...journalBody, number: "JE-B", branchId: branchB.data.branch.id }, owner.cookie)).status, 201);
     assert.equal((await get(`/api/ledger/journals?${ledgerQuery}`, manager.cookie)).data.entries.length, 2);
+    const statementPath = `/api/ledger/account-statement?${ledgerQuery}&accountId=${cash.data.account.id}&from=2026-10-02&to=2026-10-02`;
+    const accountStatement = await get(statementPath, manager.cookie);
+    assert.equal(accountStatement.status, 200);
+    assert.equal(accountStatement.data.summary[0].opening, "12.345");
+    assert.equal(accountStatement.data.summary[0].credit, "12.345");
+    assert.equal(accountStatement.data.summary[0].closing, "0.000");
+    assert.equal(accountStatement.data.rows[0].reversal, true);
+    assert.equal(accountStatement.data.rows[0].balance, "0.000");
+    assert.equal((await get(statementPath, accepted.cookie)).status, 403);
+    assert.equal((await get(`${statementPath}&branchId=${branchB.data.branch.id}`, manager.cookie)).status, 403);
+    assert.equal((await get(statementPath.replace(cash.data.account.id, foreignAccount.data.account.id), owner.cookie)).status, 404);
+    const creditStatement = await get(statementPath.replace(cash.data.account.id, revenue.data.account.id), manager.cookie);
+    assert.equal(creditStatement.data.summary[0].opening, "-12.345");
+    assert.equal(creditStatement.data.summary[0].closing, "0.000");
+    const openingOnly = await get(statementPath.replaceAll("2026-10-02", "2026-10-03"), owner.cookie);
+    assert.equal(openingOnly.data.rows.length, 0);
+    assert.equal(openingOnly.data.summary[0].opening, "12.345");
+    const statementCsv = await fetch(`${origin}${statementPath}&format=csv`, {headers:{Cookie:manager.cookie}});
+    assert.equal(statementCsv.status, 200);
+    const statementText = await statementCsv.text();
+    assert.match(statementText, /OPENING/); assert.match(statementText, /CLOSING/); assert.match(statementText, /REVERSAL/);
+    assert.equal((await get(`${statementPath}&from=2020-01-01`, owner.cookie)).status, 400);
     const ledgerPage = await fetch(`${origin}/accounting/ledger`, { headers: { Cookie: owner.cookie } });
     assert.equal(ledgerPage.status, 200);
 
