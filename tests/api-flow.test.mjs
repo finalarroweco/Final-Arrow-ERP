@@ -1090,7 +1090,7 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(trial.status, 200); assert.equal(trial.data.scope, "BRANCHES");
     assert.equal(trial.data.rows.find((row) => row.code === "1000").debitBalance, "12.345");
     assert.equal(trial.data.rows.find((row) => row.code === "4000").creditBalance, "12.345");
-    assert.deepEqual(trial.data.summary, [{currency:"OMR",debit:"12.345",credit:"12.345",debitBalance:"12.345",creditBalance:"12.345",balanced:true}]);
+    assert.deepEqual(trial.data.summary, [{currency:journal.data.entry.currency,debit:"12.345",credit:"12.345",debitBalance:"12.345",creditBalance:"12.345",balanced:true}]);
     const trialCsv = await fetch(`${origin}/api/ledger/trial-balance?${ledgerQuery}&format=csv`,{headers:{Cookie:manager.cookie}});
     assert.equal(trialCsv.status,200);assert.equal(trialCsv.headers.get("cache-control"),"private, no-store");
     const trialText=await trialCsv.text();assert.match(trialText,/TOTAL/);assert.match(trialText,/12\.345/);assert.match(trialText,/Cash/);
