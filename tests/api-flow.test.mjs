@@ -1004,6 +1004,68 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(audit.data.entries[0].actorName, "Manager");
     assert.equal("metadata" in audit.data.entries[0], false);
     assert.equal((await get(`/api/audit?tenantId=${randomUUID()}`, owner.cookie)).status, 403);
+    // Audit reports retain organization-only permissions and select whole days in the chosen zone.
+    const auditReportDb = new PrismaClient();
+    const auditFixtureIds = Array.from({length: 4}, () => randomUUID());
+    const auditActorId = audit.data.entries[0].actorId;
+    try {
+      await auditReportDb.auditLog.createMany({data: [
+        ...["2026-09-30T19:59:59Z", "2026-09-30T20:00:00Z", "2026-10-01T19:59:59Z", "2026-10-01T20:00:00Z"].map((createdAt,index) => ({id:auditFixtureIds[index],tenantId,actorId:auditActorId,action:"report.test",entity:"AuditFixture",entityId:`fixture-${index}`,createdAt:new Date(createdAt),metadata:{secret:"excluded-audit-metadata"}})),
+        {tenantId,actorId:null,action:"report.system",entity:"AuditSystemFixture",createdAt:new Date("2026-10-01T10:00:00Z")},
+        {tenantId,actorId:auditActorId,action:"\t=Report",entity:"AuditFormulaFixture",entityId:"=Entity",createdAt:new Date("2026-10-01T12:00:00Z")},
+        ...Array.from({length:52}, (_,index)=>({tenantId,actorId:auditActorId,action:"report.page",entity:"AuditPageFixture",entityId:`page-${index}`,createdAt:new Date("2026-10-01T10:00:00Z")})),
+      ]});
+      const auditPeriod=`tenantId=${tenantId}&from=2026-10-01&to=2026-10-01`;
+      const auditZonePath=`/api/audit/report?${auditPeriod}&entity=AuditFixture&timeZone=Asia%2FMuscat`;
+      assert.equal((await get(auditZonePath,manager.cookie)).status,403);
+      assert.equal((await get(auditZonePath,accepted.cookie)).status,403);
+      assert.equal((await get(auditZonePath,isolatedInvoiceActor.cookie)).status,403);
+      assert.equal((await fetch(origin+auditZonePath)).status,401);
+      const auditZoneReport=await get(auditZonePath,owner.cookie);
+      assert.equal(auditZoneReport.status,200);
+      assert.deepEqual(auditZoneReport.data.rows.map(row=>row.id),[auditFixtureIds[2],auditFixtureIds[1]]);
+      assert.equal(auditZoneReport.data.rows[1].timestamp,"2026-10-01 00:00:00");
+      assert.deepEqual(auditZoneReport.data.summary,{events:2,userEvents:2,systemEvents:0,actions:[{action:"report.test",count:2}],entities:[{entity:"AuditFixture",count:2}],actors:[{actorId:auditActorId,actorName:"Manager",count:2}]});
+      assert.equal("metadata" in auditZoneReport.data.rows[0],false);
+      const auditUTCReport=await get(`/api/audit/report?${auditPeriod}&entity=AuditFixture`,owner.cookie);
+      assert.deepEqual(auditUTCReport.data.rows.map(row=>row.id),[auditFixtureIds[3],auditFixtureIds[2]]);
+      const auditExact=await get(`/api/audit?${auditPeriod}&entityId=fixture-1&actorId=${auditActorId}&timeZone=Asia%2FMuscat`,owner.cookie);
+      assert.deepEqual(auditExact.data.entries.map(row=>row.id),[auditFixtureIds[1]]);
+      assert.equal(auditExact.data.timeZone,"Asia/Muscat");
+      assert.equal((await get(`/api/audit?${auditPeriod}&entityId=fixture-1&actorId=${randomUUID()}&timeZone=Asia%2FMuscat`,owner.cookie)).data.entries.length,0);
+      const auditSystem=await get(`/api/audit/report?${auditPeriod}&actorId=SYSTEM&entity=AuditSystemFixture`,owner.cookie);
+      assert.equal(auditSystem.data.summary.systemEvents,1);
+      assert.equal(auditSystem.data.summary.userEvents,0);
+      assert.equal(auditSystem.data.rows[0].actorName,null);
+      assert.equal((await get(`/api/audit/report?${auditPeriod}&entity=AuditMissingFixture`,owner.cookie)).data.summary.events,0);
+      const auditPages=await get(`/api/audit?${auditPeriod}&entity=AuditPageFixture`,owner.cookie);
+      assert.equal(auditPages.data.entries.length,50);
+      assert.equal(auditPages.data.nextPage,1);
+      assert.equal((await get(`/api/audit?${auditPeriod}&entity=AuditPageFixture&page=1`,owner.cookie)).data.entries.length,2);
+      const auditAllPages=await get(`/api/audit/report?${auditPeriod}&entity=AuditPageFixture`,owner.cookie);
+      assert.equal(auditAllPages.data.summary.events,52);
+      const auditCSVResponse=await fetch(`${origin}/api/audit/report?${auditPeriod}&entity=AuditPageFixture&format=csv`,{headers:{Cookie:owner.cookie}});
+      assert.equal(auditCSVResponse.status,200);
+      assert.equal(auditCSVResponse.headers.get("cache-control"),"private, no-store");
+      assert.equal((await auditCSVResponse.text()).trim().split("\r\n").length,53);
+      const auditFormulaResponse=await fetch(`${origin}/api/audit/report?${auditPeriod}&entity=AuditFormulaFixture&format=csv`,{headers:{Cookie:owner.cookie}});
+      const auditFormulaCSV=await auditFormulaResponse.text();
+      assert.equal(auditFormulaResponse.status,200);
+      assert.ok(auditFormulaCSV.includes('"\'\t=Report"'));
+      assert.ok(auditFormulaCSV.includes('"\'=Entity"'));
+      assert.equal(auditFormulaCSV.includes("excluded-audit-metadata"),false);
+      assert.equal((await get(`/api/audit/report?tenantId=${tenantId}`,owner.cookie)).status,400);
+      assert.equal((await get(`/api/audit/report?tenantId=${tenantId}&from=2026-02-30&to=2026-03-01`,owner.cookie)).status,400);
+      assert.equal((await get(`/api/audit/report?tenantId=${tenantId}&from=2026-01-01&to=2027-01-02`,owner.cookie)).status,400);
+      assert.equal((await get(`/api/audit/report?${auditPeriod}&format=csv&format=json`,owner.cookie)).status,400);
+      assert.equal((await get(`/api/audit/report?${auditPeriod}&timeZone=Europe%2FLondon`,owner.cookie)).status,400);
+      assert.equal((await get(`/api/audit?tenantId=${tenantId}&actorId=SYSTEM&actorId=${auditActorId}`,owner.cookie)).status,400);
+      await auditReportDb.auditLog.createMany({data:Array.from({length:5001},()=>({tenantId,actorId:null,action:"report.limit",entity:"AuditLimitFixture",createdAt:new Date("2026-10-01T10:00:00Z")}))});
+      assert.equal((await get(`/api/audit/report?${auditPeriod}&entity=AuditLimitFixture`,owner.cookie)).status,413);
+    } finally {
+      await auditReportDb.auditLog.deleteMany({where:{tenantId,entity:{in:["AuditFixture","AuditSystemFixture","AuditFormulaFixture","AuditPageFixture","AuditLimitFixture"]}}});
+      await auditReportDb.$disconnect();
+    }
     const correctedTimes = await get(`${timePath}?tenantId=${tenantId}`, manager.cookie);
     assert.equal(correctedTimes.data.totalMinutes, 0);
     assert.equal((await get(`${timePath}/report?${projectReportQuery}`, manager.cookie)).data.summary.totalMinutes, 0);

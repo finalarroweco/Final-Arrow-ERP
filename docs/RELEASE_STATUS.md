@@ -93,3 +93,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Preview 4
 - New versioned bilingual preview with workspace shortcuts, client-side sample-table search, CSV export of visible sample rows, explicit feedback for demonstration actions and responsive sidebar behavior. Demo records only; no persistence or production database.
 - HTML section targets and inline JavaScript syntax validated. Browser execution was unavailable locally because the Chromium executable is not installed.
+
+### Organization activity reports
+- Organization administrators can match exact record/user IDs (or SYSTEM), use UTC or Oman day boundaries, and summarize a required period by action, record type and actor. CSV exports all matching pages with current actor names, IDs and timestamps; metadata remains excluded.
+- Reports require both dates, at most 366 days / 5000 events, and preserve organization-level user-management authorization. List requests ignore stale responses. Preview 5 shows the new summary workflow with sample records.
