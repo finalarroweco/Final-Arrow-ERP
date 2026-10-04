@@ -2,7 +2,7 @@
 import {BalanceSheet} from "./balance-sheet";
 import {IncomeStatement} from "./income-statement";
 import {AccountStatement} from "./statement";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { translate, type Locale } from "@/lib/locale";
 type Option = { tenantId: string; companyId: string; label: string; currency: string; canManageAccounts: boolean; canPost: boolean; branches: { id: string; name: string; canPost: boolean }[] };
 type Account = { id: string; code: string; name: string; type: string };
@@ -17,18 +17,21 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   const [reportQuery,setReportQuery]=useState("");
   const [totals,setTotals]=useState<{currency:string;debit:string;credit:string;debitBalance:string;creditBalance:string;balanced:boolean}[]>([]);
   const [rows,setRows] = useState<Row[]>([]); const [report,setReport] = useState(false);
+  const journalRequest = useRef(0); const accountRequest = useRef(0);
   const [statementVersion,setStatementVersion]=useState(0);
   const [busy,setBusy] = useState(false); const [message,setMessage] = useState("");
   const query = useCallback((extra: Record<string,string> = {}) => new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, ...Object.fromEntries(Object.entries(filters).filter(([,value]) => value)), ...extra }),[option,filters]);
   const load = useCallback(async (number = 0) => {
     if (!option) return;
-    try { const response = await fetch(`/api/ledger/journals?${query({page: String(number)})}`); const data = await response.json(); if (!response.ok) { setMessage(data.error); return; } setEntries(data.entries); setPage(number); setNext(data.nextPage); }
-    catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
+    const request = ++journalRequest.current;
+    try { const response = await fetch(`/api/ledger/journals?${query({page: String(number)})}`); const data = await response.json(); if (request !== journalRequest.current) return; if (!response.ok) { setMessage(data.error); return; } setEntries(data.entries); setPage(number); setNext(data.nextPage); }
+    catch { if (request !== journalRequest.current) return; setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   },[option,query,t]);
   const loadAccounts = useCallback(async (number = 0) => {
     if (!option) return;
-    try { const response = await fetch(`/api/ledger/accounts?${new URLSearchParams({tenantId: option.tenantId, companyId: option.companyId, page: String(number)})}`); const data = await response.json(); if (!response.ok) { setMessage(data.error); return; } setAccounts((old) => number === 0 ? data.accounts : [...old,...data.accounts]); setAccountNext(data.nextPage); }
-    catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
+    const request = ++accountRequest.current;
+    try { const response = await fetch(`/api/ledger/accounts?${new URLSearchParams({tenantId: option.tenantId, companyId: option.companyId, page: String(number)})}`); const data = await response.json(); if (request !== accountRequest.current) return; if (!response.ok) { setMessage(data.error); return; } setAccounts((old) => number === 0 ? data.accounts : [...old,...data.accounts]); setAccountNext(data.nextPage); }
+    catch { if (request !== accountRequest.current) return; setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   },[option,t]);
   useEffect(() => { setRows([]); setReport(false); void load(); },[load]);
   useEffect(() => { void loadAccounts(); },[loadAccounts]);
@@ -41,25 +44,33 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   const types: Record<string,string> = {ASSET:"أصول",LIABILITY:"التزامات",EQUITY:"حقوق ملكية",REVENUE:"إيرادات",EXPENSE:"مصروفات"};
   const createBranches = option.branches.filter((branch) => branch.canPost);
   return <section className="panel">
-    <label>{t("Company", "الشركة")} <select disabled={busy} value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setFilters({from:"",to:"",branchId:""}); setAccounts([]); setEntries([]); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select disabled={busy} value={selected} onChange={(event) => { journalRequest.current++; accountRequest.current++; setSelected(Number(event.target.value)); setFilters({from:"",to:"",branchId:""}); setAccounts([]); setEntries([]); setMessage(""); }}>
       {options.map((scope,index) => <option key={scope.companyId} value={index}>{scope.label}</option>)}</select></label>
     <p>{t("Manual journals are posted immediately and cannot be edited. Corrections create a dated reversal. Invoices, expenses and payroll do not post here automatically yet.", "تُرحّل القيود اليدوية مباشرة ولا يمكن تعديلها. التصحيح ينشئ قيداً عكسياً مؤرخاً. الفواتير والمصاريف والرواتب لا تُرحّل تلقائياً إلى هذا الدفتر حالياً.")}</p>
     {message && <p role="status">{message}</p>}
-    <h2>{t("Chart of accounts", "دليل الحسابات")}</h2>
+    <nav aria-label={t("Ledger sections", "أقسام دفتر الأستاذ")} style={{display:"flex",gap:"1rem",flexWrap:"wrap",marginBlock:"1rem"}}>
+      <a href="#ledger-accounts">{t("Chart of accounts", "دليل الحسابات")}</a>
+      {(option.canPost || option.branches.some(branch=>branch.canPost)) && <a href="#ledger-post">{t("Post journal", "ترحيل القيد")}</a>}
+      <a href="#ledger-balance">{t("Balance sheet", "المركز المالي")}</a>
+      <a href="#ledger-income">{t("Income statement", "قائمة الدخل")}</a>
+      <a href="#ledger-statement">{t("Account statement", "كشف الحساب")}</a>
+      <a href="#ledger-journals">{t("Journals and trial balance", "القيود وميزان المراجعة")}</a>
+    </nav>
+    <h2 id="ledger-accounts">{t("Chart of accounts", "دليل الحسابات")}</h2>
     {option.canManageAccounts && <form action={(form) => save("/api/ledger/accounts",{tenantId:option.tenantId,companyId:option.companyId,code:form.get("code"),name:form.get("name"),type:form.get("type")})}>
       <label>{t("Code", "الرمز")} <input name="code" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Name", "الاسم")} <input name="name" required minLength={2} maxLength={200} /></label>
       <label>{t("Type", "النوع")} <select name="type">{Object.entries(types).map(([type,ar]) => <option key={type} value={type}>{t(type,ar)}</option>)}</select></label><button disabled={busy}>{t("Create account", "إنشاء حساب")}</button></form>}
     {accounts.map((account) => <p key={account.id}>{account.code} · {account.name} · {t(account.type,types[account.type])}</p>)}
     {accountNext !== null && <button disabled={busy} onClick={() => void loadAccounts(accountNext)}>{t("Load more accounts", "تحميل المزيد من الحسابات")}</button>}
     {(option.canPost || createBranches.length > 0) && <form key={option.companyId} action={(form) => save("/api/ledger/journals",{tenantId:option.tenantId,companyId:option.companyId,branchId:form.get("branchId") || null,number:form.get("number"),entryDate:form.get("entryDate"),description:form.get("description"),lines:Array.from({length:lineCount},(_,i) => ({accountId:form.get(`account-${i}`),debit:form.get(`debit-${i}`),credit:form.get(`credit-${i}`)}))})}>
-      <h2>{t("Post a manual journal", "ترحيل قيد يدوي")} · {option.currency}</h2>
+      <h2 id="ledger-post">{t("Post a manual journal", "ترحيل قيد يدوي")} · {option.currency}</h2>
       <label>{t("Number", "الرقم")} <input name="number" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Date", "التاريخ")} <input name="entryDate" type="date" required /></label>
       <label>{t("Description", "الوصف")} <input name="description" required minLength={3} maxLength={500} /></label>
       <label>{t("Branch", "الفرع")} <select name="branchId">{option.canPost && <option value="">{t("Company wide", "على مستوى الشركة")}</option>}{createBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
       {Array.from({length:lineCount},(_,i) => <fieldset key={i}><legend>{t("Line", "السطر")} {i+1}</legend><label>{t("Account", "الحساب")} <select name={`account-${i}`} required defaultValue=""><option value="">{t("Select account", "اختر الحساب")}</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code} · {account.name}</option>)}</select></label>
         <label>{t("Debit", "مدين")} <input name={`debit-${i}`} type="number" min={0} max={999999999999} step="0.001" required defaultValue="0" /></label><label>{t("Credit", "دائن")} <input name={`credit-${i}`} type="number" min={0} max={999999999999} step="0.001" required defaultValue="0" /></label></fieldset>)}
       <button type="button" disabled={busy || lineCount >= 100} onClick={() => setLineCount((count) => count+1)}>{t("Add line", "إضافة سطر")}</button><button type="button" disabled={busy || lineCount <= 2} onClick={() => setLineCount((count) => count-1)}>{t("Remove last line", "إزالة آخر سطر")}</button><button disabled={busy || accounts.length === 0}>{t("Post journal", "ترحيل القيد")}</button></form>}
-    <BalanceSheet key={`balance:${option.companyId}:${statementVersion}`} scope={option} locale={locale}/><IncomeStatement key={`income:${option.companyId}:${statementVersion}`} scope={option} locale={locale}/><AccountStatement key={`${option.companyId}:${statementVersion}`} scope={option} accounts={accounts} locale={locale}/><h2>{t("Journals and trial balance", "القيود وميزان المراجعة")}</h2>
+    <div id="ledger-balance"><BalanceSheet key={`balance:${option.companyId}:${statementVersion}`} scope={option} locale={locale}/></div><div id="ledger-income"><IncomeStatement key={`income:${option.companyId}:${statementVersion}`} scope={option} locale={locale}/></div><div id="ledger-statement"><AccountStatement key={`${option.companyId}:${statementVersion}`} scope={option} accounts={accounts} locale={locale}/></div><h2 id="ledger-journals">{t("Journals and trial balance", "القيود وميزان المراجعة")}</h2>
     <form key={`filters-${option.companyId}`} action={(form) => setFilters({from:String(form.get("from") || ""),to:String(form.get("to") || ""),branchId:String(form.get("branchId") || "")})}>
       <label>{t("From", "من")} <input name="from" type="date" /></label><label>{t("To", "إلى")} <input name="to" type="date" /></label><label>{t("Branch", "الفرع")} <select name="branchId"><option value="">{t("All accessible records", "كل السجلات المتاحة")}</option>{option.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><button disabled={busy}>{t("Apply", "تطبيق")}</button>
       <button type="reset" disabled={busy} onClick={() => setFilters({from:"",to:"",branchId:""})}>{t("Reset", "إعادة الضبط")}</button></form>

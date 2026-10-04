@@ -86,3 +86,6 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Manual-ledger balance sheet
 - As-of inclusive entry-date balances for assets, liabilities, equity and cumulative unclosed revenue/expense earnings; currency-separated balance checks and CSV. Closing journals transfer remaining earnings into equity without double counting.
 - Same ledger branch permissions, 20000-line cap; current account labels, manual journals only. Not consolidated currency conversion, annual retained-earnings automation or statutory statements.
+
+### Ledger navigation and company switching
+- Direct section links for account setup, journal entry and financial reports. Journal/account responses from superseded requests are ignored when switching company or loading another page. Static bilingual previews include report navigation.
