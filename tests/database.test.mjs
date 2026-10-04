@@ -172,6 +172,26 @@ test("database enforces tenant hierarchy and scope shape", async () => {
   await assert.rejects(db.journalLine.update({ where: { id: postedJournal.lines[0].id }, data: { debit: "2.000" } }));
   await assert.rejects(db.journalLine.delete({ where: { id: postedJournal.lines[0].id } }));
 
+  await db.company.update({where:{id:companyA.id},data:{ledgerLockedThrough:new Date("2026-10-01")}});
+  await assert.rejects(db.journalEntry.create({data:{...journalData,number:"JE-LOCK-DB"}}),/closed ledger period/);
+  await assert.rejects(db.journalEntry.create({data:{...journalData,number:"JE-PRIOR-DB",entryDate:new Date("2026-09-30")}}),/closed ledger period/);
+  await db.journalEntry.create({data:{...journalData,number:"JE-OPEN-DB",entryDate:new Date("2026-10-02")}});
+  assert.ok(await db.journalEntry.findUnique({where:{id:postedJournal.id}}));
+  await db.company.update({where:{id:companyA.id},data:{ledgerLockedThrough:null}});
+  await db.journalEntry.create({data:{...journalData,number:"JE-REOPEN-DB"}});
+  // Even a direct database journal writer retains a company share lock until commit.
+  let releaseJournal,signalInserted,rejectInserted;
+  const finishJournal=new Promise(resolve=>{releaseJournal=resolve;});
+  const insertedJournal=new Promise((resolve,reject)=>{signalInserted=resolve;rejectInserted=reject;});
+  const heldJournal=db.$transaction(async tx=>{
+    await tx.journalEntry.create({data:{...journalData,number:"JE-HOLD-DB"}});
+    signalInserted();await finishJournal;
+  },{timeout:10000});
+  heldJournal.catch(rejectInserted);
+  await insertedJournal;
+  try{
+    await assert.rejects(db.$queryRaw`SELECT "id" FROM "Company" WHERE "id"=${companyA.id}::uuid FOR UPDATE NOWAIT`,/lock/);
+  }finally{releaseJournal();await heldJournal;}
   const posDbItem = await db.posItem.create({ data: { tenantId: a.id, companyId: companyA.id, branchId: branchA.id, code: "POS-DB", name: "Coffee", category: "Drinks", price: "1.125", currency: "OMR", createdBy: randomUUID() } });
   const posDbData = { tenantId: a.id, companyId: companyA.id, branchId: branchA.id, number: "POS-DB", type: "TAKEAWAY", total: "3.375", currency: "OMR", createdBy: randomUUID(), lines: { create: [{ itemId: posDbItem.id, itemName: "Coffee", position: 0, quantity: 3, unitPrice: "1.125", amount: "3.375" }] } };
   await assert.rejects(db.posOrder.create({ data: { ...posDbData, total: "3.000" } }));

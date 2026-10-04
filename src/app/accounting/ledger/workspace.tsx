@@ -1,4 +1,5 @@
 "use client";
+import {PeriodLock} from "./period-lock";
 import {BalanceSheet} from "./balance-sheet";
 import {IncomeStatement} from "./income-statement";
 import {AccountStatement} from "./statement";
@@ -17,6 +18,8 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   const [reportQuery,setReportQuery]=useState("");
   const [totals,setTotals]=useState<{currency:string;debit:string;credit:string;debitBalance:string;creditBalance:string;balanced:boolean}[]>([]);
   const [rows,setRows] = useState<Row[]>([]); const [report,setReport] = useState(false);
+  const [lockedThrough,setLockedThrough]=useState<string|null>(null);
+  const periodChanged=useCallback((date:string|null)=>setLockedThrough(date),[]);
   const journalRequest = useRef(0); const accountRequest = useRef(0);
   const [statementVersion,setStatementVersion]=useState(0);
   const [busy,setBusy] = useState(false); const [message,setMessage] = useState("");
@@ -42,13 +45,15 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   }
   if(!option) return <section className="panel"><p>{t("No accessible ledger.", "لا يوجد دفتر أستاذ متاح.")}</p></section>;
   const types: Record<string,string> = {ASSET:"أصول",LIABILITY:"التزامات",EQUITY:"حقوق ملكية",REVENUE:"إيرادات",EXPENSE:"مصروفات"};
+  const firstOpenDate=lockedThrough?new Date(Date.parse(`${lockedThrough}T00:00:00Z`)+86400000).toISOString().slice(0,10):undefined;
   const createBranches = option.branches.filter((branch) => branch.canPost);
   return <section className="panel">
-    <label>{t("Company", "الشركة")} <select disabled={busy} value={selected} onChange={(event) => { journalRequest.current++; accountRequest.current++; setSelected(Number(event.target.value)); setFilters({from:"",to:"",branchId:""}); setAccounts([]); setEntries([]); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select disabled={busy} value={selected} onChange={(event) => { journalRequest.current++; accountRequest.current++; setLockedThrough(null); setSelected(Number(event.target.value)); setFilters({from:"",to:"",branchId:""}); setAccounts([]); setEntries([]); setMessage(""); }}>
       {options.map((scope,index) => <option key={scope.companyId} value={index}>{scope.label}</option>)}</select></label>
     <p>{t("Manual journals are posted immediately and cannot be edited. Corrections create a dated reversal. Invoices, expenses and payroll do not post here automatically yet.", "تُرحّل القيود اليدوية مباشرة ولا يمكن تعديلها. التصحيح ينشئ قيداً عكسياً مؤرخاً. الفواتير والمصاريف والرواتب لا تُرحّل تلقائياً إلى هذا الدفتر حالياً.")}</p>
     {message && <p role="status">{message}</p>}
     <nav aria-label={t("Ledger sections", "أقسام دفتر الأستاذ")} style={{display:"flex",gap:"1rem",flexWrap:"wrap",marginBlock:"1rem"}}>
+      <a href="#ledger-period">{t("Period lock", "قفل الفترة")}</a>
       <a href="#ledger-accounts">{t("Chart of accounts", "دليل الحسابات")}</a>
       {(option.canPost || option.branches.some(branch=>branch.canPost)) && <a href="#ledger-post">{t("Post journal", "ترحيل القيد")}</a>}
       <a href="#ledger-balance">{t("Balance sheet", "المركز المالي")}</a>
@@ -56,6 +61,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
       <a href="#ledger-statement">{t("Account statement", "كشف الحساب")}</a>
       <a href="#ledger-journals">{t("Journals and trial balance", "القيود وميزان المراجعة")}</a>
     </nav>
+    <PeriodLock key={option.companyId} scope={option} locale={locale} onChange={periodChanged}/>
     <h2 id="ledger-accounts">{t("Chart of accounts", "دليل الحسابات")}</h2>
     {option.canManageAccounts && <form action={(form) => save("/api/ledger/accounts",{tenantId:option.tenantId,companyId:option.companyId,code:form.get("code"),name:form.get("name"),type:form.get("type")})}>
       <label>{t("Code", "الرمز")} <input name="code" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Name", "الاسم")} <input name="name" required minLength={2} maxLength={200} /></label>
@@ -64,7 +70,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
     {accountNext !== null && <button disabled={busy} onClick={() => void loadAccounts(accountNext)}>{t("Load more accounts", "تحميل المزيد من الحسابات")}</button>}
     {(option.canPost || createBranches.length > 0) && <form key={option.companyId} action={(form) => save("/api/ledger/journals",{tenantId:option.tenantId,companyId:option.companyId,branchId:form.get("branchId") || null,number:form.get("number"),entryDate:form.get("entryDate"),description:form.get("description"),lines:Array.from({length:lineCount},(_,i) => ({accountId:form.get(`account-${i}`),debit:form.get(`debit-${i}`),credit:form.get(`credit-${i}`)}))})}>
       <h2 id="ledger-post">{t("Post a manual journal", "ترحيل قيد يدوي")} · {option.currency}</h2>
-      <label>{t("Number", "الرقم")} <input name="number" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Date", "التاريخ")} <input name="entryDate" type="date" required /></label>
+      <label>{t("Number", "الرقم")} <input name="number" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Date", "التاريخ")} <input name="entryDate" type="date" min={firstOpenDate} required /></label>
       <label>{t("Description", "الوصف")} <input name="description" required minLength={3} maxLength={500} /></label>
       <label>{t("Branch", "الفرع")} <select name="branchId">{option.canPost && <option value="">{t("Company wide", "على مستوى الشركة")}</option>}{createBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
       {Array.from({length:lineCount},(_,i) => <fieldset key={i}><legend>{t("Line", "السطر")} {i+1}</legend><label>{t("Account", "الحساب")} <select name={`account-${i}`} required defaultValue=""><option value="">{t("Select account", "اختر الحساب")}</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code} · {account.name}</option>)}</select></label>
@@ -81,7 +87,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
       {entry.lines.map((line) => <p key={line.id}>{line.account.code} · {line.account.name} · {t("Debit", "مدين")}: {line.debit} · {t("Credit", "دائن")}: {line.credit}</p>)}
       {entry.reversalOf && <p>{t("Reversal entry", "قيد عكسي")}</p>}{entry.reversal && <p>{t("Reversed by", "تم عكسه بالقيد")}: {entry.reversal.number}</p>}
       {!entry.reversalOf && !entry.reversal && (entry.branchId ? option.branches.find((branch) => branch.id===entry.branchId)?.canPost : option.canPost) && <details><summary>{t("Reverse journal", "عكس القيد")}</summary><form action={(form) => save(`/api/ledger/journals/${entry.id}/reverse`,{tenantId:option.tenantId,number:form.get("number"),entryDate:form.get("entryDate"),reason:form.get("reason")})}>
-        <label>{t("Reversal number", "رقم القيد العكسي")} <input name="number" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Reversal date", "تاريخ العكس")} <input name="entryDate" type="date" min={entry.entryDate.slice(0,10)} required /></label><label>{t("Reason", "السبب")} <input name="reason" required minLength={3} maxLength={500} /></label><button disabled={busy}>{t("Create reversal", "إنشاء قيد عكسي")}</button></form></details>}
+        <label>{t("Reversal number", "رقم القيد العكسي")} <input name="number" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Reversal date", "تاريخ العكس")} <input name="entryDate" type="date" min={firstOpenDate&&firstOpenDate>entry.entryDate.slice(0,10)?firstOpenDate:entry.entryDate.slice(0,10)} required /></label><label>{t("Reason", "السبب")} <input name="reason" required minLength={3} maxLength={500} /></label><button disabled={busy}>{t("Create reversal", "إنشاء قيد عكسي")}</button></form></details>}
     </article>)}
     {entries.length===0 && <p>{t("No journals on this page.", "لا توجد قيود في هذه الصفحة.")}</p>}{page>0 && <button disabled={busy} onClick={() => void load(page-1)}>{t("Previous", "السابق")}</button>}{next!==null && <button disabled={busy} onClick={() => void load(next)}>{t("Next", "التالي")}</button>}
   </section>;

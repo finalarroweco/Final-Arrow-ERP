@@ -97,3 +97,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Organization activity reports
 - Organization administrators can match exact record/user IDs (or SYSTEM), use UTC or Oman day boundaries, and summarize a required period by action, record type and actor. CSV exports all matching pages with current actor names, IDs and timestamps; metadata remains excluded.
 - Reports require both dates, at most 366 days / 5000 events, and preserve organization-level user-management authorization. List requests ignore stale responses. Preview 5 shows the new summary workflow with sample records.
+
+### Company ledger period locks
+- Authorized ledger-period administrators set an inclusive company cutoff, lower it or reopen all dates with an audited reason. Owner roles receive the new permission. Exact expected cutoff checks prevent concurrent changes from overwriting each other.
+- Posting/reversals at or before the cutoff return 409; future-date reversals and reads remain available. SQL insert triggers and shared company locks enforce the cutoff for direct database writers and serialize period changes with journal transactions. Does not create closing entries or lock operational documents.

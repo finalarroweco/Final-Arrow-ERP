@@ -1,3 +1,4 @@
+import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -39,12 +40,15 @@ export async function POST(request: Request) {
   if (await db.ledgerAccount.count({ where: { tenantId, companyId, id: { in: ids } } }) !== ids.length) return NextResponse.json({ error: "Account not found in this company" }, { status: 400 });
   try {
     const entry = await db.$transaction(async (tx) => {
-      const entry = await tx.journalEntry.create({ data: { tenantId, companyId, branchId: branchId ?? null, ...data, entryDate: new Date(`${entryDate}T00:00:00Z`), currency: company.baseCurrency, total: debit, createdBy: actor.id,
+      const postingCompany = await writableLedgerCompany(tx, tenantId, companyId, entryDate);
+      const entry = await tx.journalEntry.create({ data: { tenantId, companyId, branchId: branchId ?? null, ...data, entryDate: new Date(`${entryDate}T00:00:00Z`), currency: postingCompany.baseCurrency, total: debit, createdBy: actor.id,
         lines: { create: lines.map((line, position) => ({ ...line, position })) } }, include: { lines: true } });
       await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: "journal.posted", entity: "JournalEntry", entityId: entry.id } });
       return entry;
     }); return NextResponse.json({ entry }, { status: 201 });
   } catch (error) {
+    if (error instanceof LedgerPeriodClosed) return NextResponse.json({ error: error.message, lockedThrough: error.lockedThrough }, { status: 409 });
+    if (error instanceof LedgerCompanyMissing) return NextResponse.json({ error: "Company not found" }, { status: 404 });
     if (error instanceof Error && "code" in error && error.code === "P2002") return NextResponse.json({ error: "Journal number already in use" }, { status: 409 });
     throw error;
   }

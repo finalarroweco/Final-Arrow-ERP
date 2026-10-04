@@ -1278,6 +1278,51 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(balanceCsv.status,200);assert.equal(balanceCsv.headers.get("cache-control"),"private, no-store");
     const balanceCsvText=await balanceCsv.text();assert.match(balanceCsvText,/EARNINGS/);assert.match(balanceCsvText,/'=Office cost/);assert.match(balanceCsvText,/'-4\.125/);
 
+    const periodLockPath=`/api/ledger/period-lock?${ledgerQuery}`;
+    assert.deepEqual((await get(periodLockPath,owner.cookie)).data,{lockedThrough:null,canManage:true});
+    assert.deepEqual((await get(periodLockPath,manager.cookie)).data,{lockedThrough:null,canManage:false});
+    assert.equal((await get(periodLockPath,accepted.cookie)).status,403);
+    assert.equal((await get(periodLockPath,isolatedInvoiceActor.cookie)).status,403);
+    assert.equal((await get(`${periodLockPath}&companyId=${companyB.data.company.id}`,owner.cookie)).status,400);
+    const lockBody={...accountScope,lockedThrough:"2026-10-04",expectedLockedThrough:null,reason:"Period review completed"};
+    assert.equal((await patch("/api/ledger/period-lock",lockBody,manager.cookie)).status,403);
+    assert.equal((await patch("/api/ledger/period-lock",lockBody,accepted.cookie)).status,403);
+    assert.equal((await patch("/api/ledger/period-lock",lockBody,isolatedInvoiceActor.cookie)).status,403);
+    assert.equal((await patch("/api/ledger/period-lock",{...lockBody,lockedThrough:"2026-02-30"},owner.cookie)).status,400);
+    assert.equal((await patch("/api/ledger/period-lock",{...lockBody,reason:""},owner.cookie)).status,400);
+    const lockedPeriod=await patch("/api/ledger/period-lock",lockBody,owner.cookie);
+    assert.deepEqual(lockedPeriod.data,{lockedThrough:"2026-10-04",changed:true});
+    assert.equal(lockedPeriod.status,200);
+    assert.equal((await get(periodLockPath,manager.cookie)).data.lockedThrough,"2026-10-04");
+    assert.equal((await get(`/api/ledger/period-lock?tenantId=${tenantId}&companyId=${companyB.data.company.id}`,owner.cookie)).data.lockedThrough,null);
+    assert.equal((await patch("/api/ledger/period-lock",{...lockBody,lockedThrough:null},owner.cookie)).status,409);
+    assert.equal((await patch("/api/ledger/period-lock",{...lockBody,expectedLockedThrough:"2026-10-04"},owner.cookie)).data.changed,false);
+    for(const entryDate of ["2026-10-01","2026-10-04"]){
+      const deniedJournal=await post("/api/ledger/journals",{...journalBody,number:`JE-LOCK-${entryDate.replaceAll("-","")}`,entryDate},manager.cookie);
+      assert.equal(deniedJournal.status,409);
+      assert.equal(deniedJournal.data.lockedThrough,"2026-10-04");
+    }
+    assert.equal((await post("/api/ledger/journals",{...journalBody,branchId:branchB.data.branch.id,number:"JE-LOCK-B",entryDate:"2026-10-04"},owner.cookie)).status,409);
+    const lockedReversalBody={tenantId,number:"JE-LOCK-REV",entryDate:"2026-10-04",reason:"Correct previous entry"};
+    assert.equal((await post(`/api/ledger/journals/${otherBranchJournal.id}/reverse`,lockedReversalBody,owner.cookie)).status,409);
+    assert.equal((await get(balanceSheetPath,owner.cookie)).data.summary[0].assets,"8.220");
+    assert.equal((await fetch(`${origin}/accounting/ledger/journals/${journal.data.entry.id}`,{headers:{Cookie:owner.cookie}})).status,200);
+    assert.equal((await post("/api/ledger/journals",{...journalBody,number:"JE-OPEN-A",entryDate:"2026-10-05"},manager.cookie)).status,201);
+    assert.equal((await post(`/api/ledger/journals/${otherBranchJournal.id}/reverse`,{...lockedReversalBody,entryDate:"2026-10-05"},owner.cookie)).status,201);
+    const periodAudit=await get(`/api/audit?tenantId=${tenantId}&action=ledger-period.locked&entityId=${companyA.data.company.id}`,owner.cookie);
+    assert.equal(periodAudit.data.entries.length,1);
+    const lockAuditDb=new PrismaClient();
+    try{
+      const recordedLock=await lockAuditDb.auditLog.findUnique({where:{id:periodAudit.data.entries[0].id}});
+      assert.deepEqual(recordedLock.metadata,{previousLockedThrough:null,lockedThrough:"2026-10-04",reason:"Period review completed"});
+    }finally{await lockAuditDb.$disconnect();}
+    assert.equal((await patch("/api/ledger/period-lock",{...lockBody,lockedThrough:"2026-10-02",expectedLockedThrough:"2026-10-04",reason:"Reopen later dates for corrections"},owner.cookie)).status,200);
+    assert.equal((await post("/api/ledger/journals",{...journalBody,number:"JE-REOPENED",entryDate:"2026-10-03"},manager.cookie)).status,201);
+    assert.equal((await patch("/api/ledger/period-lock",{...lockBody,lockedThrough:null,expectedLockedThrough:"2026-10-02",reason:"Reopen all dates for review"},owner.cookie)).status,200);
+    const competingLocks=await Promise.all(["2026-10-04","2026-10-05"].map(lockedThrough=>patch("/api/ledger/period-lock",{...lockBody,lockedThrough},owner.cookie)));
+    assert.deepEqual(competingLocks.map(result=>result.status).sort(),[200,409]);
+    const winningLock=competingLocks.find(result=>result.status===200).data.lockedThrough;
+    assert.equal((await patch("/api/ledger/period-lock",{...lockBody,lockedThrough:null,expectedLockedThrough:winningLock,reason:"End concurrency test"},owner.cookie)).status,200);
     const posScope = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id };
     const menuBody = { ...posScope, code: "MENU-A", name: "Coffee", category: "Drinks", price: "1.125" };
     assert.equal((await post("/api/pos/items", menuBody, accepted.cookie)).status, 403);
