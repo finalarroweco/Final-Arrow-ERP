@@ -78,3 +78,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Goods receipt documents
 - Authorized bilingual print/PDF and JSON/CSV goods-receipt documents show saved supplier/order descriptions and quantities, current item catalog fields and stock-movement references.
 - Requires both order-read access in the source scope and stock-read access in the receiving branch. Full receipts only; no valuation, payments, partial receipts or returns.
+
+### Manual-ledger income statement
+- Scoped income statement uses posted revenue/expense account movements, exact currency-separated revenue, expenses and net income/loss; reversals and closing journals remain included. Required inclusive entry dates, 366-day / 20000 relevant-line limits, CSV export.
+- Uses current chart account names and manual postings; not automatically fed by documents or a complete statutory financial statement.
