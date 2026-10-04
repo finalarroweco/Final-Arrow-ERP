@@ -71,3 +71,6 @@ Project task registers support title, status and deadline filters. Deadline summ
 
 ### Journal print documents
 - Bilingual authorized manual-journal views show debit/credit totals, dates, current account names and reversal references; print/save PDF from browser. Related-document links require independent ledger permission.
+
+### Trial balance export
+- Currency-separated debit/credit movement and balance totals, balance check, CSV account rows and total rows with scope/date filters. Same ledger permissions and 20000-line cap as JSON; formula-safe CSV. Start dates still select period movements, not historical opening balances.
