@@ -1127,6 +1127,15 @@ test("invitation is single-use and a branch viewer sees only their company and b
     const statementText = await statementCsv.text();
     assert.match(statementText, /OPENING/); assert.match(statementText, /CLOSING/); assert.match(statementText, /REVERSAL/);
     assert.equal((await get(`${statementPath}&from=2020-01-01`, owner.cookie)).status, 400);
+    for (const [entryId,number,relatedNumber] of [[journal.data.entry.id,"JE-001","JE-REV-001"],[reversal.data.entry.id,"JE-REV-001","JE-001"]]) {
+      const journalDocument = await fetch(`${origin}/accounting/ledger/journals/${entryId}`, {headers:{Cookie:manager.cookie}});
+      assert.equal(journalDocument.status, 200);
+      const journalHtml = await journalDocument.text();
+      assert.match(journalHtml,new RegExp(number));assert.match(journalHtml,new RegExp(relatedNumber));assert.match(journalHtml,/12\.345/);
+      assert.equal((await fetch(`${origin}/accounting/ledger/journals/${entryId}`, {headers:{Cookie:accepted.cookie}})).status,404);
+    }
+    const otherBranchJournal = (await get(`/api/ledger/journals?${ledgerQuery}&branchId=${branchB.data.branch.id}`,owner.cookie)).data.entries[0];
+    assert.equal((await fetch(`${origin}/accounting/ledger/journals/${otherBranchJournal.id}`,{headers:{Cookie:manager.cookie}})).status,404);
     const ledgerPage = await fetch(`${origin}/accounting/ledger`, { headers: { Cookie: owner.cookie } });
     assert.equal(ledgerPage.status, 200);
 
