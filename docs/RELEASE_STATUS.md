@@ -82,3 +82,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Manual-ledger income statement
 - Scoped income statement uses posted revenue/expense account movements, exact currency-separated revenue, expenses and net income/loss; reversals and closing journals remain included. Required inclusive entry dates, 366-day / 20000 relevant-line limits, CSV export.
 - Uses current chart account names and manual postings; not automatically fed by documents or a complete statutory financial statement.
+
+### Manual-ledger balance sheet
+- As-of inclusive entry-date balances for assets, liabilities, equity and cumulative unclosed revenue/expense earnings; currency-separated balance checks and CSV. Closing journals transfer remaining earnings into equity without double counting.
+- Same ledger branch permissions, 20000-line cap; current account labels, manual journals only. Not consolidated currency conversion, annual retained-earnings automation or statutory statements.

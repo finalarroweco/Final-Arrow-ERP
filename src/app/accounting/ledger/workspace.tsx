@@ -1,4 +1,5 @@
 "use client";
+import {BalanceSheet} from "./balance-sheet";
 import {IncomeStatement} from "./income-statement";
 import {AccountStatement} from "./statement";
 import { useCallback, useEffect, useState } from "react";
@@ -58,7 +59,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
       {Array.from({length:lineCount},(_,i) => <fieldset key={i}><legend>{t("Line", "السطر")} {i+1}</legend><label>{t("Account", "الحساب")} <select name={`account-${i}`} required defaultValue=""><option value="">{t("Select account", "اختر الحساب")}</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code} · {account.name}</option>)}</select></label>
         <label>{t("Debit", "مدين")} <input name={`debit-${i}`} type="number" min={0} max={999999999999} step="0.001" required defaultValue="0" /></label><label>{t("Credit", "دائن")} <input name={`credit-${i}`} type="number" min={0} max={999999999999} step="0.001" required defaultValue="0" /></label></fieldset>)}
       <button type="button" disabled={busy || lineCount >= 100} onClick={() => setLineCount((count) => count+1)}>{t("Add line", "إضافة سطر")}</button><button type="button" disabled={busy || lineCount <= 2} onClick={() => setLineCount((count) => count-1)}>{t("Remove last line", "إزالة آخر سطر")}</button><button disabled={busy || accounts.length === 0}>{t("Post journal", "ترحيل القيد")}</button></form>}
-    <IncomeStatement key={`income:${option.companyId}:${statementVersion}`} scope={option} locale={locale}/><AccountStatement key={`${option.companyId}:${statementVersion}`} scope={option} accounts={accounts} locale={locale}/><h2>{t("Journals and trial balance", "القيود وميزان المراجعة")}</h2>
+    <BalanceSheet key={`balance:${option.companyId}:${statementVersion}`} scope={option} locale={locale}/><IncomeStatement key={`income:${option.companyId}:${statementVersion}`} scope={option} locale={locale}/><AccountStatement key={`${option.companyId}:${statementVersion}`} scope={option} accounts={accounts} locale={locale}/><h2>{t("Journals and trial balance", "القيود وميزان المراجعة")}</h2>
     <form key={`filters-${option.companyId}`} action={(form) => setFilters({from:String(form.get("from") || ""),to:String(form.get("to") || ""),branchId:String(form.get("branchId") || "")})}>
       <label>{t("From", "من")} <input name="from" type="date" /></label><label>{t("To", "إلى")} <input name="to" type="date" /></label><label>{t("Branch", "الفرع")} <select name="branchId"><option value="">{t("All accessible records", "كل السجلات المتاحة")}</option>{option.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><button disabled={busy}>{t("Apply", "تطبيق")}</button>
       <button type="reset" disabled={busy} onClick={() => setFilters({from:"",to:"",branchId:""})}>{t("Reset", "إعادة الضبط")}</button></form>

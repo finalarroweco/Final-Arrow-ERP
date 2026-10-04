@@ -1185,6 +1185,37 @@ test("invitation is single-use and a branch viewer sees only their company and b
     assert.equal(incomeCsv.status,200);assert.equal(incomeCsv.headers.get("cache-control"),"private, no-store");
     const incomeCsvText=await incomeCsv.text();assert.match(incomeCsvText,/'=Office cost/);assert.match(incomeCsvText,/NET INCOME/);assert.match(incomeCsvText,/'-4\.125/);
 
+    const balanceSheetPath=`/api/ledger/balance-sheet?${ledgerQuery}&to=2026-10-02`;
+    const companyBalanceSheet=await get(balanceSheetPath,owner.cookie);
+    assert.equal(companyBalanceSheet.status,200);
+    assert.deepEqual(companyBalanceSheet.data.summary,[{currency:journal.data.entry.currency,assets:"8.220",liabilities:"0.000",equity:"0.000",earnings:"8.220",equityAndEarnings:"8.220",difference:"0.000",balanced:true}]);
+    const branchBalanceSheet=await get(balanceSheetPath,manager.cookie);
+    assert.equal(branchBalanceSheet.data.summary[0].assets,"-4.125");
+    assert.equal(branchBalanceSheet.data.summary[0].earnings,"-4.125");
+    assert.equal(branchBalanceSheet.data.summary[0].balanced,true);
+    assert.equal((await get(balanceSheetPath,accepted.cookie)).status,403);
+    assert.equal((await get(`${balanceSheetPath}&branchId=${branchB.data.branch.id}`,manager.cookie)).status,403);
+    assert.equal((await get(`${balanceSheetPath}&to=2026-10-03`,owner.cookie)).status,400);
+    assert.equal((await get(balanceSheetPath.replace("2026-10-02","2026-02-30"),owner.cookie)).status,400);
+    const retainedAccount=await post("/api/ledger/accounts",{...accountScope,code:"3000",name:"Retained earnings",type:"EQUITY"},owner.cookie);
+    assert.equal(retainedAccount.status,201);
+    const closeJournal=await post("/api/ledger/journals",{...journalBody,number:"JE-CLOSE",entryDate:"2026-10-03",description:"Close branch expense balance",lines:[{accountId:retainedAccount.data.account.id,debit:"4.125",credit:"0"},{accountId:costAccount.data.account.id,debit:"0",credit:"4.125"}]},owner.cookie);
+    assert.equal(closeJournal.status,201);
+    const closedBalanceSheet=await get(balanceSheetPath.replace("2026-10-02","2026-10-03"),manager.cookie);
+    assert.equal(closedBalanceSheet.data.summary[0].earnings,"0.000");
+    assert.equal(closedBalanceSheet.data.summary[0].equity,"-4.125");
+    assert.equal(closedBalanceSheet.data.summary[0].assets,"-4.125");
+    assert.equal(closedBalanceSheet.data.summary[0].balanced,true);
+    assert.equal((await get(balanceSheetPath,manager.cookie)).data.summary[0].earnings,"-4.125");
+    const loanAccount=await post("/api/ledger/accounts",{...accountScope,code:"2000",name:"Loan",type:"LIABILITY"},owner.cookie);
+    assert.equal(loanAccount.status,201);
+    assert.equal((await post("/api/ledger/journals",{...journalBody,number:"JE-FUND",entryDate:"2026-10-04",description:"Loan and equity funding",lines:[{accountId:cash.data.account.id,debit:"10",credit:"0"},{accountId:loanAccount.data.account.id,debit:"0",credit:"6"},{accountId:retainedAccount.data.account.id,debit:"0",credit:"4"}]},owner.cookie)).status,201);
+    const fundedBalanceSheet=await get(balanceSheetPath.replace("2026-10-02","2026-10-04"),manager.cookie);
+    assert.deepEqual(fundedBalanceSheet.data.summary,[{currency:journal.data.entry.currency,assets:"5.875",liabilities:"6.000",equity:"-0.125",earnings:"0.000",equityAndEarnings:"-0.125",difference:"0.000",balanced:true}]);
+    const balanceCsv=await fetch(`${origin}${balanceSheetPath}&format=csv`,{headers:{Cookie:manager.cookie}});
+    assert.equal(balanceCsv.status,200);assert.equal(balanceCsv.headers.get("cache-control"),"private, no-store");
+    const balanceCsvText=await balanceCsv.text();assert.match(balanceCsvText,/EARNINGS/);assert.match(balanceCsvText,/'=Office cost/);assert.match(balanceCsvText,/'-4\.125/);
+
     const posScope = { tenantId, companyId: companyA.data.company.id, branchId: branchA.data.branch.id };
     const menuBody = { ...posScope, code: "MENU-A", name: "Coffee", category: "Drinks", price: "1.125" };
     assert.equal((await post("/api/pos/items", menuBody, accepted.cookie)).status, 403);
