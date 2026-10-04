@@ -1,11 +1,16 @@
-# Staging setup after the interface review
+# Persistent staging database and live application
 
-The HTML walkthrough at `/erp-preview-v2.html` is sample data. It is separate from the authenticated Next.js application. Use the following steps when a staging PostgreSQL database and hosting target are ready; no production data is needed for the first review.
+Database activation is now authorized. No persistent ERP database has been provisioned yet. The available connected Supabase organization is `Final Arrow Health`; its existing Health and NAYROQ projects are unrelated to ERP. Create a separate `Final Arrow ERP` project after the organization is selected and the provider's cost is reviewed. The Neon connector currently requires a known project ID and does not expose project discovery/creation.
 
-1. Create an isolated PostgreSQL 16 database for staging and a database user limited to that database. Keep its connection URL in the host's secret settings as `DATABASE_URL`; do not commit it.
-2. Deploy this repository as a Node.js Next.js application with `npm ci`, `npm run build` and `npm run start`. Use Node.js 24, matching CI. Run `npx prisma migrate deploy` against the staging database before starting the new version.
-3. Enable `ALLOW_REGISTRATION=true` only long enough to register the first Owner on the private staging URL; turn it off afterwards. This application does not yet implement email verification, recovery or login throttling, so do not open public registration.
-4. Enter a small fictional tenant with two companies and separate branches, then verify Owner, Manager and Viewer access, invitation acceptance, quote to order to invoice, supplier to purchase order to receipt, stock, projects, leave, expenses and tickets.
-5. Keep staging separate from production. Back up the database, use HTTPS, and review logs and access controls before inviting real users. Financial and HR modules remain internal prototypes and are not ready for regulatory use.
+## Connection and migration setup
 
-The current CI uses a temporary PostgreSQL service and verifies migrations and API flows. A successful CI run does not create a persistent database or a public application URL.
+1. Use a dedicated ERP PostgreSQL database. Keep `DATABASE_URL` and `DIRECT_DATABASE_URL` in the hosting secret store and an ignored local environment file; never commit credentials. `DATABASE_URL` is the application connection, and `DIRECT_DATABASE_URL` is the direct migration connection. On local PostgreSQL they can be identical. For a managed provider, copy both from its console and require TLS.
+2. Run `npm ci`, `npm run db:deploy`, then `npm run db:status`. Deploy the committed migration history; do not use `db push` or copy raw tables. CI already validates all migrations against an isolated PostgreSQL 16 service.
+3. Deploy the repository as a Node.js Next.js application with `npm run build` and `npm run start`, using Node.js 24 as in CI. The hosting target has not been provisioned. A database alone does not create a live app URL.
+4. Use a private HTTPS staging URL for initial setup. Temporarily enable `ALLOW_REGISTRATION=true`, register the first Owner through the application, then set it back to `false`. Password hashing runs before the short registration transaction; role permissions are inserted in batches to avoid remote-database round trips. Never write a reusable default administrator password into the repository.
+5. Create a fictional organization with two companies and branches. Verify Owner/Manager/Viewer permissions, invitations, quote → order → invoice, purchase → receipt → stock, HR, project time, payroll, POS/kitchen, reports and ledger period locks.
+6. Keep CI's synthetic API/database fixture tests on an isolated test database. They insert and remove their own fixtures and must not be run against the persistent staging database or production data.
+
+The application retains its own authentication and scoped access controls. PostgreSQL is used on the server through Prisma; do not expose its credentials to clients. If Supabase is chosen, keep ERP tables in a private schema or disable Data API exposure; do not grant anonymous or Supabase-authenticated access to ERP data. Supabase Auth is not used by this application.
+
+The latest HTML walkthrough is `/erp-preview-v6.html`, using sample records only. It is separate from the authenticated application. Account email verification/recovery, payment integrations and regulatory accounting remain unfinished; see `RELEASE_STATUS.md` for module limits.

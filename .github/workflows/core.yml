@@ -27,6 +27,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://erp:erp@localhost:5432/final_arrow_erp?schema=public
+      DIRECT_DATABASE_URL: postgresql://erp:erp@localhost:5432/final_arrow_erp?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

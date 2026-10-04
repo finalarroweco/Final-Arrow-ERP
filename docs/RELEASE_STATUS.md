@@ -101,3 +101,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Company ledger period locks
 - Authorized ledger-period administrators set an inclusive company cutoff, lower it or reopen all dates with an audited reason. Owner roles receive the new permission. Exact expected cutoff checks prevent concurrent changes from overwriting each other.
 - Posting/reversals at or before the cutoff return 409; future-date reversals and reads remain available. SQL insert triggers and shared company locks enforce the cutoff for direct database writers and serialize period changes with journal transactions. Does not create closing entries or lock operational documents.
+
+### Persistent database activation preparation
+- User authorized starting a persistent database when needed. ERP cloud project is not provisioned yet; provider organization/project selection and hosting remain pending. Existing Health/NAYROQ projects remain separate.
+- Prisma now separates application DATABASE_URL from DIRECT_DATABASE_URL for migrations; CI and environment example set both. db:deploy/db:status scripts and setup documentation are ready. Registration hashes passwords outside the transaction and batches shared permission/role-permission inserts to reduce remote-database latency while preserving existing roles.
