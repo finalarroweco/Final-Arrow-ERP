@@ -528,6 +528,22 @@ test("invitation is single-use and a branch viewer sees only their company and b
       balance.itemId === itemA.data.item.id).quantity, "6.375");
     assert.equal((await get(stockPath, accepted.cookie)).data.movements.length, 4);
 
+    const receiptReadPath = `/api/purchase-orders/receipts/${receipt.data.receipt.id}`;
+    const receiptRead = await get(receiptReadPath, accepted.cookie);
+    assert.equal(receiptRead.status,200);
+    assert.equal(receiptRead.data.receipt.order.number,"PO-001");
+    assert.equal(receiptRead.data.receipt.order.supplierName,"Updated Supplier");
+    assert.equal(receiptRead.data.receipt.lines[0].quantity,"3");
+    assert.equal(receiptRead.data.receipt.lines[0].movement.type,"PURCHASE_RECEIPT");
+    assert.equal((await get(receiptReadPath,isolatedInvoiceActor.cookie)).status,404);
+    assert.equal((await fetch(`${origin}${receiptReadPath}`)).status,401);
+    assert.equal((await get(`${receiptReadPath}?format=pdf`,owner.cookie)).status,400);
+    const receiptCsv = await fetch(`${origin}${receiptReadPath}?format=csv`,{headers:{Cookie:manager.cookie}});
+    assert.equal(receiptCsv.status,200);assert.equal(receiptCsv.headers.get("cache-control"),"private, no-store");
+    const receiptCsvText=await receiptCsv.text();assert.match(receiptCsvText,/ITEM-A/);assert.match(receiptCsvText,/3\.000/);assert.match(receiptCsvText,/Packaging/);
+    const receiptDocument=await fetch(`${origin}/purchasing/receipts/${receipt.data.receipt.id}`,{headers:{Cookie:accepted.cookie}});
+    assert.equal(receiptDocument.status,200);assert.match(await receiptDocument.text(),/PO-001/);
+    assert.equal((await fetch(`${origin}/purchasing/receipts/${receipt.data.receipt.id}`,{headers:{Cookie:isolatedInvoiceActor.cookie}})).status,404);
     const stockReportDay = (await get(stockPath, accepted.cookie)).data.movements[0].createdAt.slice(0,10);
     const stockReportQuery = new URLSearchParams({tenantId,companyId:companyA.data.company.id,branchId:branchA.data.branch.id,itemId:itemA.data.item.id,from:stockReportDay,to:stockReportDay,timeZone:"UTC"});
     const stockMovementReport = await get(`/api/inventory/stock/report?${stockReportQuery}`, accepted.cookie);

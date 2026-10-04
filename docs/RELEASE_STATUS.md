@@ -74,3 +74,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 
 ### Trial balance export
 - Currency-separated debit/credit movement and balance totals, balance check, CSV account rows and total rows with scope/date filters. Same ledger permissions and 20000-line cap as JSON; formula-safe CSV. Start dates still select period movements, not historical opening balances.
+
+### Goods receipt documents
+- Authorized bilingual print/PDF and JSON/CSV goods-receipt documents show saved supplier/order descriptions and quantities, current item catalog fields and stock-movement references.
+- Requires both order-read access in the source scope and stock-read access in the receiving branch. Full receipts only; no valuation, payments, partial receipts or returns.

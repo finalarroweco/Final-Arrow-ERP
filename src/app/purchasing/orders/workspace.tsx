@@ -145,7 +145,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       return <article key={order.id}><div><h3>{order.number} · {order.supplierName}</h3><a href={`/purchasing/orders/${order.id}`}>{t("View / print purchase order","عرض / طباعة أمر الشراء")}</a>
         <p>{t(order.status, ({ DRAFT: "مسودة", ISSUED: "مصدر", RECEIVED: "مستلم", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
         <ul>{order.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
-        {order.receipt && <p>{t("Received into", "تم الاستلام في")} {scope.branches.find((branch) => branch.id === order.receipt?.branchId)?.name ?? t("branch", "فرع")}</p>}
+        {order.receipt && <p><a href={`/purchasing/receipts/${order.receipt.id}`}>{t("View / print goods receipt","عرض / طباعة مستند الاستلام")}</a> · {t("Received into", "تم الاستلام في")} {scope.branches.find((branch) => branch.id === order.receipt?.branchId)?.name ?? t("branch", "فرع")}</p>}
         {canManage && <div className="quote-actions">
           {order.status === "DRAFT" && <><button disabled={busy} onClick={() => void change(order, "issue")}>{t("Mark issued", "إصدار الأمر")}</button>
             <button disabled={busy} onClick={() => void change(order, "cancel")}>{t("Cancel", "إلغاء")}</button></>}
