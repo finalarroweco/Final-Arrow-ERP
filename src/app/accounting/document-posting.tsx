@@ -4,7 +4,7 @@ import { translate, type Locale } from "@/lib/locale";
 type Account = {id:string;code:string;name:string;type:string};
 type Entry = {id:string;number:string;reversal?:{id:string;number:string}|null};
 export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible}: {
-  kind:"invoice"|"expense";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;
+  kind:"invoice"|"expense"|"pos";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;
 }) {
   const t=(en:string,ar:string)=>translate(locale,en,ar);
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);
@@ -38,7 +38,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible}:
     } catch {setMessage(t("Connection failed. Recheck the journal before retrying.","فشل الاتصال. تحقق من القيد قبل إعادة المحاولة."));setLoaded(false);}
     finally {setBusy(false);}
   }
-  const debitTypes=kind==="invoice"?["ASSET"]:["EXPENSE"],creditTypes=kind==="invoice"?["REVENUE"]:["ASSET","LIABILITY"];
+  const debitTypes=kind!=="expense"?["ASSET"]:["EXPENSE"],creditTypes=kind!=="expense"?["REVENUE"]:["ASSET","LIABILITY"];
   return <div className="document-posting">
     <button type="button" disabled={busy} onClick={()=>open?setOpen(false):void inspect()}>{t("Ledger posting","الترحيل المحاسبي")}</button>
     {open&&<div>

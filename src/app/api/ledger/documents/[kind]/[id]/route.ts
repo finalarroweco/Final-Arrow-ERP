@@ -8,7 +8,7 @@ import { dueDate } from "@/lib/date";
 import { documentJournal, documentJournalNumber, lockDocument, type DocumentKind } from "@/lib/document-journal";
 import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
 const uuid = z.string().uuid();
-const pathSchema = z.object({ kind: z.enum(["invoice", "expense"]), id: uuid });
+const pathSchema = z.object({ kind: z.enum(["invoice", "expense", "pos"]), id: uuid });
 const bodySchema = z.object({ tenantId: uuid, entryDate: dueDate, debitAccountId: uuid, creditAccountId: uuid }).strict();
 type Context = { params: Promise<{ kind: string; id: string }> };
 class PostingConflict extends Error {}
@@ -16,6 +16,10 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
   if (kind === "invoice") {
     const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } } });
     return row && { ...row, amount: row.subtotal, date: row.issuedAt?.toISOString().slice(0,10), eligible: row.status === "ISSUED" };
+  }
+  if (kind === "pos") {
+    const row = await client.posOrder.findFirst({where:{tenantId,id}});
+    return row && {...row,amount:row.total,date:row.paidAt?.toISOString().slice(0,10),eligible:row.status === "PAID"};
   }
   const row = await client.expense.findUnique({ where: { tenantId_id: { tenantId, id } } });
   return row && { ...row, date: row.expenseDate.toISOString().slice(0,10), eligible: row.status === "POSTED" };
@@ -52,7 +56,7 @@ export async function POST(request: Request, context: Context) {
     const entry = await db.$transaction(async tx => {
       await lockDocument(tx,kind,tenantId,id);
       const row = await source(kind,tenantId,id,tx);
-      if (!row?.eligible || !row.date) throw new PostingConflict("Issue the invoice or approve the expense before ledger posting");
+      if (!row?.eligible || !row.date) throw new PostingConflict("Issue the invoice, approve the expense or record POS payment before ledger posting");
       if (entryDate < row.date) throw new PostingConflict("Journal date cannot precede the document date");
       if (await documentJournal(tx,kind,tenantId,row.companyId,id)) throw new PostingConflict("Document already has a ledger journal, including if reversed");
       const company = await writableLedgerCompany(tx,tenantId,row.companyId,entryDate);
@@ -61,18 +65,18 @@ export async function POST(request: Request, context: Context) {
       const accounts = await tx.ledgerAccount.findMany({where:{tenantId,companyId:row.companyId,id:{in:[debitAccountId,creditAccountId]}}});
       const debit = accounts.find(a=>a.id===debitAccountId), credit = accounts.find(a=>a.id===creditAccountId);
       if (debitAccountId === creditAccountId || !debit || !credit ||
-        (kind === "invoice" ? debit.type !== "ASSET" || credit.type !== "REVENUE" :
+        (kind !== "expense" ? debit.type !== "ASSET" || credit.type !== "REVENUE" :
           debit.type !== "EXPENSE" || !["ASSET","LIABILITY"].includes(credit.type)))
-        throw new PostingConflict("Invoice requires asset debit / revenue credit; expense requires expense debit / asset or liability credit in the same company");
+        throw new PostingConflict("Invoice/POS requires asset debit / revenue credit; expense requires expense debit / asset or liability credit in the same company");
       const journal = await tx.journalEntry.create({data:{tenantId,companyId:row.companyId,branchId:row.branchId,
         number:documentJournalNumber(kind,id),entryDate:new Date(`${entryDate}T00:00:00Z`),
-        description:`${kind === "invoice" ? "Invoice" : "Expense"} ${row.number}`,
+        description:`${kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : "POS"} ${row.number}`,
         currency:row.currency,total:row.amount,createdBy:actor.id,lines:{create:[
           {position:0,accountId:debit.id,debit:row.amount,credit:new Prisma.Decimal(0)},
           {position:1,accountId:credit.id,debit:new Prisma.Decimal(0),credit:row.amount},
         ]}},select:{id:true,number:true}});
       await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:`${kind}.ledger_posted`,
-        entity:kind === "invoice" ? "Invoice" : "Expense",entityId:id,metadata:{journalId:journal.id,journalNumber:journal.number,amount:row.amount.toString(),currency:row.currency}}});
+        entity:kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : "PosOrder",entityId:id,metadata:{journalId:journal.id,journalNumber:journal.number,amount:row.amount.toString(),currency:row.currency}}});
       return journal;
     },{timeout:15000,maxWait:10000});
     return NextResponse.json({entry},{status:201});

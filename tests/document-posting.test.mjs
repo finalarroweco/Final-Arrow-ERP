@@ -48,7 +48,7 @@ test("document posting is exact, scoped, single-use and reversal-safe",{timeout:
     assert.deepEqual(competing.map(r=>r.status).sort(),[201,409]);
     const journal=competing.find(r=>r.status===201).data.entry;
     assert.equal(journal.number.length,30);
-    const saved=await db.journalEntry.findUnique({where:{id:journal.id},include:{lines:true}});
+    const saved=await db.journalEntry.findUnique({where:{id:journal.id},include:{lines:{orderBy:{position:"asc"}}}});
     assert.equal(saved.total.toFixed(3),"6.375");assert.equal(saved.lines[0].debit.toFixed(3),"6.375");assert.equal(saved.lines[1].credit.toFixed(3),"6.375");
     assert.equal((await call(invoicePath+`?tenantId=${tenantId}`,"GET",undefined,cookie)).data.entry.id,journal.id);
     assert.equal((await call(`/api/invoices/${invoice.id}/status`,"PATCH",{tenantId,action:"void",reason:"Correction"},cookie)).status,409);
@@ -65,10 +65,21 @@ test("document posting is exact, scoped, single-use and reversal-safe",{timeout:
     assert.equal((await call(`/api/ledger/journals/${posted.data.entry.id}/reverse`,"POST",{tenantId,number:"REV-EXPENSE",entryDate:day,reason:"Correction"},cookie)).status,201);
     assert.equal((await call(`/api/expenses/${expense.id}/status`,"PATCH",{tenantId,action:"void",reason:"Correction"},cookie)).status,200);
     assert.equal((await call(expensePath,"POST",expenseBody,cookie)).status,409);
+    const {branch}=await create("/api/branches",{companyId,name:"Main",code:"MAIN"});
+    const {item}=await create("/api/pos/items",{companyId,branchId:branch.id,code:"FOOD",name:"Meal",category:"Food",price:"3.125"});
+    const {order:posOrder}=await create("/api/pos/orders",{companyId,branchId:branch.id,number:"POS-POST",type:"TAKEAWAY",lines:[{itemId:item.id,quantity:2}]});
+    const posPath=`/api/ledger/documents/pos/${posOrder.id}`;
+    assert.equal((await call(posPath,"POST",body,cookie)).status,409,"open POS cannot post");
+    assert.equal((await call(`/api/pos/orders/${posOrder.id}`,"PATCH",{tenantId,action:"pay",tendered:"10.000"},cookie)).status,200);
+    const posPosted=await call(posPath,"POST",body,cookie);assert.equal(posPosted.status,201,JSON.stringify(posPosted.data));
+    const posJournal=await db.journalEntry.findUnique({where:{id:posPosted.data.entry.id}});
+    assert.equal(posJournal.total.toFixed(3),"6.250","post revenue, not cash tendered");assert.equal(posJournal.branchId,branch.id);
+    assert.equal((await call(posPath,"POST",body,cookie)).status,409);
+    assert.equal((await call(`/api/ledger/journals/${posJournal.id}/reverse`,"POST",{tenantId,number:"REV-POS",entryDate:day,reason:"QA correction"},cookie)).status,201);
     const reserved=await call("/api/ledger/journals","POST",{tenantId,companyId,number:journal.number,entryDate:day,description:"Reserved reference",lines:[{accountId:asset.id,debit:"1",credit:"0"},{accountId:revenue.id,debit:"0",credit:"1"}]},cookie);
     assert.equal(reserved.status,400);
     const trial=await call(`/api/ledger/trial-balance?tenantId=${tenantId}&companyId=${companyId}`,"GET",undefined,cookie);assert.equal(trial.status,200);
     assert.ok(trial.data.rows.every(row=>row.debitBalance==="0.000"&&row.creditBalance==="0.000"));
-    assert.equal(await db.auditLog.count({where:{tenantId,action:{in:["invoice.ledger_posted","expense.ledger_posted"]}}}),2);
+    assert.equal(await db.auditLog.count({where:{tenantId,action:{in:["invoice.ledger_posted","expense.ledger_posted","pos.ledger_posted"]}}}),3);
   } finally {server.kill("SIGTERM");await db.$disconnect();}
 });
