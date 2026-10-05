@@ -20,13 +20,22 @@ export function DashboardWorkspace({ options, locale }: { options: Option[]; loc
     const scope = options[index];
     if (!scope) return;
     const currentRequest = ++requestNumber.current;
-    setSummary(null);
-    const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId });
-    const response = await fetch(`/api/dashboard?${query}`);
-    const data = await response.json();
-    if (currentRequest !== requestNumber.current) return;
-    if (!response.ok) { setError(data.error ?? t("Could not load dashboard", "تعذر تحميل لوحة المعلومات")); return; }
-    setSummary(data); setError("");
+    setSummary(null); setError("");
+    try {
+      const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId });
+      const response = await fetch(`/api/dashboard?${query}`);
+      const data = await response.json();
+      if (currentRequest !== requestNumber.current) return;
+      if (!response.ok) {
+        setError(data.error ?? t("Could not load dashboard", "تعذر تحميل لوحة المعلومات"));
+        return;
+      }
+      setSummary(data);
+    } catch {
+      if (currentRequest !== requestNumber.current) return;
+      setError(t("Could not load activity. Check your connection and refresh.",
+        "تعذر تحميل النشاط. تحقق من اتصالك واضغط تحديث."));
+    }
   }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
   if (!options.length) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;

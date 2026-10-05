@@ -38,3 +38,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .panel textarea{width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;font:inherit;resize:vertical}
 
 .header-actions{display:flex;align-items:center;gap:20px}.language-switcher{background:transparent;color:#b80000;border:1px solid #ddd;padding:8px 12px;font-size:13px}html[dir="rtl"]{font-family:Tahoma,Arial,sans-serif}html[dir="rtl"] h1{letter-spacing:0}html[dir="rtl"] article ul{padding-left:0;padding-right:20px}html[dir="rtl"] .panel [role="status"]{border-left:0;border-right:3px solid #d60000}
+
+.module-launcher{margin:0 0 35px;padding:24px;background:#fff;border:1px solid #e8e8e8;border-radius:16px}
+.module-launcher h2{margin:0 0 10px}.module-launcher>p{color:#666;line-height:1.6}
+.module-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:22px}
+.module-groups h3{font-size:15px}.module-groups ul{list-style:none;padding:0;margin:0}
+.module-groups a{display:block;padding:9px 0;font-size:14px;text-underline-offset:3px}
+.module-groups a:focus-visible{outline:2px solid #d60000;outline-offset:3px;border-radius:3px}

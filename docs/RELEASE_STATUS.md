@@ -1,6 +1,6 @@
 # Final Arrow ERP release status
 
-This repository is an expanding product foundation. The bilingual `/erp-preview-v3.html` preview contains sample data and does not save changes. It is a separately maintained interface walkthrough, so app changes do not appear there automatically. The authenticated app needs PostgreSQL and has not been deployed for public use.
+This repository is an expanding product foundation. The bilingual `/erp-preview-v6.html` preview contains sample data and does not save changes. It is a separately maintained interface walkthrough, so app changes do not appear there automatically. The authenticated app is deployed at https://final-arrow-erp.vercel.app/dashboard with a dedicated PostgreSQL database. Vercel authentication protects all deployments. The owner account and Final Arrow / FA01 company in OMR are configured; registration is closed.
 
 | Area | Current implementation | Remaining work |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections and scoped time reports | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
-| Accounting | Internal invoice and expense registers with filtered reports, CSV export and printable internal invoices, company chart of accounts, immutable balanced manual journals, dated reversals and scoped trial balance | Automatic document posting, periods/closing, bank reconciliation, taxes, accounts payable and receivable |
+| Accounting | Internal invoice and expense registers with filtered reports, CSV export and printable internal invoices, company chart of accounts, immutable balanced manual journals, dated reversals and scoped trial balance | Automatic document posting, automated closing, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
 | POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV and a kitchen queue | Shifts, refunds, tax, kitchen printers, device payment, stock recipes and ledger posting |
 | Other planned modules | Preview cards only | Subscriptions, documents, AI and automation |
@@ -109,3 +109,13 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### 2026-10-05 — Persistent ERP database provisioned
 
 Dedicated Supabase ERP project in Mumbai is healthy. All 31 Prisma migrations and migrate status succeeded in Core checks #83 (retry after credential correction). Verified 47 public tables, zero unfinished migrations, zero users, and no anon/authenticated public table grants. Temporary bootstrap job removed; application hosting and owner bootstrap remain pending.
+
+### 2026-10-05 — Live review checkpoint
+
+Vercel hosting, owner bootstrap and the real Final Arrow company are complete. Earlier preparation entries above describe historical states. Registration is disabled after bootstrap. Runtime connections use Supabase transaction pooling, one connection per serverless instance; migrations retain the session connection.
+
+Dashboard permission checks are batched in both the page and API. The dashboard now links to all 23 implemented module screens; destination permissions remain independently enforced. Network/JSON failures show a retry message instead of leaving the activity loader indefinitely.
+
+Core checks #87 passed migrations, scope/database tests, build and API flows in isolated PostgreSQL. Live read-only checks confirmed the dashboard, customers, employees and manual ledger load. The real company has no branch yet, so POS setup cannot proceed until a branch is created. Full live operational acceptance remains outstanding; no synthetic business records have been inserted into the real company.
+
+This is an initial review build, not a complete ERP release. Automatic financial posting, tax, banking, payment devices, fingerprint attendance, email recovery and the preview-only modules remain pending.
