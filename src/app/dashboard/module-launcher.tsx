@@ -12,7 +12,7 @@ const groups = [
   ] },
   { en: "Purchasing & inventory", ar: "المشتريات والمخزون", links: [
     ["/purchasing/suppliers", "Suppliers", "الموردون"], ["/purchasing/orders", "Purchase orders", "طلبات الشراء"],
-    ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],
+    ["/purchasing/receipts", "Goods receipts", "استلام البضائع"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],
   ] },
   { en: "People & operations", ar: "الموظفون والعمليات", links: [
     ["/hr/employees", "Employees", "الموظفون"], ["/hr/attendance", "Attendance", "الحضور"],
