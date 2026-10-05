@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
-import { readableCompanyBranches } from "@/lib/access";
+import { readableCompanyPermissions } from "@/lib/access";
 import { db } from "@/lib/db";
 
 const uuid = z.string().uuid();
@@ -15,17 +15,11 @@ export async function GET(request: Request) {
   if (!tenantId.success || !companyId.success)
     return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
   const scope = { userId: actor.id, tenantId: tenantId.data, companyId: companyId.data };
+  const permissions = ["customer:read", "lead:read", "quote:read", "order:read",
+    "project:read", "employee:read", "expense:read", "ticket:read"];
+  const access = await readableCompanyPermissions({ ...scope, permissions });
   const [customerBranches, leadBranches, quoteBranches, orderBranches,
-    projectBranches, employeeBranches, expenseBranches, ticketBranches] = await Promise.all([
-    readableCompanyBranches({ ...scope, permission: "customer:read" }),
-    readableCompanyBranches({ ...scope, permission: "lead:read" }),
-    readableCompanyBranches({ ...scope, permission: "quote:read" }),
-    readableCompanyBranches({ ...scope, permission: "order:read" }),
-    readableCompanyBranches({ ...scope, permission: "project:read" }),
-    readableCompanyBranches({ ...scope, permission: "employee:read" }),
-    readableCompanyBranches({ ...scope, permission: "expense:read" }),
-    readableCompanyBranches({ ...scope, permission: "ticket:read" }),
-  ]);
+    projectBranches, employeeBranches, expenseBranches, ticketBranches] = permissions.map(key => access[key]);
   if ([customerBranches, leadBranches, quoteBranches, orderBranches,
     projectBranches, employeeBranches, expenseBranches, ticketBranches].every((value) => value === false))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
