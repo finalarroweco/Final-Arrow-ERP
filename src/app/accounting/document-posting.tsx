@@ -12,7 +12,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible}:
   const [nextPage,setNextPage]=useState<number|null>(null),[message,setMessage]=useState("");
   const endpoint=`/api/ledger/documents/${kind}/${id}`;
   async function accountPage(page:number) {
-    const response=await fetch(`/api/ledger/accounts?${new URLSearchParams({...scope,page:String(page)})}`);
+    const response=await fetch(`/api/ledger/accounts?${new URLSearchParams({tenantId:scope.tenantId,companyId:scope.companyId,page:String(page)})}`);
     if (!response.ok) throw new Error("accounts");
     const data=await response.json();setAccounts(old=>page===0?data.accounts:[...old,...data.accounts]);setNextPage(data.nextPage);
   }

@@ -70,7 +70,7 @@ test("document posting is exact, scoped, single-use and reversal-safe",{timeout:
     const {order:posOrder}=await create("/api/pos/orders",{companyId,branchId:branch.id,number:"POS-POST",type:"TAKEAWAY",lines:[{itemId:item.id,quantity:2}]});
     const posPath=`/api/ledger/documents/pos/${posOrder.id}`;
     assert.equal((await call(posPath,"POST",body,cookie)).status,409,"open POS cannot post");
-    assert.equal((await call(`/api/pos/orders/${posOrder.id}`,"PATCH",{tenantId,action:"pay",tendered:"10.000"},cookie)).status,200);
+    assert.equal((await call(`/api/pos/orders/${posOrder.id}`,"PATCH",{tenantId,action:"pay",method:"CASH",tendered:"10.000"},cookie)).status,200);
     const posPosted=await call(posPath,"POST",body,cookie);assert.equal(posPosted.status,201,JSON.stringify(posPosted.data));
     const posJournal=await db.journalEntry.findUnique({where:{id:posPosted.data.entry.id}});
     assert.equal(posJournal.total.toFixed(3),"6.250","post revenue, not cash tendered");assert.equal(posJournal.branchId,branch.id);
