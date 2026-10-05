@@ -9,6 +9,11 @@ type Employee = { id: string; fullName: string; code: string; branchId: string |
 type Entry = { id: string; employeeName: string; employeeCode: string; branchId: string | null; period: string;
   baseSalary: string; allowances: string; deductions: string; netPay: string; currency: string;
   status: "DRAFT" | "APPROVED" | "PAID" | "VOID"; paymentReference: string | null; voidReason: string | null; note: string | null };
+function grossPay(entry: Entry) {
+  const units = (value: string) => { const [whole, fraction = ""] = value.split("."); return BigInt(whole) * BigInt(1000) + BigInt(fraction.padEnd(3,"0")); };
+  const gross = units(entry.baseSalary) + units(entry.allowances);
+  return `${gross / BigInt(1000)}.${String(gross % BigInt(1000)).padStart(3,"0")}`;
+}
 export function PayrollWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [selected, setSelected] = useState(0); const [month, setMonth] = useState("");
@@ -107,7 +112,7 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
         <p><strong>{t("Net pay", "صافي الراتب")}: {entry.netPay} {entry.currency}</strong></p>
         {entry.note && <p>{entry.note}</p>}{entry.paymentReference && <p>{t("Payment reference", "مرجع الصرف")}: {entry.paymentReference}</p>}{entry.voidReason && <p>{entry.voidReason}</p>}
         {rights?.canPostLedger && entry.status !== "DRAFT" && <DocumentPosting key={`${option.companyId}:${entry.id}:${entry.status}`} kind="payroll" id={entry.id} scope={option} locale={locale}
-          amount={`(${entry.baseSalary} + ${entry.allowances})`} deductions={entry.deductions} currency={entry.currency} eligible={["APPROVED","PAID"].includes(entry.status)} />}
+          amount={grossPay(entry)} deductions={entry.deductions} currency={entry.currency} eligible={["APPROVED","PAID"].includes(entry.status)} />}
         {rights?.canApprove && entry.status === "DRAFT" && <button disabled={busy} onClick={() => void mutate(`/api/payroll/${entry.id}`, "PATCH", { tenantId: option.tenantId, action: "approve" })}>{t("Approve", "اعتماد")}</button>}
         {rights?.canPay && entry.status === "APPROVED" && <form action={(form) => mutate(`/api/payroll/${entry.id}`, "PATCH", { tenantId: option.tenantId, action: "pay", reference: form.get("reference") })}>
           <label>{t("Payment reference", "مرجع الصرف")} <input name="reference" minLength={3} maxLength={200} required /></label><button disabled={busy}>{t("Record payment", "تسجيل الصرف")}</button></form>}

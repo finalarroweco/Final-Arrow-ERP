@@ -33,7 +33,7 @@ export default async function PayrollPage() {
         .map(async (branch) => ({ id: branch.id, name: branch.name, ...await rights(branch.id) }))) };
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/accounting/invoices">{t("Invoices", "الفواتير")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
-    <section className="hero"><p>{t("HUMAN RESOURCES", "الموارد البشرية")}</p><h1>{t("Monthly payroll.", "الرواتب الشهرية.")}</h1><p className="sub">{t("Prepare manual payroll entries, approve and record payment.", "جهّز سجلات الرواتب يدوياً واعتمدها وسجّل صرفها.")}</p></section>
+    <section className="hero"><p>{t("HUMAN RESOURCES", "الموارد البشرية")}</p><h1>{t("Monthly payroll.", "الرواتب الشهرية.")}</h1><p className="sub">{t("Prepare payroll entries, approve, post accrual journals and record payment.", "جهّز سجلات الرواتب واعتمدها ورحّل قيود الاستحقاق وسجّل صرفها.")}</p></section>
     <PayrollWorkspace options={options} locale={locale} />
   </main>;
 }
