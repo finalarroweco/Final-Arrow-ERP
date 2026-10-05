@@ -3,8 +3,8 @@ import { useState, type FormEvent } from "react";
 import { translate, type Locale } from "@/lib/locale";
 type Account = {id:string;code:string;name:string;type:string};
 type Entry = {id:string;number:string;reversal?:{id:string;number:string}|null};
-export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible}: {
-  kind:"invoice"|"expense"|"pos";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;
+export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,deductions}: {
+  kind:"invoice"|"expense"|"pos"|"payroll";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;deductions?:string;
 }) {
   const t=(en:string,ar:string)=>translate(locale,en,ar);
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);
@@ -32,17 +32,21 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible}:
     try {
       const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
         tenantId:scope.tenantId,entryDate:form.get("entryDate"),debitAccountId:form.get("debitAccountId"),creditAccountId:form.get("creditAccountId"),
+        ...(kind === "payroll" && hasDeductions ? {deductionAccountId:form.get("deductionAccountId")} : {}),
       })});const data=await response.json();
       if (!response.ok) {setMessage(data.error??t("Posting failed","تعذر الترحيل"));return;}
       setEntry(data.entry);setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));
     } catch {setMessage(t("Connection failed. Recheck the journal before retrying.","فشل الاتصال. تحقق من القيد قبل إعادة المحاولة."));setLoaded(false);}
     finally {setBusy(false);}
   }
-  const debitTypes=kind!=="expense"?["ASSET"]:["EXPENSE"],creditTypes=kind!=="expense"?["REVENUE"]:["ASSET","LIABILITY"];
+  const hasDeductions=Boolean(deductions && /[1-9]/.test(deductions));
+  const debitTypes=["expense","payroll"].includes(kind)?["EXPENSE"]:["ASSET"];
+  const creditTypes=kind === "payroll"?["LIABILITY"]:kind === "expense"?["ASSET","LIABILITY"]:["REVENUE"];
   return <div className="document-posting">
     <button type="button" disabled={busy} onClick={()=>open?setOpen(false):void inspect()}>{t("Ledger posting","الترحيل المحاسبي")}</button>
     {open&&<div>
       <p>{t("Posts this document once as a balanced journal. Select the correct accounts; this does not collect or send money.","يُرحّل هذا المستند مرة واحدة بقيد متوازن. اختر الحسابات المناسبة؛ لا تُحصّل أو تُحوّل أموالاً من هنا.")}</p>
+      {kind === "payroll" && <p>{t("Accrual: debit gross salary and allowances; credit net payroll payable and a separate deduction account. Choose a liability for amounts owed to others, or an expense offset for salary reductions. Payment settlement is recorded separately with a manual journal; recording payroll payment does not settle this liability.","قيد الاستحقاق: إجمالي الأساسي والبدلات مدين، وصافي الرواتب المستحقة والخصومات دائن. اختر للخصومات حساب التزام للمبالغ المستحقة للغير أو حساب مصروف مقابل لتخفيضات الراتب. تسوية الصرف بقيد يدوي منفصل؛ تسجيل صرف الراتب لا يسوّي هذا الالتزام.")}</p>}
       {message&&<p role="status">{message}</p>}
       {busy&&<p role="status">{t("Working…","جاري التنفيذ…")}</p>}
       {!loaded&&!busy&&<button type="button" onClick={()=>void inspect()}>{t("Check again","إعادة التحقق")}</button>}
@@ -56,10 +60,14 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible}:
             <option value="">{t("Select account","اختر الحساب")}</option>
             {accounts.filter(a=>debitTypes.includes(a.type)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
           </select></label>
-          <label>{t("Credit account","الحساب الدائن")} <select name="creditAccountId" required disabled={busy} defaultValue="">
+          <label>{kind === "payroll" ? t("Net payroll payable account","حساب صافي الرواتب المستحقة") : t("Credit account","الحساب الدائن")} <select name="creditAccountId" required disabled={busy} defaultValue="">
             <option value="">{t("Select account","اختر الحساب")}</option>
             {accounts.filter(a=>creditTypes.includes(a.type)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
           </select></label>
+          {kind === "payroll" && hasDeductions && <label>{t("Deduction account","حساب الخصومات")} · {deductions} {currency} <select name="deductionAccountId" required disabled={busy} defaultValue="">
+            <option value="">{t("Select account","اختر الحساب")}</option>
+            {accounts.filter(a=>["LIABILITY","EXPENSE"].includes(a.type)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
+          </select></label>}
           {nextPage!==null&&<button type="button" disabled={busy} onClick={async()=>{setBusy(true);try{await accountPage(nextPage);}catch{setMessage(t("Could not load more accounts","تعذر تحميل المزيد من الحسابات"));}finally{setBusy(false);}}}>{t("More accounts","المزيد من الحسابات")}</button>}
           <a href="/accounting/ledger#ledger-accounts">{t("Set up chart of accounts","إعداد دليل الحسابات")}</a>
           <button disabled={busy}>{t("Post balanced journal","ترحيل القيد المتوازن")}</button>

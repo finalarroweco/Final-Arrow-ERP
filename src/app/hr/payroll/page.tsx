@@ -20,6 +20,8 @@ export default async function PayrollPage() {
       companyId: company.id, permission: "payroll:read" });
     if (visible === false) return null;
     const rights = async (branchId?: string) => ({
+      canPostLedger: (await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "ledger:post" })) &&
+        (await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "ledger:read" })),
       canCreate: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "payroll:create" }),
       canApprove: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "payroll:approve" }),
       canPay: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "payroll:pay" }),

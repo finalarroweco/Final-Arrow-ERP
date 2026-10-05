@@ -10,9 +10,9 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections and scoped time reports | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
-| Accounting | Internal invoice and expense registers with filtered reports, CSV export and printable internal invoices, company chart of accounts, immutable balanced manual journals, dated reversals and scoped trial balance | Automatic document posting, automated closing, bank reconciliation, taxes, accounts payable and receivable |
+| Accounting | Internal invoice and expense registers, company chart of accounts, balanced manual and source-linked invoice/expense/POS/payroll journals, reversals, period locks and financial reports | Payment settlement workflows, automated closing, bank reconciliation, taxes, accounts payable and receivable |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
-| POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV and a kitchen queue | Shifts, refunds, tax, kitchen printers, device payment, stock recipes and ledger posting |
+| POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV and a kitchen queue | Shifts, refunds, tax, kitchen printers, device payment, stock recipes |
 | Other planned modules | Preview cards only | Subscriptions, documents, AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
 
@@ -77,7 +77,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 
 ### Goods receipt documents
 - Authorized bilingual print/PDF and JSON/CSV goods-receipt documents show saved supplier/order descriptions and quantities, current item catalog fields and stock-movement references.
-- Requires both order-read access in the source scope and stock-read access in the receiving branch. Full receipts only; no valuation, payments, partial receipts or returns.
+- Requires both order-read access in the source scope and stock-read access in the receiving branch. Full receipts only; complete inventory-only corrections are available. No valuation, payments, partial receipts or supplier credit documents.
 
 ### Manual-ledger income statement
 - Scoped income statement uses posted revenue/expense account movements, exact currency-separated revenue, expenses and net income/loss; reversals and closing journals remain included. Required inclusive entry dates, 366-day / 20000 relevant-line limits, CSV export.
@@ -135,3 +135,11 @@ Paid POS orders also support source-linked posting (SYSP- prefix): asset debit /
 Stock operators can reverse a complete historical stock movement with a required reason. The server copies the exact opposite Decimal quantity into a new movement dated now, keeps the original, prevents negative/overflow balances, and serializes duplicate corrections with a source row lock. A deterministic correction ID additionally enforces single-use through the stock movement primary key. Reversal movements cannot themselves be reversed.
 
 Recent movements identify corrected originals and correction rows. Purchase-receipt corrections additionally require read access to the originating purchase order. These correct inventory quantities only: receipt/order history stays intact; no supplier credit, refund, tax or valuation entry is created. Partial supplier returns remain pending. The isolated API flow covers insufficient stock, concurrent corrections, duplicate/reversal rejection, exact fractional quantities, access and full receipt quantity return. Stock list requests discard responses from a previous branch and show network failures.
+
+### Payroll accrual journals and branch readiness
+
+Approved or paid payroll entries can explicitly post a single accrual journal. Exact base salary plus allowances debit an expense account; net pay credits a payroll liability, and positive deductions credit a separate liability or expense-offset account selected by the operator. Gross pay must be positive; zero net pay omits the zero liability line. All accounts must belong to the company, and journal dates cannot precede the payroll month or fall in a locked period. SYSR- references prevent duplicate posting even after reversal. Payroll row locks serialize posting with status changes; approved accrued payroll requires reversal before voiding. Source data and audit events remain preserved.
+
+This recognizes manually entered payroll only. Payment recording does not settle the ledger liability; settlement still uses a separate manual journal. Deduction rules, taxes, insurance and bank transfers are not calculated or performed. The register exposes accrual posting only to ledger-read/post operators and ignores stale list/employee responses after company changes. Isolated API fixtures cover exact split quantities, zero net pay, invalid accounts, scope, periods, concurrent duplicates and reversal/void behavior.
+
+The real Final Arrow company now has one main branch (MAIN). Live inventory review confirmed the branch and empty stock register; no synthetic operational data was inserted. Core checks #94 passed the full stock correction flow.

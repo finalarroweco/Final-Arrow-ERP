@@ -8,11 +8,17 @@ import { dueDate } from "@/lib/date";
 import { documentJournal, documentJournalNumber, lockDocument, type DocumentKind } from "@/lib/document-journal";
 import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
 const uuid = z.string().uuid();
-const pathSchema = z.object({ kind: z.enum(["invoice", "expense", "pos"]), id: uuid });
-const bodySchema = z.object({ tenantId: uuid, entryDate: dueDate, debitAccountId: uuid, creditAccountId: uuid }).strict();
+const pathSchema = z.object({ kind: z.enum(["invoice", "expense", "pos", "payroll"]), id: uuid });
+const bodySchema = z.object({ tenantId: uuid, entryDate: dueDate, debitAccountId: uuid, creditAccountId: uuid, deductionAccountId: uuid.optional() }).strict();
 type Context = { params: Promise<{ kind: string; id: string }> };
 class PostingConflict extends Error {}
 async function source(kind: DocumentKind, tenantId: string, id: string, client: Prisma.TransactionClient = db) {
+  if (kind === "payroll") {
+    const row = await client.payrollEntry.findUnique({where:{tenantId_id:{tenantId,id}}});
+    return row && {...row, amount:row.baseSalary.plus(row.allowances),
+      number:`${row.employeeCode} ${row.period.toISOString().slice(0,7)}`,
+      date:row.period.toISOString().slice(0,10), eligible:["APPROVED","PAID"].includes(row.status)};
+  }
   if (kind === "invoice") {
     const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } } });
     return row && { ...row, amount: row.subtotal, date: row.issuedAt?.toISOString().slice(0,10), eligible: row.status === "ISSUED" };
@@ -48,7 +54,8 @@ export async function POST(request: Request, context: Context) {
   const body = bodySchema.safeParse(await request.json().catch(()=>null));
   if (!path.success || !body.success) return NextResponse.json({error:"Invalid document posting"},{status:400});
   const {kind,id} = path.data;
-  const {tenantId,entryDate,debitAccountId,creditAccountId} = body.data;
+  const {tenantId,entryDate,debitAccountId,creditAccountId,deductionAccountId} = body.data;
+  if (kind !== "payroll" && deductionAccountId) return NextResponse.json({error:"Deduction account is only supported for payroll"},{status:400});
   const initial = await source(kind,tenantId,id);
   if (!initial) return NextResponse.json({error:"Document not found"},{status:404});
   if (!(await permitted(actor.id,kind,tenantId,initial,true))) return NextResponse.json({error:"Forbidden"},{status:403});
@@ -56,27 +63,36 @@ export async function POST(request: Request, context: Context) {
     const entry = await db.$transaction(async tx => {
       await lockDocument(tx,kind,tenantId,id);
       const row = await source(kind,tenantId,id,tx);
-      if (!row?.eligible || !row.date) throw new PostingConflict("Issue the invoice, approve the expense or record POS payment before ledger posting");
+      if (!row?.eligible || !row.date) throw new PostingConflict("Issue the invoice, approve the expense/payroll or record POS payment before ledger posting");
       if (entryDate < row.date) throw new PostingConflict("Journal date cannot precede the document date");
       if (await documentJournal(tx,kind,tenantId,row.companyId,id)) throw new PostingConflict("Document already has a ledger journal, including if reversed");
       const company = await writableLedgerCompany(tx,tenantId,row.companyId,entryDate);
       if (row.currency !== company.baseCurrency) throw new PostingConflict("Document currency differs from company currency");
       if (!row.amount.gt(0) || row.amount.gte("1000000000000000")) throw new PostingConflict("Document amount is outside the supported positive range");
-      const accounts = await tx.ledgerAccount.findMany({where:{tenantId,companyId:row.companyId,id:{in:[debitAccountId,creditAccountId]}}});
+      const accounts = await tx.ledgerAccount.findMany({where:{tenantId,companyId:row.companyId,id:{in:[debitAccountId,creditAccountId,...(deductionAccountId?[deductionAccountId]:[])]}}});
       const debit = accounts.find(a=>a.id===debitAccountId), credit = accounts.find(a=>a.id===creditAccountId);
       if (debitAccountId === creditAccountId || !debit || !credit ||
-        (kind !== "expense" ? debit.type !== "ASSET" || credit.type !== "REVENUE" :
+        (kind === "payroll" ? debit.type !== "EXPENSE" || credit.type !== "LIABILITY" : kind !== "expense" ? debit.type !== "ASSET" || credit.type !== "REVENUE" :
           debit.type !== "EXPENSE" || !["ASSET","LIABILITY"].includes(credit.type)))
-        throw new PostingConflict("Invoice/POS requires asset debit / revenue credit; expense requires expense debit / asset or liability credit in the same company");
+        throw new PostingConflict("Invalid document account types: payroll requires expense debit / payroll liability credit in the same company");
+      const zero = new Prisma.Decimal(0);
+      const lines = [{position:0,accountId:debit.id,debit:row.amount,credit:zero}];
+      if (kind === "payroll" && "deductions" in row) {
+        if (!row.netPay.plus(row.deductions).eq(row.amount)) throw new PostingConflict("Payroll amounts are inconsistent");
+        if (row.netPay.gt(0)) lines.push({position:lines.length,accountId:credit.id,debit:zero,credit:row.netPay});
+        if (row.deductions.gt(0)) {
+          const deduction=accounts.find(a=>a.id===deductionAccountId);
+          if (!deduction || !["LIABILITY","EXPENSE"].includes(deduction.type) || [debit.id,credit.id].includes(deduction.id))
+            throw new PostingConflict("Choose a separate deduction liability or expense-offset account in this company");
+          lines.push({position:lines.length,accountId:deduction.id,debit:zero,credit:row.deductions});
+        } else if (deductionAccountId) throw new PostingConflict("No payroll deductions to post");
+      } else lines.push({position:1,accountId:credit.id,debit:zero,credit:row.amount});
       const journal = await tx.journalEntry.create({data:{tenantId,companyId:row.companyId,branchId:row.branchId,
         number:documentJournalNumber(kind,id),entryDate:new Date(`${entryDate}T00:00:00Z`),
-        description:`${kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : "POS"} ${row.number}`,
-        currency:row.currency,total:row.amount,createdBy:actor.id,lines:{create:[
-          {position:0,accountId:debit.id,debit:row.amount,credit:new Prisma.Decimal(0)},
-          {position:1,accountId:credit.id,debit:new Prisma.Decimal(0),credit:row.amount},
-        ]}},select:{id:true,number:true}});
+        description:`${kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : kind === "payroll" ? "Payroll accrual" : "POS"} ${row.number}`,
+        currency:row.currency,total:row.amount,createdBy:actor.id,lines:{create:lines}},select:{id:true,number:true}});
       await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:`${kind}.ledger_posted`,
-        entity:kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : "PosOrder",entityId:id,metadata:{journalId:journal.id,journalNumber:journal.number,amount:row.amount.toString(),currency:row.currency}}});
+        entity:kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : kind === "payroll" ? "PayrollEntry" : "PosOrder",entityId:id,metadata:{journalId:journal.id,journalNumber:journal.number,amount:row.amount.toString(),currency:row.currency}}});
       return journal;
     },{timeout:15000,maxWait:10000});
     return NextResponse.json({entry},{status:201});

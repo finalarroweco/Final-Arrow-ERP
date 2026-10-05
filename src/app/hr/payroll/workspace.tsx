@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { translate, type Locale } from "@/lib/locale";
-type Rights = { canCreate: boolean; canApprove: boolean; canPay: boolean; canVoid: boolean };
+import { DocumentPosting } from "../../accounting/document-posting";
+type Rights = { canPostLedger: boolean; canCreate: boolean; canApprove: boolean; canPay: boolean; canVoid: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string; companyRights: Rights;
   branches: ({ id: string; name: string } & Rights)[] };
 type Employee = { id: string; fullName: string; code: string; branchId: string | null };
@@ -18,24 +19,27 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
   const [employeePage, setEmployeePage] = useState<number | null>(null);
   const [page, setPage] = useState(0); const [next, setNext] = useState<number | null>(null);
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const option = options[selected];
+  const listRequest = useRef(0), employeeRequest = useRef(0);
   const load = useCallback(async (number = 0) => {
     if (!option) return;
+    const request = ++listRequest.current;
     try {
       const response = await fetch(`/api/payroll?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number), ...(month ? { period: month } : {}), ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) })}`);
-      const data = await response.json(); if (!response.ok) { setMessage(data.error); return; }
+      const data = await response.json(); if (request !== listRequest.current) return; if (!response.ok) { setMessage(data.error); return; }
       setEntries(data.entries); setPage(number); setNext(data.nextPage);
-    } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
+    } catch { if (request === listRequest.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [option, month, filters, t]);
   const loadEmployees = useCallback(async (number = 0) => {
     if (!option || !(option.companyRights.canCreate || option.branches.some((branch) => branch.canCreate))) return;
+    const request = ++employeeRequest.current;
     try {
       const response = await fetch(`/api/employees?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number) })}`);
-      const data = await response.json(); if (!response.ok) { setMessage(data.error); return; }
+      const data = await response.json(); if (request !== employeeRequest.current) return; if (!response.ok) { setMessage(data.error); return; }
       setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage);
-    } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
+    } catch { if (request === employeeRequest.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [option, t]);
-  useEffect(() => { setSummary([]); setReportReady(false); void load(); }, [load]);
-  useEffect(() => { void loadEmployees(); }, [loadEmployees]);
+  useEffect(() => { setSummary([]); setReportReady(false); void load(); return () => { listRequest.current++; }; }, [load]);
+  useEffect(() => { void loadEmployees(); return () => { employeeRequest.current++; }; }, [loadEmployees]);
   async function mutate(url: string, method: "POST" | "PATCH", body: object) {
     setBusy(true); setMessage("");
     try {
@@ -48,7 +52,7 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
   const eligible = employees.filter((employee) => employee.branchId ? option.branches.find((branch) => branch.id === employee.branchId)?.canCreate : option.companyRights.canCreate);
   const amountField = (name: string, en: string, ar: string) => <label>{t(en, ar)} <input name={name} type="number" min={0} max={9999999999} step="0.001" defaultValue={name === "baseSalary" ? undefined : "0"} required /></label>;
   return <section className="panel">
-    <label>{t("Company", "الشركة")} <select value={selected} disabled={busy} onChange={(event) => { setSelected(Number(event.target.value)); setFilters({ q: "", status: "", branchId: "" }); setEntries([]); setEmployees([]); setEmployeePage(null); setMessage(""); }}>
+    <label>{t("Company", "الشركة")} <select value={selected} disabled={busy} onChange={(event) => { listRequest.current++; employeeRequest.current++; setSelected(Number(event.target.value)); setFilters({ q: "", status: "", branchId: "" }); setEntries([]); setEmployees([]); setEmployeePage(null); setMessage(""); }}>
       {options.map((scope, index) => <option key={scope.companyId} value={index}>{scope.label}</option>)}</select></label>
     <p>{t("Amounts are entered manually in the company currency. Taxes, social insurance and attendance deductions are not calculated automatically. Recording payment here does not transfer money.",
       "تُدخل المبالغ يدوياً بعملة الشركة. الضرائب والتأمينات وخصومات الحضور لا تُحسب تلقائياً. تسجيل الصرف هنا لا يحوّل الأموال.")}</p>
@@ -102,6 +106,8 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
         <p>{t("Base", "الأساسي")}: {entry.baseSalary} · {t("Allowances", "البدلات")}: {entry.allowances} · {t("Deductions", "الخصومات")}: {entry.deductions}</p>
         <p><strong>{t("Net pay", "صافي الراتب")}: {entry.netPay} {entry.currency}</strong></p>
         {entry.note && <p>{entry.note}</p>}{entry.paymentReference && <p>{t("Payment reference", "مرجع الصرف")}: {entry.paymentReference}</p>}{entry.voidReason && <p>{entry.voidReason}</p>}
+        {rights?.canPostLedger && entry.status !== "DRAFT" && <DocumentPosting key={`${option.companyId}:${entry.id}:${entry.status}`} kind="payroll" id={entry.id} scope={option} locale={locale}
+          amount={`(${entry.baseSalary} + ${entry.allowances})`} deductions={entry.deductions} currency={entry.currency} eligible={["APPROVED","PAID"].includes(entry.status)} />}
         {rights?.canApprove && entry.status === "DRAFT" && <button disabled={busy} onClick={() => void mutate(`/api/payroll/${entry.id}`, "PATCH", { tenantId: option.tenantId, action: "approve" })}>{t("Approve", "اعتماد")}</button>}
         {rights?.canPay && entry.status === "APPROVED" && <form action={(form) => mutate(`/api/payroll/${entry.id}`, "PATCH", { tenantId: option.tenantId, action: "pay", reference: form.get("reference") })}>
           <label>{t("Payment reference", "مرجع الصرف")} <input name="reference" minLength={3} maxLength={200} required /></label><button disabled={busy}>{t("Record payment", "تسجيل الصرف")}</button></form>}
