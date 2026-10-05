@@ -40,8 +40,16 @@ export async function GET(request: Request) {
   const sharedItems = await db.inventoryItem.findMany({ where: { tenantId: where.tenantId,
     companyId: where.companyId, branchId: null, archivedAt: null },
     select: { id: true, sku: true, name: true, unit: true }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 200 });
+  const reversalEvents = await db.auditLog.findMany({ where: { tenantId: where.tenantId,
+    entity: "StockMovement", entityId: { in: movements.map(movement => movement.id) },
+    action: { in: ["inventory-stock.reversed", "inventory-stock.reversal-created"] } },
+    select: { entityId: true, action: true } });
+  const decorated = movements.map(movement => ({ ...movement,
+    reversed: reversalEvents.some(event => event.entityId === movement.id && event.action === "inventory-stock.reversed"),
+    isReversal: reversalEvents.some(event => event.entityId === movement.id && event.action === "inventory-stock.reversal-created"),
+  }));
   return NextResponse.json({ items: [...items, ...sharedItems].sort((a, b) => a.name.localeCompare(b.name)),
-    balances, movements });
+    balances, movements: decorated }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: Request) {

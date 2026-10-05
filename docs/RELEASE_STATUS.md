@@ -129,3 +129,9 @@ A reserved 30-character journal number encodes all 128 source UUID bits in base 
 Accounting registers discard outdated list requests during company changes and show connection errors. The new isolated API fixture covers quote → order → invoice → journal → reversal → void, concurrent duplicate attempts, expense posting, permissions, account/company validation, period locking and exact amounts. Live business-flow acceptance is still outstanding.
 
 Paid POS orders also support source-linked posting (SYSP- prefix): asset debit / revenue credit using the actual order total, excluding tendered cash and change. Only paid orders qualify. Payment recording remains manual; no card capture, refund or inventory recipe is performed. The isolated flow test includes POS payment → ledger posting → reversal.
+
+### Full stock movement correction
+
+Stock operators can reverse a complete historical stock movement with a required reason. The server copies the exact opposite Decimal quantity into a new movement dated now, keeps the original, prevents negative/overflow balances, and serializes duplicate corrections with a source row lock. A deterministic correction ID additionally enforces single-use through the stock movement primary key. Reversal movements cannot themselves be reversed.
+
+Recent movements identify corrected originals and correction rows. Purchase-receipt corrections additionally require read access to the originating purchase order. These correct inventory quantities only: receipt/order history stays intact; no supplier credit, refund, tax or valuation entry is created. Partial supplier returns remain pending. The isolated API flow covers insufficient stock, concurrent corrections, duplicate/reversal rejection, exact fractional quantities, access and full receipt quantity return. Stock list requests discard responses from a previous branch and show network failures.
