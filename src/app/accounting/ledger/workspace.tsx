@@ -61,7 +61,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
       <a href="#ledger-statement">{t("Account statement", "كشف الحساب")}</a>
       <a href="#ledger-journals">{t("Journals and trial balance", "القيود وميزان المراجعة")}</a>
     </nav>
-    <div key={option.companyId} className="ledger-period-slot"><PeriodLock scope={option} locale={locale} onChange={periodChanged}/></div>
+    <div className="ledger-period-slot"><PeriodLock scope={option} locale={locale} onChange={periodChanged}/></div>
     <h2 id="ledger-accounts">{t("Chart of accounts", "دليل الحسابات")}</h2>
     {option.canManageAccounts && <form action={(form) => save("/api/ledger/accounts",{tenantId:option.tenantId,companyId:option.companyId,code:form.get("code"),name:form.get("name"),type:form.get("type")})}>
       <label>{t("Code", "الرمز")} <input name="code" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Name", "الاسم")} <input name="name" required minLength={2} maxLength={200} /></label>

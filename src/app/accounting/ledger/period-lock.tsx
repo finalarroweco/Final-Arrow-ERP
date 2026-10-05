@@ -15,7 +15,7 @@ export function PeriodLock({ scope, locale, onChange }: { scope: {tenantId:strin
     } catch {if(generation===request.current)setMessage(t("Network request failed","فشل الاتصال بالشبكة"));}
     finally{if(generation===request.current)setBusy(false);}
   },[scope.tenantId,scope.companyId,onChange,t]);
-  useEffect(()=>{void load();return()=>{request.current++;};},[load]);
+  useEffect(()=>{setState(null);setMessage("");void load();return()=>{request.current++;};},[load]);
   async function save(lockedThrough:string|null,reason:string){
     if(!state)return;
     const generation=++request.current;
