@@ -14,3 +14,13 @@ Database activation is now authorized. No persistent ERP database has been provi
 The application retains its own authentication and scoped access controls. PostgreSQL is used on the server through Prisma; do not expose its credentials to clients. If Supabase is chosen, keep ERP tables in a private schema or disable Data API exposure; do not grant anonymous or Supabase-authenticated access to ERP data. Supabase Auth is not used by this application.
 
 The latest HTML walkthrough is `/erp-preview-v6.html`, using sample records only. It is separate from the authenticated application. Account email verification/recovery, payment integrations and regulatory accounting remain unfinished; see `RELEASE_STATUS.md` for module limits.
+
+## Database provisioned — 2026-10-05
+
+Supabase project `Final Arrow ERP` (`uqgsvbfmgnorepdydyde`) is in the authorized Final Arrow Health organization, Mumbai (`ap-south-1`), Micro compute. The user approved the displayed additional $10/month compute cost. Data API and automatic table exposure were disabled during creation.
+
+All 31 Prisma migrations were applied through GitHub Actions using the write-only `ERP_DATABASE_URL` repository secret. `prisma migrate status` passed. The database has 47 public tables including Prisma migration history, no unfinished migrations, and no initial users. The temporary automatic bootstrap job was removed after success. The helper script checks the exact project/session pooler endpoint and enforces TLS without printing credentials.
+
+Application hosting and its server-side environment variables are still pending. GitHub Actions secrets do not configure a running application host. No live ERP URL or owner account exists yet.
+
+Provider access hardening was applied separately as Supabase migration `erp_private_database_access`: revoke public-table/sequence access from anon/authenticated, remove public/API function execution grants, revoke corresponding postgres default privileges, and pin the five ERP trigger functions to `public, pg_temp`. This is provider access configuration, not a replacement for Prisma schema migrations. After hardening the API-role table grant count is zero and the security advisor is clear.

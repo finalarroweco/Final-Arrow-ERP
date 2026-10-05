@@ -105,3 +105,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 ### Persistent database activation preparation
 - User authorized starting a persistent database when needed. ERP cloud project is not provisioned yet; provider organization/project selection and hosting remain pending. Existing Health/NAYROQ projects remain separate.
 - Prisma now separates application DATABASE_URL from DIRECT_DATABASE_URL for migrations; CI and environment example set both. db:deploy/db:status scripts and setup documentation are ready. Registration hashes passwords outside the transaction and batches shared permission/role-permission inserts to reduce remote-database latency while preserving existing roles.
+
+### 2026-10-05 — Persistent ERP database provisioned
+
+Dedicated Supabase ERP project in Mumbai is healthy. All 31 Prisma migrations and migrate status succeeded in Core checks #83 (retry after credential correction). Verified 47 public tables, zero unfinished migrations, zero users, and no anon/authenticated public table grants. Temporary bootstrap job removed; application hosting and owner bootstrap remain pending.
