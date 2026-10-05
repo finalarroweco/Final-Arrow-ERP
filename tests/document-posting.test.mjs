@@ -108,7 +108,8 @@ test("document posting is exact, scoped, single-use and reversal-safe",{timeout:
     const receiptList=await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,cookie);
     assert.equal(receiptList.status,200);assert.equal(receiptList.data.receipts.length,1);
     const receiptId=receiptList.data.receipts[0].id;
-    assert.equal(receiptList.data.receipts[0].order.id,purchase.id);assert.equal(receiptList.data.receipts[0]._count.lines,1);
+    assert.equal(receiptList.data.receipts[0].order.id,purchase.id);assert.equal(receiptList.data.receipts[0]._count.lines,1);assert.equal(receiptList.data.receipts[0].correctedLineCount,1);
+    assert.equal((await stock()).movements.find(m=>m.id===receiptMovement.id).receiptId,receiptId);
     assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,outsider.cookie)).status,403);
     assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}&q=Return`,"GET",undefined,cookie)).data.receipts.length,1);
     assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}&q=${receiptId}`,"GET",undefined,cookie)).data.receipts.length,1);
@@ -130,6 +131,14 @@ test("document posting is exact, scoped, single-use and reversal-safe",{timeout:
     await create(`/api/purchase-orders/${sharedPurchase.id}/receive`,{branchId:branch.id,lines:[{orderLineId:sharedPurchase.lines[0].id,itemId:stockItem.id}]});
     assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,cookie)).data.receipts.length,2);
     assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,viewer.cookie)).data.receipts.length,1);
+    const sharedReceipt=await db.goodsReceipt.findUnique({where:{orderId:sharedPurchase.id},include:{lines:{include:{movement:true}}}});
+    const viewerStock=await call(`/api/inventory/stock?${stockQuery}`,"GET",undefined,viewer.cookie);
+    assert.equal(viewerStock.status,200);
+    assert.equal(viewerStock.data.movements.find(m=>m.id===receiptMovement.id).receiptId,receiptId);
+    assert.equal(viewerStock.data.movements.find(m=>m.id===sharedReceipt.lines[0].movement.id).receiptId,null,"stock view must not expose an unreadable source receipt link");
+    assert.ok(viewerStock.data.movements.every(m=>!("receiptLine" in m)),"internal source scope stays private");
+    const ownerReceipts=(await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,cookie)).data.receipts;
+    assert.equal(ownerReceipts.find(r=>r.id===sharedReceipt.id).correctedLineCount,0);
     const liability=await account("PAYABLE","LIABILITY"),deductionLiability=await account("DEDUCT","LIABILITY");
     const {employee}=await create("/api/employees",{companyId,branchId:branch.id,code:"PAY-QA",fullName:"Payroll QA"});
     const {entry:payroll}=await create("/api/payroll",{companyId,employeeId:employee.id,period:day.slice(0,7),baseSalary:"10.125",allowances:"2.250",deductions:"3.125"});

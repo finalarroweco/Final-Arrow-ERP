@@ -8,7 +8,7 @@ type Option = { tenantId: string; companyId: string; branchId: string; label: st
 type Item = { id: string; sku: string; name: string; unit: string };
 type Balance = { itemId: string; quantity: string;
   item: { sku: string; name: string; unit: string; archivedAt: string | null } };
-type Movement = { reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT"; delta: string;
+type Movement = { receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT"; delta: string;
   reason: string; createdAt: string; balance: { item: Item } };
 
 export function StockWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
@@ -88,6 +88,7 @@ export function StockWorkspace({ options, locale }: { options: Option[]; locale:
     <h2>{t("Recent movements", "الحركات الأخيرة")}</h2><p>{t("A reversal records the full opposite quantity today, keeping the original movement. Receipt reversals affect stock only; supplier credits and refunds remain separate.", "يسجّل العكس كامل الكمية المقابلة بتاريخ اليوم مع الاحتفاظ بالحركة الأصلية. عكس الاستلام يؤثر على المخزون فقط؛ إشعارات المورد والمبالغ المستردة منفصلة.")}</p><div className="customer-list">{movements.map((movement) => <article key={movement.id}>
       <div><h3>{movement.balance.item.name}</h3><p>{movement.reason} · {new Date(movement.createdAt).toLocaleString()}</p></div>
       <strong>{movement.delta} {movement.balance.item.unit}</strong>
+      {movement.receiptId && <a href={`/purchasing/receipts/${movement.receiptId}`}>{t("View goods receipt", "عرض مستند الاستلام")}</a>}
       {movement.reversed && <p>{t("Reversed", "تم عكسها")}</p>}
       {movement.isReversal && <p>{t("Correction movement", "حركة تصحيحية")}</p>}
       {scope.canAdjust && !movement.reversed && !movement.isReversal && <details><summary>{t("Reverse full movement", "عكس كامل الحركة")}</summary>

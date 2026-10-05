@@ -10,11 +10,16 @@ export async function receiptRegister(userId:string,raw:unknown){
  const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["purchase-order:read","inventory-stock:read"]});
  const purchase=rights["purchase-order:read"],stock=rights["inventory-stock:read"];
  if(purchase===false||stock===false||(branchId&&stock!==null&&!stock.includes(branchId)))throw new ReceiptRegisterError("Forbidden",403);
- const rows=await db.goodsReceipt.findMany({where:{tenantId,companyId,
+ return db.$transaction(async tx=>{
+ const rows=await tx.goodsReceipt.findMany({where:{tenantId,companyId,
    ...(branchId?{branchId}:stock===null?{}:{branchId:{in:stock}}),
    order:{...(purchase===null?{}:{branchId:{in:purchase}})},
    ...(q?{OR:[...(uuid.safeParse(q).success?[{id:q}]:[]),{order:{number:{contains:q,mode:"insensitive" as const}}},{order:{supplierName:{contains:q,mode:"insensitive" as const}}}]}:{}),
  },orderBy:[{createdAt:"desc"},{id:"asc"}],skip:page*50,take:51,
- select:{id:true,createdAt:true,branchId:true,branch:{select:{name:true}},order:{select:{id:true,number:true,supplierName:true}},_count:{select:{lines:true}}}});
- return {receipts:rows.slice(0,50),nextPage:rows.length>50?page+1:null,page};
+ select:{id:true,createdAt:true,branchId:true,branch:{select:{name:true}},order:{select:{id:true,number:true,supplierName:true}},_count:{select:{lines:true}},lines:{select:{movement:{select:{id:true}}}}}});
+ const visible=rows.slice(0,50),movementIds=visible.flatMap(r=>r.lines.flatMap(line=>line.movement?[line.movement.id]:[]));
+ const events=movementIds.length?await tx.auditLog.findMany({where:{tenantId,entity:"StockMovement",action:"inventory-stock.reversed",entityId:{in:movementIds}},select:{entityId:true}}):[];
+ const corrected=new Set(events.map(event=>event.entityId));
+ return {receipts:visible.map(({lines,...receipt})=>({...receipt,correctedLineCount:lines.filter(line=>line.movement&&corrected.has(line.movement.id)).length})),nextPage:rows.length>50?page+1:null,page};
+ },{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
 }

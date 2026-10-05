@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
-import { canAccess } from "@/lib/access";
+import { canAccess, readableCompanyPermissions } from "@/lib/access";
 import { db } from "@/lib/db";
 
 const uuid = z.string().uuid();
@@ -21,8 +21,10 @@ export async function GET(request: Request) {
   const branchId = uuid.safeParse(params.get("branchId"));
   if (!tenantId.success || !companyId.success || !branchId.success)
     return NextResponse.json({ error: "Invalid branch scope" }, { status: 400 });
-  if (!(await canAccess({ userId: actor.id, tenantId: tenantId.data, companyId: companyId.data,
-    branchId: branchId.data, permission: "inventory-stock:read" })))
+  const rights = await readableCompanyPermissions({userId:actor.id,tenantId:tenantId.data,companyId:companyId.data,
+    permissions:["inventory-stock:read","purchase-order:read"]});
+  const stockRead=rights["inventory-stock:read"],purchaseRead=rights["purchase-order:read"];
+  if (stockRead === false || (stockRead !== null && !stockRead.includes(branchId.data)))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const where = { tenantId: tenantId.data, companyId: companyId.data, branchId: branchId.data };
   const [items, balances, movements] = await Promise.all([
@@ -33,6 +35,7 @@ export async function GET(request: Request) {
       item: { select: { sku: true, name: true, unit: true, archivedAt: true } } }, orderBy: { item: { name: "asc" } } }),
     db.stockMovement.findMany({ where: { tenantId: where.tenantId, balance: where },
       select: { id: true, type: true, delta: true, reason: true, createdAt: true,
+        receiptLine: {select:{receipt:{select:{id:true,order:{select:{branchId:true}}}}}},
         balance: { select: { item: { select: { sku: true, name: true, unit: true } } } } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 20 }),
   ]);
@@ -44,7 +47,8 @@ export async function GET(request: Request) {
     entity: "StockMovement", entityId: { in: movements.map(movement => movement.id) },
     action: { in: ["inventory-stock.reversed", "inventory-stock.reversal-created"] } },
     select: { entityId: true, action: true } });
-  const decorated = movements.map(movement => ({ ...movement,
+  const decorated = movements.map(({receiptLine,...movement}) => ({ ...movement,
+    receiptId: receiptLine && (purchaseRead === null || (Array.isArray(purchaseRead) && receiptLine.receipt.order.branchId && purchaseRead.includes(receiptLine.receipt.order.branchId))) ? receiptLine.receipt.id : null,
     reversed: reversalEvents.some(event => event.entityId === movement.id && event.action === "inventory-stock.reversed"),
     isReversal: reversalEvents.some(event => event.entityId === movement.id && event.action === "inventory-stock.reversal-created"),
   }));
