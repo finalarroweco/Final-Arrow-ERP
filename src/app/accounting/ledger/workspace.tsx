@@ -50,7 +50,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   return <section className="panel">
     <label>{t("Company", "الشركة")} <select disabled={busy} value={selected} onChange={(event) => { journalRequest.current++; accountRequest.current++; setLockedThrough(null); setSelected(Number(event.target.value)); setFilters({from:"",to:"",branchId:""}); setAccounts([]); setEntries([]); setMessage(""); }}>
       {options.map((scope,index) => <option key={scope.companyId} value={index}>{scope.label}</option>)}</select></label>
-    <p>{t("Manual journals are posted immediately and cannot be edited. Corrections create a dated reversal. Issued invoices and approved expenses can be posted from their registers after selecting accounts. Payroll does not post here yet.", "تُرحّل القيود اليدوية مباشرة ولا يمكن تعديلها. التصحيح ينشئ قيداً عكسياً مؤرخاً. يمكن ترحيل الفواتير المصدرة والمصاريف المعتمدة من سجلاتها بعد اختيار الحسابات. الرواتب لا تُرحّل إلى هذا الدفتر حالياً.")}</p>
+    <p>{t("Manual journals are posted immediately and cannot be edited. Corrections create a dated reversal. Issued invoices, approved expenses and paid POS orders can be posted from their registers after selecting accounts. Payroll does not post here yet.", "تُرحّل القيود اليدوية مباشرة ولا يمكن تعديلها. التصحيح ينشئ قيداً عكسياً مؤرخاً. يمكن ترحيل الفواتير المصدرة والمصاريف المعتمدة وطلبات نقاط البيع المدفوعة من سجلاتها بعد اختيار الحسابات. الرواتب لا تُرحّل إلى هذا الدفتر حالياً.")}</p>
     {message && <p role="status">{message}</p>}
     <nav aria-label={t("Ledger sections", "أقسام دفتر الأستاذ")} style={{display:"flex",gap:"1rem",flexWrap:"wrap",marginBlock:"1rem"}}>
       <a href="#ledger-period">{t("Period lock", "قفل الفترة")}</a>
@@ -61,7 +61,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
       <a href="#ledger-statement">{t("Account statement", "كشف الحساب")}</a>
       <a href="#ledger-journals">{t("Journals and trial balance", "القيود وميزان المراجعة")}</a>
     </nav>
-    <PeriodLock key={option.companyId} scope={option} locale={locale} onChange={periodChanged}/>
+    <div key={option.companyId} className="ledger-period-slot"><PeriodLock scope={option} locale={locale} onChange={periodChanged}/></div>
     <h2 id="ledger-accounts">{t("Chart of accounts", "دليل الحسابات")}</h2>
     {option.canManageAccounts && <form action={(form) => save("/api/ledger/accounts",{tenantId:option.tenantId,companyId:option.companyId,code:form.get("code"),name:form.get("name"),type:form.get("type")})}>
       <label>{t("Code", "الرمز")} <input name="code" required pattern="[A-Z0-9-]{2,30}" /></label><label>{t("Name", "الاسم")} <input name="name" required minLength={2} maxLength={200} /></label>
