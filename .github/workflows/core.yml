@@ -41,3 +41,26 @@ jobs:
       - run: npm run test:db
       - run: npm run build
       - run: npm run test:api
+
+  bootstrap-erp-database:
+    name: Bootstrap authorized ERP database
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/core-auth-companies-branches'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: bootstrap-final-arrow-erp-database
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations to the authorized ERP project
+        env:
+          ERP_DATABASE_URL: ${{ secrets.ERP_DATABASE_URL }}
+        run: node scripts/bootstrap-erp-database.mjs
