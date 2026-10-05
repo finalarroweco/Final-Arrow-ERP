@@ -6,6 +6,8 @@ import { canAccess } from "@/lib/access";
 import { db } from "@/lib/db";
 import { dueDate } from "@/lib/date";
 import { journalNumber } from "@/lib/ledger";
+import { documentJournal, documentJournalNumber, lockDocument } from "@/lib/document-journal";
+class PayrollReversalConflict extends Error {}
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await context.params;
@@ -18,6 +20,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (original.reversalOf || parsed.data.entryDate < original.entryDate.toISOString().slice(0,10)) return NextResponse.json({ error: "Cannot reverse a reversal or use an earlier date" }, { status: 409 });
   try {
     const entry = await db.$transaction(async (tx) => {
+      if (/^SYS[RW]-/.test(original.number)) {
+        const link=await tx.auditLog.findFirst({where:{tenantId:original.tenantId,entity:"PayrollEntry",
+          action:{in:["payroll.ledger_posted","payroll-payment.ledger_posted"]},metadata:{path:["journalId"],equals:original.id}},select:{entityId:true}});
+        const kind=original.number.startsWith("SYSR-") ? "payroll" : "payroll-payment";
+        if (!link?.entityId || !z.string().uuid().safeParse(link.entityId).success || documentJournalNumber(kind,link.entityId) !== original.number) throw new PayrollReversalConflict("Payroll source link could not be verified");
+        // Same source lock as payment/accrual posting prevents concurrent settlement
+        // from surviving a reversed accrual. Always lock source before company.
+        await lockDocument(tx,"payroll",original.tenantId,link.entityId);
+        if (kind === "payroll") {
+          const payment=await documentJournal(tx,"payroll-payment",original.tenantId,original.companyId,link.entityId);
+          if (payment && !payment.reversal) throw new PayrollReversalConflict("Reverse the payroll payment journal before reversing its accrual");
+        }
+      }
       await writableLedgerCompany(tx, original.tenantId, original.companyId, parsed.data.entryDate);
       const entry = await tx.journalEntry.create({ data: { tenantId: original.tenantId, companyId: original.companyId, branchId: original.branchId,
         number: parsed.data.number, entryDate: new Date(`${parsed.data.entryDate}T00:00:00Z`), description: parsed.data.reason,
@@ -27,6 +42,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return entry;
     }); return NextResponse.json({ entry }, { status: 201 });
   } catch (error) {
+    if (error instanceof PayrollReversalConflict) return NextResponse.json({error:error.message},{status:409});
     if (error instanceof LedgerPeriodClosed) return NextResponse.json({ error: error.message, lockedThrough: error.lockedThrough }, { status: 409 });
     if (error instanceof LedgerCompanyMissing) return NextResponse.json({ error: "Company not found" }, { status: 404 });
     if (error instanceof Error && "code" in error && error.code === "P2002") return NextResponse.json({ error: "Journal already reversed or number already used" }, { status: 409 });

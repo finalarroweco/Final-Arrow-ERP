@@ -4,7 +4,7 @@ import { translate, type Locale } from "@/lib/locale";
 type Account = {id:string;code:string;name:string;type:string};
 type Entry = {id:string;number:string;reversal?:{id:string;number:string}|null};
 export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,deductions}: {
-  kind:"invoice"|"expense"|"pos"|"payroll";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;deductions?:string;
+  kind:"invoice"|"expense"|"pos"|"payroll"|"payroll-payment";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;deductions?:string;
 }) {
   const t=(en:string,ar:string)=>translate(locale,en,ar);
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);
@@ -40,13 +40,14 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     finally {setBusy(false);}
   }
   const hasDeductions=Boolean(deductions && /[1-9]/.test(deductions));
-  const debitTypes=["expense","payroll"].includes(kind)?["EXPENSE"]:["ASSET"];
-  const creditTypes=kind === "payroll"?["LIABILITY"]:kind === "expense"?["ASSET","LIABILITY"]:["REVENUE"];
+  const debitTypes=kind === "payroll-payment"?["LIABILITY"]:["expense","payroll"].includes(kind)?["EXPENSE"]:["ASSET"];
+  const creditTypes=kind === "payroll-payment"?["ASSET"]:kind === "payroll"?["LIABILITY"]:kind === "expense"?["ASSET","LIABILITY"]:["REVENUE"];
   return <div className="document-posting">
-    <button type="button" disabled={busy} onClick={()=>open?setOpen(false):void inspect()}>{t("Ledger posting","الترحيل المحاسبي")}</button>
+    <button type="button" disabled={busy} onClick={()=>open?setOpen(false):void inspect()}>{kind === "payroll-payment" ? t("Payment settlement journal","قيد تسوية صرف الراتب") : kind === "payroll" ? t("Payroll accrual journal","قيد استحقاق الراتب") : t("Ledger posting","الترحيل المحاسبي")}</button>
     {open&&<div>
       <p>{t("Posts this document once as a balanced journal. Select the correct accounts; this does not collect or send money.","يُرحّل هذا المستند مرة واحدة بقيد متوازن. اختر الحسابات المناسبة؛ لا تُحصّل أو تُحوّل أموالاً من هنا.")}</p>
-      {kind === "payroll" && <p>{t("Accrual: debit gross salary and allowances; credit net payroll payable and a separate deduction account. Choose a liability for amounts owed to others, or an expense offset for salary reductions. Payment settlement is recorded separately with a manual journal; recording payroll payment does not settle this liability.","قيد الاستحقاق: إجمالي الأساسي والبدلات مدين، وصافي الرواتب المستحقة والخصومات دائن. اختر للخصومات حساب التزام للمبالغ المستحقة للغير أو حساب مصروف مقابل لتخفيضات الراتب. تسوية الصرف بقيد يدوي منفصل؛ تسجيل صرف الراتب لا يسوّي هذا الالتزام.")}</p>}
+      {kind === "payroll" && <p>{t("Accrual: debit gross salary and allowances; credit net payroll payable and a separate deduction account. Choose a liability for amounts owed to others, or an expense offset for salary reductions. After recording payment, post its separate settlement journal.","قيد الاستحقاق: إجمالي الأساسي والبدلات مدين، وصافي الرواتب المستحقة والخصومات دائن. اختر للخصومات حساب التزام للمبالغ المستحقة للغير أو حساب مصروف مقابل لتخفيضات الراتب. بعد تسجيل الصرف، رحّل قيد تسويته المنفصل.")}</p>}
+      {kind === "payroll-payment" && <p>{t("Debit the same net-pay liability selected in the active accrual and credit the cash/bank asset used for the recorded payment. Reverse this payment journal before reversing the accrual. No money is transferred; deduction liabilities remain for separate settlement.","اختر مديناً نفس حساب صافي الرواتب المستحقة في قيد الاستحقاق الساري، ودائناً حساب النقد أو البنك المستخدم للصرف المسجّل. اعكس قيد الصرف قبل عكس الاستحقاق. لا يُحوّل هذا الإجراء أموالاً؛ تبقى التزامات الخصومات لتسوية منفصلة.")}</p>}
       {message&&<p role="status">{message}</p>}
       {busy&&<p role="status">{t("Working…","جاري التنفيذ…")}</p>}
       {!loaded&&!busy&&<button type="button" onClick={()=>void inspect()}>{t("Check again","إعادة التحقق")}</button>}

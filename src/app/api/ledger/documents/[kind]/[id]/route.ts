@@ -8,16 +8,17 @@ import { dueDate } from "@/lib/date";
 import { documentJournal, documentJournalNumber, lockDocument, type DocumentKind } from "@/lib/document-journal";
 import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
 const uuid = z.string().uuid();
-const pathSchema = z.object({ kind: z.enum(["invoice", "expense", "pos", "payroll"]), id: uuid });
+const pathSchema = z.object({ kind: z.enum(["invoice", "expense", "pos", "payroll", "payroll-payment"]), id: uuid });
 const bodySchema = z.object({ tenantId: uuid, entryDate: dueDate, debitAccountId: uuid, creditAccountId: uuid, deductionAccountId: uuid.optional() }).strict();
 type Context = { params: Promise<{ kind: string; id: string }> };
 class PostingConflict extends Error {}
 async function source(kind: DocumentKind, tenantId: string, id: string, client: Prisma.TransactionClient = db) {
-  if (kind === "payroll") {
+  if (kind === "payroll" || kind === "payroll-payment") {
     const row = await client.payrollEntry.findUnique({where:{tenantId_id:{tenantId,id}}});
-    return row && {...row, amount:row.baseSalary.plus(row.allowances),
+    return row && {...row, amount:kind === "payroll" ? row.baseSalary.plus(row.allowances) : row.netPay,
       number:`${row.employeeCode} ${row.period.toISOString().slice(0,7)}`,
-      date:row.period.toISOString().slice(0,10), eligible:["APPROVED","PAID"].includes(row.status)};
+      date:kind === "payroll" ? row.period.toISOString().slice(0,10) : row.paidAt?.toISOString().slice(0,10),
+      eligible:kind === "payroll" ? ["APPROVED","PAID"].includes(row.status) : row.status === "PAID"};
   }
   if (kind === "invoice") {
     const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } } });
@@ -32,7 +33,7 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
 }
 async function permitted(userId: string, kind: DocumentKind, tenantId: string, row: { companyId: string; branchId: string | null }, post: boolean) {
   const scope = { userId, tenantId, companyId: row.companyId, branchId: row.branchId ?? undefined };
-  const checks = await Promise.all([canAccess({ ...scope, permission: `${kind}:read` }),
+  const checks = await Promise.all([canAccess({ ...scope, permission: `${kind === "payroll-payment" ? "payroll" : kind}:read` }),
     canAccess({ ...scope, permission: "ledger:read" }), ...(post ? [canAccess({ ...scope, permission: "ledger:post" })] : [])]);
   return checks.every(Boolean);
 }
@@ -72,9 +73,17 @@ export async function POST(request: Request, context: Context) {
       const accounts = await tx.ledgerAccount.findMany({where:{tenantId,companyId:row.companyId,id:{in:[debitAccountId,creditAccountId,...(deductionAccountId?[deductionAccountId]:[])]}}});
       const debit = accounts.find(a=>a.id===debitAccountId), credit = accounts.find(a=>a.id===creditAccountId);
       if (debitAccountId === creditAccountId || !debit || !credit ||
-        (kind === "payroll" ? debit.type !== "EXPENSE" || credit.type !== "LIABILITY" : kind !== "expense" ? debit.type !== "ASSET" || credit.type !== "REVENUE" :
+        (kind === "payroll-payment" ? debit.type !== "LIABILITY" || credit.type !== "ASSET" : kind === "payroll" ? debit.type !== "EXPENSE" || credit.type !== "LIABILITY" : kind !== "expense" ? debit.type !== "ASSET" || credit.type !== "REVENUE" :
           debit.type !== "EXPENSE" || !["ASSET","LIABILITY"].includes(credit.type)))
         throw new PostingConflict("Invalid document account types: payroll requires expense debit / payroll liability credit in the same company");
+      if (kind === "payroll-payment") {
+        const accrual=await documentJournal(tx,"payroll",tenantId,row.companyId,id);
+        if (!accrual || accrual.reversal) throw new PostingConflict("Post an active payroll accrual before settling payment");
+        if (entryDate < accrual.entryDate.toISOString().slice(0,10)) throw new PostingConflict("Payment journal date cannot precede its accrual");
+        const payable=await tx.journalLine.findUnique({where:{entryId_position:{entryId:accrual.id,position:1}}});
+        if (!payable || payable.accountId !== debit.id || !payable.credit.eq(row.amount))
+          throw new PostingConflict("Debit the same net-pay liability used in the payroll accrual");
+      }
       const zero = new Prisma.Decimal(0);
       const lines = [{position:0,accountId:debit.id,debit:row.amount,credit:zero}];
       if (kind === "payroll" && "deductions" in row) {
@@ -89,10 +98,10 @@ export async function POST(request: Request, context: Context) {
       } else lines.push({position:1,accountId:credit.id,debit:zero,credit:row.amount});
       const journal = await tx.journalEntry.create({data:{tenantId,companyId:row.companyId,branchId:row.branchId,
         number:documentJournalNumber(kind,id),entryDate:new Date(`${entryDate}T00:00:00Z`),
-        description:`${kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : kind === "payroll" ? "Payroll accrual" : "POS"} ${row.number}`,
+        description:`${kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : kind === "payroll" ? "Payroll accrual" : kind === "payroll-payment" ? "Payroll payment" : "POS"} ${row.number}`,
         currency:row.currency,total:row.amount,createdBy:actor.id,lines:{create:lines}},select:{id:true,number:true}});
       await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:`${kind}.ledger_posted`,
-        entity:kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : kind === "payroll" ? "PayrollEntry" : "PosOrder",entityId:id,metadata:{journalId:journal.id,journalNumber:journal.number,amount:row.amount.toString(),currency:row.currency}}});
+        entity:kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : ["payroll","payroll-payment"].includes(kind) ? "PayrollEntry" : "PosOrder",entityId:id,metadata:{journalId:journal.id,journalNumber:journal.number,amount:row.amount.toString(),currency:row.currency}}});
       return journal;
     },{timeout:15000,maxWait:10000});
     return NextResponse.json({entry},{status:201});

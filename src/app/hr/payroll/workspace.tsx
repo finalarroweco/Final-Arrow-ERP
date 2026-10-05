@@ -113,6 +113,8 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
         {entry.note && <p>{entry.note}</p>}{entry.paymentReference && <p>{t("Payment reference", "مرجع الصرف")}: {entry.paymentReference}</p>}{entry.voidReason && <p>{entry.voidReason}</p>}
         {rights?.canPostLedger && entry.status !== "DRAFT" && <DocumentPosting key={`${option.companyId}:${entry.id}:${entry.status}`} kind="payroll" id={entry.id} scope={option} locale={locale}
           amount={grossPay(entry)} deductions={entry.deductions} currency={entry.currency} eligible={["APPROVED","PAID"].includes(entry.status)} />}
+        {rights?.canPostLedger && entry.status === "PAID" && <DocumentPosting key={`payment:${option.companyId}:${entry.id}`} kind="payroll-payment" id={entry.id} scope={option} locale={locale}
+          amount={entry.netPay} currency={entry.currency} eligible={/[1-9]/.test(entry.netPay)} />}
         {rights?.canApprove && entry.status === "DRAFT" && <button disabled={busy} onClick={() => void mutate(`/api/payroll/${entry.id}`, "PATCH", { tenantId: option.tenantId, action: "approve" })}>{t("Approve", "اعتماد")}</button>}
         {rights?.canPay && entry.status === "APPROVED" && <form action={(form) => mutate(`/api/payroll/${entry.id}`, "PATCH", { tenantId: option.tenantId, action: "pay", reference: form.get("reference") })}>
           <label>{t("Payment reference", "مرجع الصرف")} <input name="reference" minLength={3} maxLength={200} required /></label><button disabled={busy}>{t("Record payment", "تسجيل الصرف")}</button></form>}
