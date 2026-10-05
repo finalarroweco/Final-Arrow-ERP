@@ -20,6 +20,8 @@ export default async function ExpensesPage() {
       companyId: company.id, permission: "expense:read" });
     if (visible === false) return null;
     const rights = async (branchId?: string) => ({
+      canPostLedger: (await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "ledger:post" })) &&
+        (await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "ledger:read" })),
       canCreate: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "expense:create" }),
       canPost: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "expense:post" }),
       canVoid: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "expense:void" }),

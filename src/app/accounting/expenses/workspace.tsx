@@ -1,10 +1,11 @@
 "use client";
 
+import { DocumentPosting } from "../document-posting";
 import {FinancialReport} from "../financial-report";
 import { translate, type Locale } from "@/lib/locale";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-type Rights = { canCreate: boolean; canPost: boolean; canVoid: boolean };
+type Rights = { canPostLedger: boolean; canCreate: boolean; canPost: boolean; canVoid: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string; companyRights: Rights;
   branches: ({ id: string; name: string } & Rights)[] };
 type Expense = { id: string; number: string; description: string; category: string; amount: string;
@@ -20,15 +21,20 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const requestNumber = useRef(0);
   const scope = options[selected];
   const load = useCallback(async (index: number, number = 0) => {
     const option = options[index];
     if (!option) return;
+    const request = ++requestNumber.current;
+    try {
     const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number) });
     const response = await fetch(`/api/expenses?${query}`);
     const data = await response.json();
+    if (request !== requestNumber.current) return;
     if (!response.ok) { setMessage(data.error ?? t("Could not load expenses", "تعذر تحميل المصاريف")); return; }
     setExpenses(data.expenses); setPage(number); setNextPage(data.nextPage);
+    } catch { if (request === requestNumber.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
   async function mutate(url: string, method: "POST" | "PATCH", body: object, success: string, pageNumber = 0) {
@@ -43,7 +49,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
   if (!scope) return <section className="panel"><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
   const createBranches = scope.branches.filter((branch) => branch.canCreate);
   return <section className="panel">
-    <label>{t("Company", "الشركة") } <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setExpenses([]); setMessage(""); }}>
+    <label>{t("Company", "الشركة") } <select disabled={busy} value={selected} onChange={(event) => { requestNumber.current++; setSelected(Number(event.target.value)); setExpenses([]); setMessage(""); }}>
       {options.map((option, index) => <option key={option.companyId} value={index}>{option.label}</option>)}
     </select></label>
     {(scope.companyRights.canCreate || createBranches.length > 0) && <form action={(form) => mutate("/api/expenses", "POST",
@@ -70,6 +76,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
       const rights = expense.branchId ? scope.branches.find((branch) => branch.id === expense.branchId) : scope.companyRights;
       return <article key={expense.id} className="card"><strong>{expense.number} · {expense.description}</strong>
         <p>{expense.category} · {expense.amount} {expense.currency} · {expense.expenseDate.slice(0, 10)} · {t(expense.status, ({ DRAFT: "مسودة", POSTED: "مرحّل", VOID: "ملغى" })[expense.status])} · {expense.branchId ? scope.branches.find((branch) => branch.id === expense.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>
+        {rights?.canPostLedger && expense.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${expense.id}:${expense.status}`} kind="expense" id={expense.id} scope={scope} locale={locale} amount={expense.amount} currency={expense.currency} eligible={expense.status === "POSTED"}/>}
         {expense.voidReason && <p>{t("Void reason:", "سبب الإلغاء:")} {expense.voidReason}</p>}
         {rights?.canPost && expense.status === "DRAFT" && <button disabled={busy}
           onClick={() => void mutate(`/api/expenses/${expense.id}/status`, "PATCH",

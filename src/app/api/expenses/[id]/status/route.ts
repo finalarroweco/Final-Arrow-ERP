@@ -1,3 +1,4 @@
+import { documentJournal, lockDocument } from "@/lib/document-journal";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -26,6 +27,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     branchId: expense.branchId ?? undefined, permission: action === "post" ? "expense:post" : "expense:void" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
+    await lockDocument(tx, "expense", tenantId, id);
+    if (action === "void") {
+      const journal = await documentJournal(tx, "expense", tenantId, expense.companyId, id);
+      if (journal && !journal.reversal) return { ledgerBlocked: true as const };
+    }
     const changed = await tx.expense.updateMany({ where: { id, tenantId, status: action === "post" ? "DRAFT" : { in: ["DRAFT", "POSTED"] } },
       data: action === "post" ? { status: "POSTED", postedAt: new Date() }
         : { status: "VOID", voidedAt: new Date(), voidReason: parsed.data.action === "void" ? parsed.data.reason : undefined } });
@@ -34,6 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entity: "Expense", entityId: id, ...(action === "void" ? { metadata: { reason: parsed.data.reason } } : {}) } });
     return tx.expense.findUnique({ where: { id }, select: { id: true, status: true, postedAt: true, voidedAt: true, voidReason: true } });
   });
+  if (result && "ledgerBlocked" in result) return NextResponse.json({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
   if (!result) return NextResponse.json({ error: "Expense status changed" }, { status: 409 });
   return NextResponse.json({ expense: result });
 }

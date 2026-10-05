@@ -1,10 +1,11 @@
 "use client";
 
+import { DocumentPosting } from "../document-posting";
 import {FinancialReport} from "../financial-report";
 import { translate, type Locale } from "@/lib/locale";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
-type Rights = { canCreate: boolean; canIssue: boolean; canVoid: boolean };
+type Rights = { canPostLedger: boolean; canCreate: boolean; canIssue: boolean; canVoid: boolean };
 type Option = { tenantId: string; companyId: string; label: string; companyPermissions: Rights;
   branches: ({ id: string; name: string } & Rights)[] };
 type Order = { id: string; number: string; customerName: string; branchId: string | null;
@@ -24,24 +25,34 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const requestNumber = useRef(0);
+  const orderRequest = useRef(0);
   const scope = options[selected];
   const load = useCallback(async (index: number, pageNumber = 0) => {
     const option = options[index];
     if (!option) return;
+    const request = ++requestNumber.current;
+    try {
     const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId,
       page: String(pageNumber) });
     const response = await fetch(`/api/invoices?${query}`);
     const data = await response.json();
+    if (request !== requestNumber.current) return;
     if (!response.ok) { setError(data.error ?? t("Could not load invoices", "تعذر تحميل الفواتير")); return; }
     setInvoices(data.invoices); setPage(pageNumber); setNextPage(data.nextPage); setError("");
+    } catch { if (request === requestNumber.current) setError(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
   const loadOrders = useCallback(async (index: number) => {
     const option = options[index];
     if (!option || !(option.companyPermissions.canCreate || option.branches.some((branch) => branch.canCreate))) return;
-    const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId });
-    const response = await fetch(`/api/orders?${query}`);
-    if (response.ok) setOrders((await response.json()).orders);
-  }, [options]);
+    const request = ++orderRequest.current;
+    try {
+      const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId });
+      const response = await fetch(`/api/orders?${query}`);
+      const data = await response.json();
+      if (request === orderRequest.current && response.ok) setOrders(data.orders);
+    } catch { if (request === orderRequest.current) setError(t("Could not load sales orders", "تعذر تحميل طلبات البيع")); }
+  }, [options, t]);
   useEffect(() => { void load(selected); void loadOrders(selected); }, [load, loadOrders, selected]);
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,7 +67,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not create invoice", "تعذر إنشاء الفاتورة"));
       else { setReportVersion(value=>value+1);form.reset(); await Promise.all([load(selected), loadOrders(selected)]); }
-    } finally { setBusy(false); }
+    } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   async function change(invoice: Invoice, action: "issue" | "void", reason?: string) {
     if (!scope) return;
@@ -68,14 +79,14 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
       const data = await response.json();
       if (!response.ok) setError(data.error ?? t("Could not update invoice", "تعذر تحديث الفاتورة"));
       else {setReportVersion(value=>value+1);await load(selected, page);}
-    } finally { setBusy(false); }
+    } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   if (!options.length) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;
   const eligibleOrders = orders.filter((order) => order.status === "COMPLETED" && !order.invoice &&
     (order.branchId ? scope.branches.find((branch) => branch.id === order.branchId)?.canCreate
       : scope.companyPermissions.canCreate));
-  return <section><label>{t("Company", "الشركة") } <select value={selected} onChange={(event) => {
-    setSelected(Number(event.target.value)); setInvoices([]); setOrders([]);
+  return <section><label>{t("Company", "الشركة") } <select disabled={busy} value={selected} onChange={(event) => {
+    requestNumber.current++; orderRequest.current++; setSelected(Number(event.target.value)); setInvoices([]); setOrders([]); setError("");
   }}>{options.map((option, index) => <option key={`${option.tenantId}:${option.companyId}`} value={index}>{option.label}</option>)}</select></label>
     {(scope.companyPermissions.canCreate || scope.branches.some((branch) => branch.canCreate)) &&
       <form onSubmit={(event) => void create(event)} className="crm-form"><h2>{t("New internal invoice", "فاتورة داخلية جديدة")}</h2>
@@ -92,6 +103,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         : scope.companyPermissions;
       return <article key={invoice.id}><div><h3>{invoice.number} · {invoice.customerName}</h3>
         <p>{t(invoice.status, ({ DRAFT: "مسودة", ISSUED: "مصدرة", VOID: "ملغاة" })[invoice.status])} · {invoice.subtotal} {invoice.currency}</p>
+        {rights?.canPostLedger && invoice.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${invoice.id}:${invoice.status}`} kind="invoice" id={invoice.id} scope={scope} locale={locale} amount={invoice.subtotal} currency={invoice.currency} eligible={invoice.status === "ISSUED"}/>}
         <a href={`/accounting/invoices/${invoice.id}`}>{t("View / print invoice", "عرض / طباعة الفاتورة")}</a>
         <ul>{invoice.lines.map((line, index) => <li key={index}>
           {line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>

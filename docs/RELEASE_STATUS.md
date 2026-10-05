@@ -119,3 +119,11 @@ Dashboard permission checks are batched in both the page and API. The dashboard 
 Core checks #87 passed migrations, scope/database tests, build and API flows in isolated PostgreSQL. Live read-only checks confirmed the dashboard, customers, employees and manual ledger load. The real company has no branch yet, so POS setup cannot proceed until a branch is created. Full live operational acceptance remains outstanding; no synthetic business records have been inserted into the real company.
 
 This is an initial review build, not a complete ERP release. Automatic financial posting, tax, banking, payment devices, fingerprint attendance, email recovery and the preview-only modules remain pending.
+
+### Document-to-ledger posting
+
+Issued invoices and posted expenses now have an explicit ledger-posting action in their registers. The user chooses the journal date and accounts: asset/revenue for invoices, expense/asset-or-liability for expenses. Exact source amounts, source currency and branch are copied by the server; zero values, incompatible account types, foreign-company accounts, earlier dates, currency mismatches and closed periods are rejected. No tax calculation or external payment is performed.
+
+A reserved 30-character journal number encodes all 128 source UUID bits in base 36 with SYSI-/SYSE- prefixes. The existing company/number unique constraint prevents duplicate posting, including after a reversal; manual entries and reversal inputs cannot claim those prefixes. Source row locks serialize ledger posting with source voiding. Posted documents must have their linked ledger journal reversed before voiding. Document posting and audit logging commit atomically. No schema migration or changes to existing records are required.
+
+Accounting registers discard outdated list requests during company changes and show connection errors. The new isolated API fixture covers quote → order → invoice → journal → reversal → void, concurrent duplicate attempts, expense posting, permissions, account/company validation, period locking and exact amounts. Live business-flow acceptance is still outstanding.

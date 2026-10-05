@@ -1,3 +1,4 @@
+import { documentJournal, lockDocument } from "@/lib/document-journal";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -25,6 +26,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     branchId: invoice.branchId ?? undefined, permission: action === "issue" ? "invoice:issue" : "invoice:void" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
+    await lockDocument(tx, "invoice", tenantId, id);
+    if (action === "void") {
+      const journal = await documentJournal(tx, "invoice", tenantId, invoice.companyId, id);
+      if (journal && !journal.reversal) return { ledgerBlocked: true as const };
+    }
     const changed = await tx.invoice.updateMany({ where: { id, tenantId,
       status: action === "issue" ? "DRAFT" : { in: ["DRAFT", "ISSUED"] } },
       data: action === "issue" ? { status: "ISSUED", issuedAt: new Date() }
@@ -37,6 +43,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.invoice.findUnique({ where: { id }, select: { id: true, status: true,
       issuedAt: true, voidedAt: true, voidReason: true } });
   });
+  if (result && "ledgerBlocked" in result) return NextResponse.json({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
   if (!result) return NextResponse.json({ error: "Invoice status has changed or transition is invalid" }, { status: 409 });
   return NextResponse.json({ invoice: result });
 }

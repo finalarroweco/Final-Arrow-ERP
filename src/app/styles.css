@@ -45,3 +45,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .module-groups h3{font-size:15px}.module-groups ul{list-style:none;padding:0;margin:0}
 .module-groups a{display:block;padding:9px 0;font-size:14px;text-underline-offset:3px}
 .module-groups a:focus-visible{outline:2px solid #d60000;outline-offset:3px;border-radius:3px}
+
+.document-posting{margin-block:12px}.document-posting>div{padding:15px;border:1px solid #ddd;border-radius:8px;background:#fafafa;max-width:650px}
+.document-posting p{line-height:1.6!important}.document-posting form{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.document-posting form label{display:grid;gap:6px;min-width:170px}.document-posting select{padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;max-width:100%}
+.customer-list article:has(.document-posting){align-items:flex-start;flex-wrap:wrap}
