@@ -167,7 +167,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       {lines.length < 50 && <button type="button" onClick={() => setLines([...lines, { description: "", quantity: 1, unitPrice: "0.000" }])}>{t("Add line", "إضافة بند")}</button>}
       <button type="submit" disabled={busy || receiptPending || !supplierId}>{t("Create draft", "إنشاء مسودة")} · {scope.currency}</button>
     </form>}
-    <p>{t("Receive whole units in separate deliveries. Enter zero to skip a line; received quantities stay fulfilled after stock corrections.","استلم كميات صحيحة على دفعات مستقلة. أدخل صفرًا لتجاوز بند؛ الكميات المستلمة تبقى محسوبة بعد تصحيح المخزون.")}</p>
+    <p>{t("Receive whole units in separate deliveries. Enter zero to skip a line; received quantities stay fulfilled after stock corrections. Reports include partial deliveries under Issued.","استلم كميات صحيحة على دفعات مستقلة. أدخل صفرًا لتجاوز بند؛ الكميات المستلمة تبقى محسوبة بعد تصحيح المخزون. تظهر الأوامر المستلمة جزئيًا ضمن حالة مصدرة في التقارير.")}</p>
     {error && <p role="alert">{error}</p>}
     {scope&&<FinancialReport key={`${scope.companyId}:${reportVersion}`} kind="purchase-orders" scope={scope} locale={locale}/>}
     <div className="customer-list">{orders.map((order) => {
@@ -197,10 +197,10 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
             {receiptBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
           </select></label>}
           {order.lines.filter(line=>line.receivedQuantity<line.quantity).map(line=><div key={line.id} className="formrow"><label>{line.description} · {t("Remaining","المتبقي")}: {line.quantity-line.receivedQuantity}
-            <select name={line.id} required={(receiptQuantities[line.id]??0)>0} disabled={busy||receiptPending||(receiptQuantities[line.id]??0)===0} defaultValue={receiptRequest.current?.lines.find(l=>l.orderLineId===line.id)?.itemId??""}><option value="">{t("Choose inventory item","اختر صنفًا من المخزون")}</option>
+            <select key={`${line.id}:${receiptItems.length}:${receiptPending?receiptRequest.current?.requestId:"new"}`} name={line.id} required={(receiptQuantities[line.id]??0)>0} disabled={busy||receiptPending||(receiptQuantities[line.id]??0)===0} defaultValue={receiptRequest.current?.lines.find(l=>l.orderLineId===line.id)?.itemId??""}><option value="">{t("Choose inventory item","اختر صنفًا من المخزون")}</option>
               {receiptItems.map(item=><option key={item.id} value={item.id}>{item.sku} · {item.name} ({item.unit})</option>)}
             </select></label><label>{t("Receive now","استلام الآن")} · {line.description}<input type="number" min={0} max={line.quantity-line.receivedQuantity} step={1} required disabled={busy||receiptPending} value={receiptQuantities[line.id]??0} onChange={event=>setReceiptQuantities(v=>({...v,[line.id]:Number(event.target.value)}))}/></label></div>)}
-          <button disabled={busy||!receiptItems.length}>{receiptPending?t("Retry same receipt","إعادة محاولة نفس الاستلام"):t("Record this delivery","تسجيل هذه الدفعة")}</button>
+          <button disabled={busy||(!receiptPending&&!receiptItems.length)}>{receiptPending?t("Retry same receipt","إعادة محاولة نفس الاستلام"):t("Record this delivery","تسجيل هذه الدفعة")}</button>
         </form>}
       </div></article>;
     })}</div>
