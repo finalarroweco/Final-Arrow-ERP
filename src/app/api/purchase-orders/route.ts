@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
-import { canAccess, readableCompanyBranches } from "@/lib/access";
+import { canAccess, readableCompanyPermissions } from "@/lib/access";
 import { db } from "@/lib/db";
 
 const uuid = z.string().uuid();
@@ -26,18 +26,21 @@ export async function GET(request: Request) {
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
     return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
-  const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
-    companyId: companyId.data, permission: "purchase-order:read" });
+  const rights = await readableCompanyPermissions({ userId: actor.id, tenantId: tenantId.data,
+    companyId: companyId.data, permissions: ["purchase-order:read", "inventory-stock:read"] });
+  const branches = rights["purchase-order:read"], stock = rights["inventory-stock:read"];
+  const receiptVisibility = stock === false ? { id: { in: [] as string[] } } : stock === null ? {} : { branchId: { in: stock } };
   if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const orders = await db.purchaseOrder.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
+  const orders = await db.$transaction(tx=>tx.purchaseOrder.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, supplierId: true, supplierName: true, branchId: true,
       status: true, issuedAt: true, receivedAt: true, cancelledAt: true,
       currency: true, subtotal: true, notes: true, createdAt: true,
-      receipt: { select: { id: true, branchId: true, createdAt: true } },
-      lines: { select: { id: true, position: true, description: true, quantity: true, unitPrice: true, amount: true },
+      receipts: { where: receiptVisibility, select: { id: true, branchId: true, createdAt: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 10 },
+      _count: { select: { receipts: { where: receiptVisibility } } },
+      lines: { select: { id: true, position: true, description: true, quantity: true, receivedQuantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
-    orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 }),{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
   return NextResponse.json({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });
 }
 

@@ -494,7 +494,7 @@ model PurchaseOrder {
   branch       Branch?             @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   supplier     Supplier            @relation(fields: [tenantId, companyId, supplierId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        PurchaseOrderLine[]
-  receipt      GoodsReceipt?
+  receipts     GoodsReceipt[]
 
   @@unique([companyId, number])
   @@unique([tenantId, id])
@@ -509,6 +509,7 @@ model PurchaseOrderLine {
   position     Int
   description  String
   quantity     Int
+  receivedQuantity Int @default(0)
   unitPrice    Decimal            @db.Decimal(18, 3)
   amount       Decimal            @db.Decimal(18, 3)
   order        PurchaseOrder      @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
@@ -524,7 +525,7 @@ model GoodsReceipt {
   tenantId  String             @db.Uuid
   companyId String             @db.Uuid
   branchId  String             @db.Uuid
-  orderId   String             @unique @db.Uuid
+  orderId   String             @db.Uuid
   createdBy String             @db.Uuid
   createdAt DateTime           @default(now())
   company   Company            @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
@@ -532,8 +533,8 @@ model GoodsReceipt {
   order     PurchaseOrder      @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines     GoodsReceiptLine[]
 
+  @@index([orderId, createdAt])
   @@unique([tenantId, id])
-  @@unique([tenantId, companyId, orderId])
   @@unique([tenantId, companyId, orderId, id])
   @@index([tenantId, companyId, branchId, createdAt])
 }

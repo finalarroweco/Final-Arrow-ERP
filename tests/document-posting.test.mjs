@@ -131,7 +131,7 @@ test("document posting is exact, scoped, single-use and reversal-safe",{timeout:
     await create(`/api/purchase-orders/${sharedPurchase.id}/receive`,{branchId:branch.id,lines:[{orderLineId:sharedPurchase.lines[0].id,itemId:stockItem.id}]});
     assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,cookie)).data.receipts.length,2);
     assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,viewer.cookie)).data.receipts.length,1);
-    const sharedReceipt=await db.goodsReceipt.findUnique({where:{orderId:sharedPurchase.id},include:{lines:{include:{movement:true}}}});
+    const sharedReceipt=await db.goodsReceipt.findFirst({where:{orderId:sharedPurchase.id},include:{lines:{include:{movement:true}}}});
     const viewerStock=await call(`/api/inventory/stock?${stockQuery}`,"GET",undefined,viewer.cookie);
     assert.equal(viewerStock.status,200);
     assert.equal(viewerStock.data.movements.find(m=>m.id===receiptMovement.id).receiptId,receiptId);
