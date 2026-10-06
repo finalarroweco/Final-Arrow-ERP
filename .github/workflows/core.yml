@@ -41,3 +41,18 @@ jobs:
       - run: npm run test:db
       - run: npm run build
       - run: npm run test:api
+
+  migrate-erp:
+    needs: verify
+    if: github.event_name == 'pull_request' && github.head_ref == 'feature/core-auth-companies-branches' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: node scripts/bootstrap-erp-database.mjs
+        env:
+          ERP_DATABASE_URL: ${{ secrets.ERP_DATABASE_URL }}
