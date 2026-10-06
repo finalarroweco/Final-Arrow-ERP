@@ -139,6 +139,41 @@ test("document posting is exact, scoped, single-use and reversal-safe",{timeout:
     assert.ok(viewerStock.data.movements.every(m=>!("receiptLine" in m)),"internal source scope stays private");
     const ownerReceipts=(await call(`/api/purchase-orders/receipts?${receiptQuery}`,"GET",undefined,cookie)).data.receipts;
     assert.equal(ownerReceipts.find(r=>r.id===sharedReceipt.id).correctedLineCount,0);
+    // Inclusive UTC day bounds and scoped CSV exports use the same saved receipts.
+    await db.goodsReceipt.update({where:{id:receiptId},data:{createdAt:new Date("2026-01-01T00:00:00.000Z")}});
+    await db.goodsReceipt.update({where:{id:sharedReceipt.id},data:{createdAt:new Date("2026-01-01T23:59:59.999Z")}});
+    await db.purchaseOrder.update({where:{id:sharedPurchase.id},data:{supplierName:' =SUM(1,2) "supplier"'}});
+    const period="&from=2026-01-01&to=2026-01-01";
+    assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}${period}`,"GET",undefined,cookie)).data.receipts.length,2);
+    assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}&from=2026-01-02&to=2026-01-02`,"GET",undefined,cookie)).data.receipts.length,0);
+    for(const bad of ["&from=2026-01-01","&from=2026-02-30&to=2026-03-01","&from=2026-01-02&to=2026-01-01","&from=2025-01-01&to=2026-01-02","&format=csv",period+"&format=csv&page=1",period+"&format=xml",period+"&unknown=1",period+"&from=2026-01-01"]){
+      assert.equal((await call(`/api/purchase-orders/receipts?${receiptQuery}${bad}`,"GET",undefined,cookie)).status,400);
+    }
+    const csvPath=`${origin}/api/purchase-orders/receipts?${receiptQuery}${period}&format=csv`;
+    const csv=await fetch(csvPath,{headers:{Cookie:cookie}});
+    assert.equal(csv.status,200);assert.match(csv.headers.get("content-type"),/text\/csv/);
+    assert.equal(csv.headers.get("cache-control"),"private, no-store");
+    assert.match(csv.headers.get("content-disposition"),/receipts-2026-01-01-2026-01-01\.csv/);
+    const csvText=await csv.text();assert.ok(csvText.includes(receiptId)&&csvText.includes(sharedReceipt.id));
+    assert.ok(csvText.includes('"\' =SUM(1,2) ""supplier"""'),"spreadsheet formulas and embedded quotes must be escaped");
+    assert.match(csvText,/,"1","1"/);
+    const branchCsv=await fetch(csvPath,{headers:{Cookie:viewer.cookie}});
+    const branchText=await branchCsv.text();assert.equal(branchCsv.status,200);assert.ok(branchText.includes(receiptId));assert.ok(!branchText.includes(sharedReceipt.id));
+    assert.equal((await fetch(csvPath,{headers:{Cookie:outsider.cookie}})).status,403);
+    assert.equal((await fetch(csvPath)).status,401);
+    // CI-only report fixtures verify complete export across pages and fail-closed limits.
+    const fixtureCreator=(await db.purchaseOrder.findUniqueOrThrow({where:{id:sharedPurchase.id}})).createdBy;
+    const bulkOrders=Array.from({length:501},(_,i)=>({id:randomUUID(),tenantId,companyId,branchId:branch.id,supplierId:supplier.id,number:`BULK-EXPORT-${i}`,supplierName:"Bulk export QA",currency:"OMR",subtotal:"0",status:"RECEIVED",createdBy:fixtureCreator}));
+    await db.purchaseOrder.createMany({data:bulkOrders});
+    const bulkReceipts=bulkOrders.map(o=>({id:randomUUID(),tenantId,companyId,branchId:branch.id,orderId:o.id,createdBy:fixtureCreator,createdAt:new Date("2026-01-01T12:00:00.000Z")}));
+    await db.goodsReceipt.createMany({data:bulkReceipts.slice(0,51)});
+    const bulkQuery=`${receiptQuery}${period}&q=BULK-EXPORT`;
+    const bulkPage=await call(`/api/purchase-orders/receipts?${bulkQuery}`,"GET",undefined,cookie);
+    assert.equal(bulkPage.data.receipts.length,50);assert.equal(bulkPage.data.nextPage,1);
+    const fullCsv=await fetch(`${origin}/api/purchase-orders/receipts?${bulkQuery}&format=csv`,{headers:{Cookie:cookie}});
+    assert.equal(fullCsv.status,200);assert.equal((await fullCsv.text()).split("\r\n").length,52);
+    await db.goodsReceipt.createMany({data:bulkReceipts.slice(51)});
+    assert.equal((await fetch(`${origin}/api/purchase-orders/receipts?${bulkQuery}&format=csv`,{headers:{Cookie:cookie}})).status,413);
     const liability=await account("PAYABLE","LIABILITY"),deductionLiability=await account("DEDUCT","LIABILITY");
     const {employee}=await create("/api/employees",{companyId,branchId:branch.id,code:"PAY-QA",fullName:"Payroll QA"});
     const {entry:payroll}=await create("/api/payroll",{companyId,employeeId:employee.id,period:day.slice(0,7),baseSalary:"10.125",allowances:"2.250",deductions:"3.125"});
