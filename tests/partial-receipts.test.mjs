@@ -25,7 +25,7 @@ test("partial receipts are bounded, atomic, scoped and replay-safe",{timeout:900
   const {item:itemB}=await create("/api/inventory/items",{companyId,branchId:branch.id,sku:"PART-B",name:"Second item",unit:"unit"});
   async function purchase(number,quantities=[5,4]){const {order}=await create("/api/purchase-orders",{companyId,branchId:branch.id,supplierId:supplier.id,number,lines:quantities.map((quantity,i)=>({description:`Delivery line ${i}`,quantity,unitPrice:"1.125"}))});assert.equal((await call(`/api/purchase-orders/${order.id}/status`,"PATCH",{tenantId,action:"issue"},cookie)).status,200);return order;}
   const order=await purchase("PO-PART"),path=`/api/purchase-orders/${order.id}/receive`;
-  const lineA=order.lines[0],lineB=order.lines[1];
+  const lineA=order.lines.find(l=>l.position===0),lineB=order.lines.find(l=>l.position===1);
   const body={tenantId,branchId:branch.id,requestId:randomUUID(),lines:[{orderLineId:lineA.id,itemId:itemA.id,quantity:2}]};
   assert.equal((await call(path,"POST",body)).status,401);
   assert.equal((await call(path,"POST",body,outsider.cookie)).status,403);
@@ -57,7 +57,7 @@ test("partial receipts are bounded, atomic, scoped and replay-safe",{timeout:900
   const query=new URLSearchParams({tenantId,companyId});
   const visible=await call(`/api/purchase-orders?${query}`,"GET",undefined,viewer.cookie);
   assert.equal(visible.status,200);assert.equal(visible.data.orders[0].receipts.length,1);
-  assert.equal(visible.data.orders[0].lines[0].receivedQuantity,2);
+  assert.equal(visible.data.orders[0].lines.find(l=>l.id===lineA.id).receivedQuantity,2);
   const print=await fetch(`${origin}/purchasing/orders/${order.id}`,{headers:{Cookie:cookie}});assert.equal(print.status,200);assert.match(await print.text(),/مستلم جزئيًا|Partially received/);
   // Direct database changes cannot over-fulfil or rewrite saved lines.
   const original=await db.goodsReceiptLine.findFirst({where:{receiptId:body.requestId}});

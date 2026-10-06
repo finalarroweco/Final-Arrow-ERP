@@ -72,7 +72,7 @@ export async function POST(request: Request) {
         supplierId, supplierName: supplier.displayName, number, notes: notes ?? null,
         currency: company.baseCurrency, subtotal, createdBy: actor.id,
         lines: { create: lines.map((line, position) => ({ position, description: line.description,
-          quantity: line.quantity, unitPrice: line.unitPrice, amount: amounts[position] })) } }, include: { lines: true } });
+          quantity: line.quantity, unitPrice: line.unitPrice, amount: amounts[position] })) } }, include: { lines: { orderBy: { position: "asc" } } } });
       await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: "purchase-order.created",
         entity: "PurchaseOrder", entityId: order.id,
         metadata: { supplierId, subtotal: subtotal.toString(), currency: order.currency } } });
