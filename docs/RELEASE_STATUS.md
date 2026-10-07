@@ -181,3 +181,10 @@ Receipt rows now distinguish original receipt lines whose stock movements have b
 - The source UUID is encoded in reserved SYSG/SYST journal numbers and decoded to verify correction links. Trial balance, income, balance sheet and account statements already include these ordinary balanced journals.
 - Isolated CI coverage includes exact multi-price partial receipt totals, duplicate races, original account matching, dependency/reversal races, period locks, currency/scope checks, source-document print paths and hiding financial references after permissions are revoked.
 - No cash is transferred. Supplier cash payments/refunds, taxes, freight, foreign-exchange handling, formal supplier credit-note identifiers and inventory costing rules remain separate work. There are still 33 migrations; this slice uses the existing immutable journal schema.
+
+### Supplier source-journal statements
+- Authorized AR/EN supplier statements show posted purchase receipt accruals, return credits and their correction journals, with an earlier opening balance and running credit-minus-debit balances per currency.
+- Uses source purchase-order permission, receiving-branch stock and ledger permissions, and independent supplier-read permission. An explicit receiving branch narrows the same scope; archived suppliers remain reportable.
+- Journal-date filters use UTC, up to 366 days and 5000 period journals; bounded source-document and historical-journal lookups reject over 20000 records rather than truncate balances. Repeatable-read transactions keep opening and period movements consistent.
+- CSV export escapes formulas; authorized server-rendered views link to source documents and journals and support browser printing. Supplier name/code search narrows the first 200 selector results.
+- This is not a confirmed payable balance: unposted sources, supplier settlements/refunds, taxes/freight and unrelated manual journals are excluded.

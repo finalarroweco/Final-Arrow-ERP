@@ -5,7 +5,7 @@ import {spawn} from "node:child_process";
 import {PrismaClient} from "@prisma/client";
 const origin="http://127.0.0.1:3223";
 async function call(path,method="GET",body,cookie){const r=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cookie:r.headers.get("set-cookie")?.split(";")[0]};}
-test("purchase accruals and return credits are exact, scoped, locked and source-dependent",{timeout:90000},async()=>{
+test("purchase accruals, credits and supplier statements are exact, scoped and source-dependent",{timeout:90000},async()=>{
  const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-p","3223"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
@@ -55,6 +55,25 @@ test("purchase accruals and return credits are exact, scoped, locked and source-
   const credits=await Promise.all([call(returnPath,"POST",creditBody,cookie),call(returnPath,"POST",creditBody,cookie)]);assert.deepEqual(credits.map(r=>r.status).sort(),[201,409],JSON.stringify(credits));
   const credit=await db.journalEntry.findUnique({where:{id:credits.find(r=>r.status===201).data.entry.id},include:{lines:{orderBy:{position:"asc"}}}});assert.equal(credit.total.toString(),"1.125");assert.equal(credit.lines[0].accountId,payable.id);assert.equal(credit.lines[1].accountId,asset.id);
   assert.equal(await db.auditLog.count({where:{tenantId,entityId:returned.id,action:"purchase-return.ledger_posted"}}),1);
+  assert.equal((await call("/api/ledger/journals","POST",{...manual,number:"PGL-UNRELATED-MANUAL",lines:[{accountId:expense.id,debit:"7",credit:"0"},{accountId:otherPayable.id,debit:"0",credit:"7"}]},cookie)).status,201);
+  const statementParams=new URLSearchParams({tenantId,companyId,supplierId:supplier.id,from:day,to:day});
+  const statementPath=`/api/purchasing/supplier-statement?${statementParams}`;
+  assert.equal((await call(statementPath)).status,401);
+  assert.equal((await call(statementPath,"GET",undefined,outsider.cookie)).status,403);
+  assert.equal((await call(statementPath,"GET",undefined,siblingCookie)).status,403);
+  assert.equal((await call(statementPath+`&branchId=${sibling.id}`,"GET",undefined,viewerCookie)).status,403);
+  assert.equal((await call(statementPath+"&from="+day,"GET",undefined,cookie)).status,400);
+  assert.equal((await call(statementPath.replace(`from=${day}`,"from=2026-02-30"),"GET",undefined,cookie)).status,400);
+  const supplierReport=await call(statementPath,"GET",undefined,viewerCookie);assert.equal(supplierReport.status,200,JSON.stringify(supplierReport.data));
+  assert.deepEqual(supplierReport.data.summary,[{currency:"OMR",opening:"0.000",increase:"4.625",decrease:"1.125",closing:"3.500"}]);
+  assert.equal(supplierReport.data.rows.length,2);assert.equal(supplierReport.data.rows.at(-1).balance,"3.500");assert.ok(supplierReport.data.rows.every(r=>r.branchId===branch.id));
+  const omittedBranch=await call(statementPath+`&branchId=${sibling.id}`,"GET",undefined,cookie);assert.equal(omittedBranch.status,200);assert.equal(omittedBranch.data.rows.length,0);
+  const statementPage=await fetch(origin+`/purchasing/supplier-statement?${new URLSearchParams({scope:`${tenantId}:${companyId}`,supplierId:supplier.id,from:day,to:day})}`,{headers:{Cookie:cookie}});assert.equal(statementPage.status,200);assert.match(await statementPage.text(),/3\.500/);
+  // Supplier names/codes remain CSV-safe even when they resemble spreadsheet formulas.
+  await db.supplier.update({where:{id:supplier.id},data:{displayName:"=HYPERLINK(unsafe)",archivedAt:new Date()}});
+  const csv=await fetch(origin+statementPath+"&format=csv",{headers:{Cookie:cookie}});assert.equal(csv.status,200);assert.match(csv.headers.get("cache-control"),/no-store/);const csvText=await csv.text();assert.match(csvText,/"'=HYPERLINK\(unsafe\)"/);assert.match(csvText,/CLOSING/);assert.match(csvText,/3\.500/);
+
+  await db.supplier.update({where:{id:supplier.id},data:{displayName:"Accounting supplier",archivedAt:null}});
   const reverse=(id,number,date=day)=>call(`/api/ledger/journals/${id}/reverse`,"POST",{tenantId,number,entryDate:date,reason:"Correct purchase accounting"},cookie);
   assert.equal((await reverse(original.id,"PGL-PARENT-BLOCKED")).status,409);
   const query=new URLSearchParams({tenantId,companyId});
@@ -66,6 +85,9 @@ test("purchase accruals and return credits are exact, scoped, locked and source-
   assert.equal((await reverse(credit.id,"PGL-CREDIT-REV",nextDay)).status,201);
   assert.equal((await reverse(original.id,"PGL-PARENT-EARLY")).status,409,"source correction cannot precede its dependent return correction");
   assert.equal((await reverse(original.id,"PGL-PARENT-REV",nextDay)).status,201);
+  const historical=await call(statementPath,"GET",undefined,cookie);assert.equal(historical.data.summary[0].closing,"3.500","future corrections cannot change past closing");
+  const corrected=await call(statementPath.replace(`from=${day}`,`from=${nextDay}`).replace(`to=${day}`,`to=${nextDay}`),"GET",undefined,cookie);assert.equal(corrected.status,200);assert.deepEqual(corrected.data.summary,[{currency:"OMR",opening:"3.500",increase:"1.125",decrease:"4.625",closing:"0.000"}]);assert.ok(corrected.data.rows.every(r=>r.reversal));
+
   assert.equal((await call(path,"POST",receiptBody,cookie)).status,409,"reversed source journals cannot post again");
   assert.equal((await call(returnPath,"POST",creditBody,cookie)).status,409);
   // Receipt accounting and full stock correction compete under the same source lock.
@@ -87,6 +109,8 @@ test("purchase accruals and return credits are exact, scoped, locked and source-
   const noLedger=await call(`/api/purchase-orders/returns?${query}`,"GET",undefined,viewerCookie);assert.equal(noLedger.status,200);assert.ok(noLedger.data.returns.every(r=>r.entry===null&&r.financialStatus==="no_access"));
   const noLedgerReceipts=await call(`/api/purchase-orders/receipts?${query}`,"GET",undefined,viewerCookie);assert.equal(noLedgerReceipts.status,200);assert.ok(noLedgerReceipts.data.receipts.every(r=>r.entry===null&&r.financialStatus==="no_access"));
   assert.equal((await call(returnPath+`?tenantId=${tenantId}`,"GET",undefined,viewerCookie)).status,403);
+  assert.equal((await call(statementPath,"GET",undefined,viewerCookie)).status,403);
+  const deniedCsv=await fetch(origin+statementPath+"&format=csv",{headers:{Cookie:viewerCookie}});assert.equal(deniedCsv.status,403);
   const noLedgerPrint=await fetch(origin+`/purchasing/returns/${returned.id}`,{headers:{Cookie:viewerCookie}});assert.equal(noLedgerPrint.status,200);assert.doesNotMatch(await noLedgerPrint.text(),/قيد إشعار مرتجع المشتريات|Purchase return credit/);
  }finally{server.kill("SIGTERM");await db.$disconnect();}
 });
