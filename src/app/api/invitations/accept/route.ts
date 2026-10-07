@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSession, currentUser, hashPassword } from "@/lib/auth";
+import {lockTenant} from "@/lib/role-management";
 import { db } from "@/lib/db";
 
 const schema = z.object({
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
   }
   try {
     const userId = await db.$transaction(async (tx) => {
+      await lockTenant(tx,invitation.tenantId);
       const claimed = await tx.invitation.updateMany({
         where: { id: invitation.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
         data: { acceptedAt: new Date() },
@@ -69,3 +71,4 @@ export async function POST(request: Request) {
     throw error;
   }
 }
+

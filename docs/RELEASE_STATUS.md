@@ -4,7 +4,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 
 | Area | Current implementation | Remaining work |
 | --- | --- | --- |
-| Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events, an organization administration activity viewer and persistent per-email login throttling | Custom role editor, account recovery, verified email, network-level abuse controls |
+| Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events, an organization administration activity viewer and persistent per-email login throttling | Account recovery, verified email, network-level abuse controls |
 | CRM & sales | Customers, leads, quotes, orders, internal invoices | Contacts, imports, tax, payments, legal documents |
 | Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, stock return documents/register and source-linked receipt accruals/return credits, UTC receipt register and CSV, catalog and branch stock ledger | Reservations, valuation rules, unallocated supplier advances |
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections and scoped time reports | Dependencies, time approval, billing, budgets, resource planning |
@@ -202,3 +202,11 @@ Supplier settlements now record actual payments and refunds against a posted goo
 The database enforces positive amounts, exact balanced journals, original account/currency/source scope, available balance, immutable settlement records and chronological dates. Receipt locking serializes competing settlements and corrections. A saved request ID supports exact retries without duplicate journals; altered retry payloads are rejected. Active settlements must be reversed before the original receipt accrual. Period locks and supplier/order/stock/ledger permissions apply.
 
 The new settlement register, receipt form, supplier statement and supplier balance overview include payments, refunds and journal corrections. There are now 34 migrations. Unallocated advances, bank feeds/transfers, tax/freight, currency conversion and due-date aging remain unfinished. Isolated API tests cover simultaneous requests, direct database overpayments, retry behavior, scope, periods and reversals.
+
+### Custom operational roles and member assignments
+
+Organization owners can create and update up to 100 custom roles at `/settings/roles`, inspect protected built-in templates, and assign up to ten role/scope combinations to an existing member. Permissions are selected from the organization's owner catalog; user administration and organization creation cannot be delegated through custom roles. Action permissions require their module's read rights. Owner access and the built-in Owner/Manager/Viewer roles cannot be edited here.
+
+Assignments replace all prior grants for the selected member, retain suspension status, and revoke that member's pending invitations so old invitation links cannot restore superseded access. Invitations support custom roles and organization/company/branch scopes. Existing sessions use current permissions on their next authorized request. Changes and before/after access are audited.
+
+Tenant-row locks serialize role updates, membership edits and invitation acceptance; expected revisions reject stale competing changes. API fixtures cover cross-tenant isolation, reserved permissions, protected owners, mismatched branch/company scope, concurrent edits, immediate revocation, suspended members and pending invitation invalidation. No additional database migration is required; the existing 34-migration schema is reused.

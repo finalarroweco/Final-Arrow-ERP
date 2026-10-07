@@ -47,7 +47,7 @@ export function TeamPanel({ tenantId, currentUserId, locale }: { tenantId: strin
   }
 
   return <section className="team-panel">
-    <h3>{t("Team access", "صلاحيات الفريق")}</h3>
+    <h3>{t("Team access", "صلاحيات الفريق")}</h3><a href={`/settings/roles?tenantId=${tenantId}`}>{t("Edit roles and member permissions", "تعديل أدوار وصلاحيات الأعضاء")}</a>
     {error && <p role="alert">{error}</p>}
     <h4>{t("Members", "الأعضاء")}</h4>
     <ul>{members.map((member) => <li key={member.id}>
@@ -65,3 +65,4 @@ export function TeamPanel({ tenantId, currentUserId, locale }: { tenantId: strin
     </li>)}</ul>}
   </section>;
 }
+

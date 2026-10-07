@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
+import {grantRevision} from "@/lib/role-management";
 import { db } from "@/lib/db";
 
 export async function GET(request: Request) {
@@ -15,21 +16,21 @@ export async function GET(request: Request) {
     db.membership.findMany({
       where: { tenantId: tenantId.data },
       include: { user: { select: { name: true, email: true } },
-        roleGrants: { include: { role: { select: { name: true } }, scopes: true } } },
+        roleGrants: { include: { role: { select: { id: true, name: true } }, scopes: true } } },
       orderBy: { createdAt: "asc" },
     }),
     db.invitation.findMany({
       where: { tenantId: tenantId.data, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
-      include: { role: { select: { name: true } } },
+      include: { role: { select: { id: true, name: true } } },
       orderBy: { createdAt: "desc" },
     }),
   ]);
   return NextResponse.json({
     members: memberships.map((membership) => ({
       id: membership.id, userId: membership.userId, name: membership.user.name,
-      email: membership.user.email, status: membership.status,
+      email: membership.user.email, status: membership.status, revision:grantRevision(membership.roleGrants),
       grants: membership.roleGrants.map((grant) => ({
-        role: grant.role.name,
+        role: grant.role.name, roleId:grant.role.id,
         scopes: grant.scopes.map((scope) => ({
           type: scope.type, companyId: scope.companyId, branchId: scope.branchId,
         })),
@@ -40,5 +41,6 @@ export async function GET(request: Request) {
       type: invitation.type, companyId: invitation.companyId, branchId: invitation.branchId,
       expiresAt: invitation.expiresAt,
     })),
-  });
+  },{headers:{"Cache-Control":"private, no-store"}});
 }
+

@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {randomUUID} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import {PrismaClient} from '@prisma/client';
+const origin='http://127.0.0.1:3225';
+async function call(path,method='GET',body,cookie){const r=await fetch(origin+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
+test('custom roles and member assignments enforce owner control, scope, stale edits and immediate revocation',{timeout:90000},async()=>{
+ const db=new PrismaClient(),server=spawn('./node_modules/.bin/next',['start','-p','3225'],{env:{...process.env,ALLOW_REGISTRATION:'true'},stdio:['ignore','ignore','inherit']});
+ try{
+  let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
+  async function owner(){const id=randomUUID().slice(0,8);const r=await call('/api/auth/register','POST',{name:'Role owner',email:`role-owner-${id}@example.invalid`,password:'Role-owner-password-2026',organization:'Roles QA',slug:`roles-${id}`});assert.equal(r.status,201);return r;}
+  const actor=await owner(),outsider=await owner(),tenantId=actor.data.tenantId,cookie=actor.cookie;
+  const create=async(path,body)=>{const r=await call(path,'POST',{tenantId,...body},cookie);assert.equal(r.status,201,JSON.stringify(r.data));return r.data;};
+  const {company}=await create('/api/companies',{name:'Role company',code:'ROLE'}),companyId=company.id;
+  const {branch}=await create('/api/branches',{companyId,name:'Main',code:'MAIN'}),{branch:sibling}=await create('/api/branches',{companyId,name:'Sibling',code:'SIB'});
+  const {company:foreignCompany}=await create('/api/companies',{name:'Other company',code:'OTHER'});
+  const base={tenantId,name:'Branch accountant',permissions:['company:read','branch:read','customer:read','ledger:read','ledger:post']};
+  assert.equal((await call('/api/roles','POST',base)).status,401);assert.equal((await call('/api/roles','POST',base,outsider.cookie)).status,403);
+  for(const permissions of [['user:manage'],['user:invite'],['company:create'],['invented:read'],['ledger:post'],['customer:read','customer:read'],['project-time:read']])assert.equal((await call('/api/roles','POST',{...base,permissions},cookie)).status,400);
+  assert.equal((await call('/api/roles','POST',{...base,name:'owner'},cookie)).status,400);
+  const {role}=await create('/api/roles',{name:base.name,permissions:base.permissions});
+  assert.equal((await call('/api/roles','POST',{...base,name:'BRANCH ACCOUNTANT'},cookie)).status,409);
+  const catalog=async()=>{const r=await call(`/api/roles?tenantId=${tenantId}`,'GET',undefined,cookie);assert.equal(r.status,200);return r.data;};
+  let catalogData=await catalog(),editable=catalogData.roles.find(r=>r.id===role.id),ownerRole=catalogData.roles.find(r=>r.name==='Owner');
+  assert.ok(!catalogData.permissions.includes('user:manage'));assert.equal(ownerRole.assignable,false);
+  assert.equal((await call(`/api/roles/${ownerRole.id}`,'PATCH',{...base,name:'New owner',expectedRevision:ownerRole.revision},cookie)).status,403);
+  const email=`role-member-${randomUUID().slice(0,8)}@example.invalid`;
+  const invite=await create('/api/invitations',{email,roleId:role.id,scope:{type:'BRANCH',companyId,branchId:branch.id}});
+  assert.equal((await call('/api/invitations','POST',{tenantId,email:'denied@example.invalid',roleId:ownerRole.id,scope:{type:'TENANT'}},cookie)).status,403);
+  assert.equal((await call('/api/invitations','POST',{tenantId,email:'denied@example.invalid',role:'Viewer',roleId:role.id,scope:{type:'TENANT'}},cookie)).status,400);
+  const accepted=await call('/api/invitations/accept','POST',{token:invite.path.split('/').at(-1),name:'Accountant',password:'Accountant-test-password-2026'});assert.equal(accepted.status,200);
+  assert.equal((await call(`/api/roles?tenantId=${tenantId}`,'GET',undefined,accepted.cookie)).status,403);
+  assert.equal((await call('/api/roles','POST',{...base,name:'Escalation'},accepted.cookie)).status,403);
+  assert.equal((await call(`/api/ledger/accounts?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie)).status,200);
+  assert.equal((await call(`/api/ledger/accounts?tenantId=${tenantId}&companyId=${foreignCompany.id}`,'GET',undefined,accepted.cookie)).status,403);
+  const {customer:mainCustomer}=await create('/api/customers',{companyId,branchId:branch.id,code:'MAIN-C',displayName:'Main customer'});
+  const {customer:siblingCustomer}=await create('/api/customers',{companyId,branchId:sibling.id,code:'SIB-C',displayName:'Sibling customer'});
+  const list=await call(`/api/customers?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie);assert.deepEqual(list.data.customers.map(c=>c.id),[mainCustomer.id]);
+  const updateBody={tenantId,name:role.name,permissions:['company:read','branch:read','customer:read'],expectedRevision:editable.revision};
+  const updates=await Promise.all([call(`/api/roles/${role.id}`,'PATCH',updateBody,cookie),call(`/api/roles/${role.id}`,'PATCH',{...updateBody,name:'Competing name'},cookie)]);assert.deepEqual(updates.map(r=>r.status).sort(),[200,409]);
+  assert.equal((await call(`/api/ledger/accounts?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie)).status,403,'role permission removal applies to existing sessions');
+  const team=async()=>{const r=await call(`/api/team?tenantId=${tenantId}`,'GET',undefined,cookie);assert.equal(r.status,200);return r.data.members;};
+  let members=await team(),member=members.find(m=>m.email===email),ownerMember=members.find(m=>m.grants.some(g=>g.role==='Owner'));
+  const assign={tenantId,expectedRevision:member.revision,grants:[{roleId:role.id,scope:{type:'BRANCH',companyId,branchId:sibling.id}}]};
+  const target=`/api/team/${member.id}/grants`;
+  assert.equal((await call(target,'PATCH',assign,accepted.cookie)).status,403);assert.equal((await call(target,'PATCH',assign,outsider.cookie)).status,403);
+  assert.equal((await call(`/api/team/${ownerMember.id}/grants`,'PATCH',{...assign,expectedRevision:ownerMember.revision},cookie)).status,403);
+  assert.equal((await call(target,'PATCH',{...assign,grants:[{roleId:ownerRole.id,scope:{type:'TENANT'}}]},cookie)).status,403);
+  assert.equal((await call(target,'PATCH',{...assign,grants:[{roleId:role.id,scope:{type:'BRANCH',companyId:foreignCompany.id,branchId:branch.id}}]},cookie)).status,404);
+  assert.equal((await call(target,'PATCH',{...assign,grants:[assign.grants[0],assign.grants[0]]},cookie)).status,400);
+  const otherCatalog=await call(`/api/roles?tenantId=${outsider.data.tenantId}`,'GET',undefined,outsider.cookie),foreignRole=otherCatalog.data.roles.find(r=>r.name==='Viewer');
+  assert.equal((await call(target,'PATCH',{...assign,grants:[{roleId:foreignRole.id,scope:{type:'TENANT'}}]},cookie)).status,404);
+  const pending=await create('/api/invitations',{email,role:'Manager',scope:{type:'TENANT'}});
+  const assigned=await Promise.all([call(target,'PATCH',assign,cookie),call(target,'PATCH',{...assign,grants:[{roleId:role.id,scope:{type:'TENANT'}}]},cookie)]);assert.deepEqual(assigned.map(r=>r.status).sort(),[200,409]);
+  assert.equal((await call('/api/invitations/accept','POST',{token:pending.path.split('/').at(-1)},accepted.cookie)).status,410,'old pending invitations cannot restore replaced access');
+  const refreshed=(await team()).find(m=>m.id===member.id);assert.notEqual(refreshed.revision,member.revision);
+  assert.equal((await call(target,'PATCH',assign,cookie)).status,409);
+  // Establish branch-only scope regardless of which competing update won.
+  assert.equal((await call(target,'PATCH',{...assign,expectedRevision:refreshed.revision},cookie)).status,200);
+  const scoped=await call(`/api/customers?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie);assert.deepEqual(scoped.data.customers.map(c=>c.id),[siblingCustomer.id]);
+  assert.equal((await call(`/api/team/${member.id}`,'PATCH',{tenantId,status:'SUSPENDED'},cookie)).status,200);
+  const suspended=(await team()).find(m=>m.id===member.id);
+  assert.equal((await call(target,'PATCH',{...assign,expectedRevision:suspended.revision},cookie)).status,200);
+  assert.equal((await call(`/api/customers?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie)).status,403,'editing suspended member access does not reactivate membership');
+  assert.equal((await call(`/api/team/${member.id}`,'PATCH',{tenantId,status:'ACTIVE'},cookie)).status,200);
+  catalogData=await catalog();editable=catalogData.roles.find(r=>r.id===role.id);
+  assert.equal((await call(`/api/roles/${role.id}`,'PATCH',{tenantId,name:editable.name,permissions:[],expectedRevision:editable.revision},cookie)).status,200);
+  assert.equal((await call(`/api/customers?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie)).status,403,'empty custom role has no operational access');
+  const page=await fetch(origin+'/settings/roles',{headers:{Cookie:cookie}});assert.equal(page.status,200);assert.match(await page.text(),/Roles and permissions/);
+  const audit=await db.auditLog.findMany({where:{tenantId,action:{in:['role.created','role.updated','member.access_updated']}}});assert.ok(audit.some(a=>a.action==='role.created'));assert.ok(audit.some(a=>a.action==='member.access_updated'&&a.metadata.revokedPendingInvitations===1));
+ }finally{server.kill('SIGTERM');await db.$disconnect();}
+});

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
+import {lockTenant,RoleError,roleFailure} from "@/lib/role-management";
 import { db } from "@/lib/db";
 
 const schema = z.object({
@@ -20,21 +21,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ me
   const { tenantId, status } = parsed.data;
   if (!(await canAccess({ userId: actor.id, tenantId, permission: "user:manage" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const membership = await db.membership.findUnique({
-    where: { tenantId_id: { tenantId, id: membershipId } },
-    include: { roleGrants: { include: { role: { select: { name: true } } } } },
-  });
-  if (!membership) return NextResponse.json({ error: "Member not found" }, { status: 404 });
-  if (membership.userId === actor.id || membership.roleGrants.some((grant) => grant.role.name === "Owner"))
-    return NextResponse.json({ error: "Owner membership cannot be changed here" }, { status: 403 });
-  if (membership.status === "INVITED")
-    return NextResponse.json({ error: "Member has not joined" }, { status: 409 });
-  await db.$transaction(async (tx) => {
-    await tx.membership.update({ where: { id: membership.id }, data: { status } });
-    await tx.auditLog.create({
-      data: { tenantId, actorId: actor.id, action: status === "SUSPENDED" ? "member.suspended" : "member.reactivated",
-        entity: "Membership", entityId: membership.id },
-    });
+  try {await db.$transaction(async (tx) => {
+    await lockTenant(tx,tenantId);
+    const membership=await tx.membership.findFirst({where:{tenantId,id:membershipId},include:{roleGrants:{include:{role:{select:{name:true}}}}}});
+    if(!membership)throw new RoleError("Member not found",404);
+    if(membership.userId===actor.id||membership.roleGrants.some(g=>g.role.name==="Owner"))throw new RoleError("Owner membership cannot be changed here",403);
+    if(membership.status==="INVITED")throw new RoleError("Member has not joined");
+    await tx.membership.update({where:{id:membership.id},data:{status}});
+    await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:status==="SUSPENDED"?"member.suspended":"member.reactivated",entity:"Membership",entityId:membership.id}});
   });
   return NextResponse.json({ status });
+  }catch(error){return roleFailure(error);}
 }
+
