@@ -1,3 +1,4 @@
+import {purchaseDocument,purchaseJournalSource,returnJournalDependencies} from "@/lib/purchase-ledger";
 import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -20,6 +21,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (original.reversalOf || parsed.data.entryDate < original.entryDate.toISOString().slice(0,10)) return NextResponse.json({ error: "Cannot reverse a reversal or use an earlier date" }, { status: 409 });
   try {
     const entry = await db.$transaction(async (tx) => {
+      if (/^SYS[GT]-/.test(original.number)) {
+        const link=purchaseJournalSource(original.number);
+        if(!link||documentJournalNumber(link.kind,link.id)!==original.number)throw new PayrollReversalConflict("Purchase source link could not be verified");
+        await lockDocument(tx,link.kind,original.tenantId,link.id);
+        const source=await purchaseDocument(tx,link.kind,original.tenantId,link.id);
+        if(!source||source.companyId!==original.companyId||source.branchId!==original.branchId)throw new PayrollReversalConflict("Purchase source scope could not be verified");
+        const rights=await Promise.all([canAccess({...scope,branchId:source.orderBranchId??undefined,permission:"purchase-order:read"}),canAccess({...scope,branchId:source.branchId,permission:"inventory-stock:read"})]);
+        if(!rights.every(Boolean))throw new PayrollReversalConflict("Purchase and receiving-stock read permissions are required");
+        if(link.kind==="purchase-receipt"){
+          const dependencies=await returnJournalDependencies(tx,original.tenantId,original.companyId,source.receiptId);
+          if(dependencies.active)throw new PayrollReversalConflict("Reverse active return-credit journals before the original receipt journal");
+          if(dependencies.latestDate&&parsed.data.entryDate<dependencies.latestDate)throw new PayrollReversalConflict("Receipt reversal date cannot precede return-credit corrections");
+        }
+      }
       if (/^SYS[RW]-/.test(original.number)) {
         const link=await tx.auditLog.findFirst({where:{tenantId:original.tenantId,entity:"PayrollEntry",
           action:{in:["payroll.ledger_posted","payroll-payment.ledger_posted"]},metadata:{path:["journalId"],equals:original.id}},select:{entityId:true}});
@@ -49,3 +64,4 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     throw error;
   }
 }
+

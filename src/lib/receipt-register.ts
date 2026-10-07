@@ -1,3 +1,4 @@
+import {documentJournalNumber} from "./document-journal";
 import { z } from "zod";
 import { db } from "./db";
 import { readableCompanyPermissions } from "./access";
@@ -8,7 +9,7 @@ export class ReceiptRegisterError extends Error { constructor(message:string,pub
 export async function receiptRegister(userId:string,raw:unknown){
  const parsed=filters.safeParse(raw);if(!parsed.success)throw new ReceiptRegisterError("Invalid receipt filters",400);
  const {tenantId,companyId,branchId,q,page,from,to,format}=parsed.data;
- const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["purchase-order:read","inventory-stock:read"]});
+ const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["purchase-order:read","inventory-stock:read","ledger:read"]});
  const purchase=rights["purchase-order:read"],stock=rights["inventory-stock:read"];
  if(purchase===false||stock===false||(branchId&&stock!==null&&!stock.includes(branchId)))throw new ReceiptRegisterError("Forbidden",403);
  return db.$transaction(async tx=>{
@@ -24,7 +25,14 @@ export async function receiptRegister(userId:string,raw:unknown){
  if(movementIds.length>25000)throw new ReceiptRegisterError("Export has too many stock lines. Narrow the filters.",413);
  const events=movementIds.length?await tx.auditLog.findMany({where:{tenantId,entity:"StockMovement",action:"inventory-stock.reversed",entityId:{in:movementIds}},select:{entityId:true}}):[];
  const corrected=new Set(events.map(event=>event.entityId));
- return {receipts:visible.map(({lines,...receipt})=>({...receipt,correctedLineCount:lines.filter(line=>line.movement&&corrected.has(line.movement.id)).length})),nextPage:format==="json"&&rows.length>50?page+1:null,page,from,to,format};
+ const ledger=rights["ledger:read"],financial=format==="json"?visible.filter(r=>ledger===null||(Array.isArray(ledger)&&ledger.includes(r.branchId))):[];
+ const entries=financial.length?await tx.journalEntry.findMany({where:{tenantId,companyId,number:{in:financial.map(r=>documentJournalNumber("purchase-receipt",r.id))}},select:{id:true,number:true,reversal:{select:{id:true,number:true}}}}):[];
+ const byNumber=new Map(entries.map(e=>[e.number,e]));
+ return {receipts:visible.map(({lines,...receipt})=>{
+  const accessible=ledger===null||(Array.isArray(ledger)&&ledger.includes(receipt.branchId));
+  const entry=accessible?byNumber.get(documentJournalNumber("purchase-receipt",receipt.id)):undefined;
+  return {...receipt,correctedLineCount:lines.filter(line=>line.movement&&corrected.has(line.movement.id)).length,financialStatus:!accessible?"no_access":entry?(entry.reversal?"reversed":"posted"):"unposted",entry:entry??null};
+ }),nextPage:format==="json"&&rows.length>50?page+1:null,page,from,to,format};
  },{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
 }
 
@@ -32,3 +40,4 @@ export function receiptRegisterCsv(result:Awaited<ReturnType<typeof receiptRegis
  const cell=(value:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(value)?`'${value}`:value).replaceAll('"','""')}"`;
  return [["Receipt ID","Order","Supplier","Receiving branch","Received at (UTC)","Original lines","Corrected stock lines"],...result.receipts.map(r=>[r.id,r.order.number,r.order.supplierName,r.branch.name,r.createdAt.toISOString(),String(r._count.lines),String(r.correctedLineCount)])].map(row=>row.map(cell).join(",")).join("\r\n");
 }
+

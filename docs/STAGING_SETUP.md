@@ -30,3 +30,5 @@ The backward-compatible partial-receipt migration is applied as the 32nd Prisma 
 
 
 Goods stock returns are available at `/purchasing/returns`. Create them from a saved receipt; no synthetic fixtures should be entered into production. Migration `20261007110000_goods_returns` was deployed before the app update. Supplier financial credits/refunds and stock valuation are not included in the stock-return document.
+
+Receipt accruals and purchase-return credit journals can be posted from their document pages. Set up purchase asset/expense and supplier liability accounts first. Return journals require the active receipt journal and use its same accounts. Registers show financial status only within ledger-read scope. Supplier cash settlements and tax adjustments are not performed by these actions.

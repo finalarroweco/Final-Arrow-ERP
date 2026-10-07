@@ -1,3 +1,4 @@
+import {documentJournal,lockDocument} from "@/lib/document-journal";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -13,7 +14,7 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
   const {id}=await context.params;const parsed=schema.safeParse(await request.json().catch(()=>null));
   if(!uuid.safeParse(id).success||!parsed.success)return NextResponse.json({error:"Invalid movement reversal"},{status:400});
   const {tenantId,reason}=parsed.data;
-  const original=await db.stockMovement.findFirst({where:{tenantId,id},include:{balance:true,receiptLine:{select:{receipt:{select:{order:{select:{branchId:true}}}}}}}});
+  const original=await db.stockMovement.findFirst({where:{tenantId,id},include:{balance:true,receiptLine:{select:{receipt:{select:{id:true,order:{select:{branchId:true}}}}}}}});
   if(!original)return NextResponse.json({error:"Movement not found"},{status:404});
   const {companyId,branchId,itemId}=original.balance;
   const scope={userId:actor.id,tenantId,companyId,branchId};
@@ -22,6 +23,11 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
   if(!checks.every(Boolean))return NextResponse.json({error:"Forbidden"},{status:403});
   try{
     const result=await db.$transaction(async tx=>{
+      if(original.receiptLine){
+        await lockDocument(tx,"purchase-receipt",tenantId,original.receiptLine.receipt.id);
+        const journal=await documentJournal(tx,"purchase-receipt",tenantId,companyId,original.receiptLine.receipt.id);
+        if(journal&&!journal.reversal)throw new StockConflict("Reverse the active receipt ledger journal before fully correcting its stock");
+      }
       // Serialize corrections of this exact immutable source movement.
       await tx.$queryRaw`SELECT id FROM "StockMovement" WHERE "tenantId"=${tenantId}::uuid AND id=${id}::uuid FOR UPDATE`;
       if(original.type === "PURCHASE_RETURN")throw new StockConflict("Saved stock returns cannot be reversed");
