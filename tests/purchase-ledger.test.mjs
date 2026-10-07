@@ -46,6 +46,9 @@ test("purchase accruals and return credits are exact, scoped, locked and source-
   const manual={tenantId,companyId,branchId:branch.id,number:original.number,entryDate:day,description:"Reserved source reference",lines:[{accountId:asset.id,debit:"1",credit:"0"},{accountId:payable.id,debit:"0",credit:"1"}]};
   assert.equal((await call("/api/ledger/journals","POST",manual,cookie)).status,400);
   assert.equal((await call("/api/ledger/journals","POST",{...manual,number:original.number.replace("SYSG-","SYST-")},cookie)).status,400);
+  assert.equal((await call(returnPath+`?tenantId=${tenantId}`,"GET",undefined,viewerCookie)).status,403);
+  const viewerRole=await db.role.findUnique({where:{tenantId_name:{tenantId,name:"Viewer"}}});
+  await db.rolePermission.create({data:{tenantId,roleId:viewerRole.id,permissionKey:"ledger:read"}});
   const setup=await call(returnPath+`?tenantId=${tenantId}`,"GET",undefined,viewerCookie);assert.equal(setup.status,200);assert.equal(setup.data.purchaseSetup.debitAccountId,payable.id);assert.equal(setup.data.purchaseSetup.creditAccountId,asset.id);assert.equal(setup.data.amount,"1.125");
   assert.equal((await call(returnPath,"POST",{...creditBody,debitAccountId:otherPayable.id},cookie)).status,409);
   assert.equal((await call(returnPath,"POST",{...creditBody,creditAccountId:expense.id},cookie)).status,409);
@@ -80,7 +83,7 @@ test("purchase accruals and return credits are exact, scoped, locked and source-
   const lockedReturn=await returnStock(locked);assert.equal((await call(endpoint("return",lockedReturn.id),"POST",creditBody,cookie)).status,409);assert.equal((await call(endpoint("return",lockedReturn.id),"POST",{...creditBody,entryDate:nextDay},cookie)).status,201);
   const foreignCurrency=await receive("PO-PGL-USD",[1,0]);await db.purchaseOrder.update({where:{id:foreignCurrency.orderId},data:{currency:"USD"}});assert.equal((await call(endpoint("receipt",foreignCurrency.id),"POST",{...receiptBody,entryDate:nextDay},cookie)).status,409);
   // Removing ledger read hides journal references while preserving authorized stock-document access.
-  const viewerRole=await db.role.findUnique({where:{tenantId_name:{tenantId,name:"Viewer"}}});await db.rolePermission.delete({where:{tenantId_roleId_permissionKey:{tenantId,roleId:viewerRole.id,permissionKey:"ledger:read"}}});
+  await db.rolePermission.delete({where:{tenantId_roleId_permissionKey:{tenantId,roleId:viewerRole.id,permissionKey:"ledger:read"}}});
   const noLedger=await call(`/api/purchase-orders/returns?${query}`,"GET",undefined,viewerCookie);assert.equal(noLedger.status,200);assert.ok(noLedger.data.returns.every(r=>r.entry===null&&r.financialStatus==="no_access"));
   const noLedgerReceipts=await call(`/api/purchase-orders/receipts?${query}`,"GET",undefined,viewerCookie);assert.equal(noLedgerReceipts.status,200);assert.ok(noLedgerReceipts.data.receipts.every(r=>r.entry===null&&r.financialStatus==="no_access"));
   assert.equal((await call(returnPath+`?tenantId=${tenantId}`,"GET",undefined,viewerCookie)).status,403);
