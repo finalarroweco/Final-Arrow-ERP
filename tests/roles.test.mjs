@@ -74,6 +74,8 @@ test('custom roles and member assignments enforce owner control, scope, stale ed
   assert.equal((await call(`/api/roles/${role.id}`,'PATCH',{tenantId,name:editable.name,permissions:[],expectedRevision:editable.revision},cookie)).status,200);
   assert.equal((await call(`/api/customers?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie)).status,403,'empty custom role has no operational access');
   const page=await fetch(origin+'/settings/roles',{headers:{Cookie:cookie}});assert.equal(page.status,200);assert.match(await page.text(),/Roles and permissions/);
+  const screens=['/dashboard','/workspace','/approvals','/audit','/settings/security','/crm','/crm/leads','/sales/quotes','/sales/orders','/purchasing/suppliers','/purchasing/orders','/purchasing/receipts','/purchasing/returns','/purchasing/settlements','/purchasing/supplier-statement','/purchasing/supplier-balances','/inventory/items','/inventory/stock','/hr/employees','/hr/attendance','/hr/leave','/hr/payroll','/projects','/helpdesk','/accounting/invoices','/accounting/expenses','/accounting/ledger','/pos','/pos/kitchen'];
+  for(const screen of screens){const r=await fetch(origin+screen,{headers:{Cookie:cookie}});assert.equal(r.status,200,`Owner workspace failed: ${screen}`);assert.match(await r.text(),/Final Arrow ERP/,`Missing application layout: ${screen}`);}
   const audit=await db.auditLog.findMany({where:{tenantId,action:{in:['role.created','role.updated','member.access_updated']}}});assert.ok(audit.some(a=>a.action==='role.created'));assert.ok(audit.some(a=>a.action==='member.access_updated'&&a.metadata.revokedPendingInvitations===1));
  }finally{server.kill('SIGTERM');await db.$disconnect();}
 });
