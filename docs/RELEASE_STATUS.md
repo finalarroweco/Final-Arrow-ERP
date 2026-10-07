@@ -188,3 +188,9 @@ Receipt rows now distinguish original receipt lines whose stock movements have b
 - Journal-date filters use UTC, up to 366 days and 5000 period journals; bounded source-document and historical-journal lookups reject over 20000 records rather than truncate balances. Repeatable-read transactions keep opening and period movements consistent.
 - CSV export escapes formulas; authorized server-rendered views link to source documents and journals and support browser printing. Supplier name/code search narrows the first 200 selector results.
 - This is not a confirmed payable balance: unposted sources, supplier settlements/refunds, taxes/freight and unrelated manual journals are excluded.
+
+### Posted supplier balance overview
+- AR/EN as-of report groups receipt accruals, return credits and immutable correction journals by visible supplier and currency. Archived suppliers and zero balances with posted history stay visible.
+- Independent supplier, source-order, receiving-stock and ledger read scopes all apply before journal lookup. Receiving-branch and supplier-name/code filters narrow the same visible data; unposted sources and unrelated manual journals are excluded.
+- Exact Decimal net, positive and negative totals, journal/correction counts, source statement links and formula-safe CSV. One repeatable-read snapshot; reject more than 20000 source documents/historical journals or 5000 supplier/currency rows without partial totals.
+- Supplier payments, cash refunds, taxes/freight and due-date aging remain separate pending features. These balances are not confirmed supplier balances.

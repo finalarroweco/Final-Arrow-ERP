@@ -29,7 +29,7 @@ export default async function SuppliersPage() {
       branches: await Promise.all(company.branches.filter((branch) => visible === null || visible.includes(branch.id))
         .map(async (branch) => ({ id: branch.id, name: branch.name, ...await permissions(branch.id) }))) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/purchasing/supplier-statement">{t("Supplier statement", "كشف حساب المورد")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/purchasing/supplier-statement">{t("Supplier statement", "كشف حساب المورد")}</a><a href="/purchasing/supplier-balances">{t("Posted supplier balances", "أرصدة الموردين المرحلة")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("PURCHASING", "المشتريات")}</p><h1>{t("Suppliers.", "الموردون.")}</h1><p className="sub">{t("Company and branch supplier records.", "سجلات موردي الشركات والفروع.")}</p></section>
     <SuppliersWorkspace options={options} locale={locale} />
   </main>;
