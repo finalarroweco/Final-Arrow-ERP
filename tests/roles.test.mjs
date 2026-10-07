@@ -59,6 +59,12 @@ test('custom roles and member assignments enforce owner control, scope, stale ed
   // Establish branch-only scope regardless of which competing update won.
   assert.equal((await call(target,'PATCH',{...assign,expectedRevision:refreshed.revision},cookie)).status,200);
   const scoped=await call(`/api/customers?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie);assert.deepEqual(scoped.data.customers.map(c=>c.id),[siblingCustomer.id]);
+  const currentMember=(await team()).find(m=>m.id===member.id);
+  const multiple={...assign,expectedRevision:currentMember.revision,grants:[assign.grants[0],{roleId:role.id,scope:{type:'BRANCH',companyId,branchId:branch.id}}]};
+  assert.equal((await call(target,'PATCH',multiple,cookie)).status,200);
+  const both=await call(`/api/customers?tenantId=${tenantId}&companyId=${companyId}`,'GET',undefined,accepted.cookie);assert.deepEqual(new Set(both.data.customers.map(c=>c.id)),new Set([mainCustomer.id,siblingCustomer.id]));
+  const multiMember=(await team()).find(m=>m.id===member.id);assert.equal(multiMember.grants.length,2);
+  assert.equal((await call(target,'PATCH',{...assign,expectedRevision:multiMember.revision},cookie)).status,200);
   assert.equal((await call(`/api/team/${member.id}`,'PATCH',{tenantId,status:'SUSPENDED'},cookie)).status,200);
   const suspended=(await team()).find(m=>m.id===member.id);
   assert.equal((await call(target,'PATCH',{...assign,expectedRevision:suspended.revision},cookie)).status,200);
