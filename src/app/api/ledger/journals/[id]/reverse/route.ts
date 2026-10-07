@@ -1,3 +1,4 @@
+import {settlementReceipt,settlementAllowed,settlementDependencies,settlementNumber,receiptSettlementState} from "@/lib/supplier-settlement";
 import {purchaseDocument,purchaseJournalSource,returnJournalDependencies} from "@/lib/purchase-ledger";
 import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
 import { NextResponse } from "next/server";
@@ -21,6 +22,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (original.reversalOf || parsed.data.entryDate < original.entryDate.toISOString().slice(0,10)) return NextResponse.json({ error: "Cannot reverse a reversal or use an earlier date" }, { status: 409 });
   try {
     const entry = await db.$transaction(async (tx) => {
+      if (/^SYS[DC]-/.test(original.number)) {
+        const saved=await tx.supplierSettlement.findFirst({where:{tenantId:original.tenantId,entryId:original.id}});
+        if(!saved||settlementNumber(saved.kind as "PAYMENT"|"REFUND",saved.id)!==original.number)throw new PayrollReversalConflict("Settlement source link could not be verified");
+        await lockDocument(tx,"purchase-receipt",original.tenantId,saved.receiptId);
+        const receipt=await settlementReceipt(tx,original.tenantId,saved.receiptId);
+        if(!receipt||!(await settlementAllowed(actor.id,receipt,true)))throw new PayrollReversalConflict("Supplier, source-order and receiving-stock permissions are required");
+        if(parsed.data.entryDate<(await receiptSettlementState(tx,receipt)).latest)throw new PayrollReversalConflict("Settlement reversal date cannot precede later receipt activity");
+      }
       if (/^SYS[GT]-/.test(original.number)) {
         const link=purchaseJournalSource(original.number);
         if(!link||documentJournalNumber(link.kind,link.id)!==original.number)throw new PayrollReversalConflict("Purchase source link could not be verified");
@@ -30,6 +39,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const rights=await Promise.all([canAccess({...scope,branchId:source.orderBranchId??undefined,permission:"purchase-order:read"}),canAccess({...scope,branchId:source.branchId,permission:"inventory-stock:read"})]);
         if(!rights.every(Boolean))throw new PayrollReversalConflict("Purchase and receiving-stock read permissions are required");
         if(link.kind==="purchase-receipt"){
+          const payments=await settlementDependencies(tx,original.tenantId,source.receiptId);
+          if(payments.active)throw new PayrollReversalConflict("Reverse active supplier settlements before the receipt journal");
+          if(payments.latest&&parsed.data.entryDate<payments.latest)throw new PayrollReversalConflict("Receipt reversal date cannot precede supplier settlement corrections");
           const dependencies=await returnJournalDependencies(tx,original.tenantId,original.companyId,source.receiptId);
           if(dependencies.active)throw new PayrollReversalConflict("Reverse active return-credit journals before the original receipt journal");
           if(dependencies.latestDate&&parsed.data.entryDate<dependencies.latestDate)throw new PayrollReversalConflict("Receipt reversal date cannot precede return-credit corrections");

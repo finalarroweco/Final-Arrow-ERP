@@ -1,3 +1,4 @@
+import {settlementNumber} from "./supplier-settlement";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {db} from "./db";
@@ -24,8 +25,9 @@ export async function supplierStatement(userId:string,raw:unknown){
   // Bounds apply before building the journal lookup; never silently truncate a balance.
   const receipts=await tx.goodsReceipt.findMany({where:sourceWhere,select:{id:true,branchId:true,order:{select:{number:true}}},take:20001});
   const returns=await tx.goodsReturn.findMany({where:{tenantId,receipt:sourceWhere},select:{id:true,receipt:{select:{branchId:true,order:{select:{number:true}}}}},take:20001});
-  if(receipts.length+returns.length>20000)throw new SupplierStatementError("Statement exceeds 20000 source documents. Select a receiving branch.",413);
-  const sources=new Map<string,{kind:"receipt"|"return";documentId:string;branchId:string;order:string}>([...receipts.map(r=>[documentJournalNumber("purchase-receipt",r.id),{kind:"receipt",documentId:r.id,branchId:r.branchId,order:r.order.number}] as const),...returns.map(r=>[documentJournalNumber("purchase-return",r.id),{kind:"return",documentId:r.id,branchId:r.receipt.branchId,order:r.receipt.order.number}] as const)]);
+  const settlements=await tx.supplierSettlement.findMany({where:{tenantId,receipt:sourceWhere},select:{id:true,kind:true,receiptId:true,receipt:{select:{branchId:true,order:{select:{number:true}}}}},take:20001});
+  if(receipts.length+returns.length+settlements.length>20000)throw new SupplierStatementError("Statement exceeds 20000 source documents. Select a receiving branch.",413);
+  const sources=new Map<string,{kind:"receipt"|"return"|"payment"|"refund";documentId:string;branchId:string;order:string}>([...receipts.map(r=>[documentJournalNumber("purchase-receipt",r.id),{kind:"receipt",documentId:r.id,branchId:r.branchId,order:r.order.number}] as const),...returns.map(r=>[documentJournalNumber("purchase-return",r.id),{kind:"return",documentId:r.id,branchId:r.receipt.branchId,order:r.receipt.order.number}] as const),...settlements.map(s=>[settlementNumber(s.kind as "PAYMENT"|"REFUND",s.id),{kind:s.kind==="PAYMENT"?"payment" as const:"refund" as const,documentId:s.receiptId,branchId:s.receipt.branchId,order:s.receipt.order.number}] as const)]);
   const end=new Date(`${to}T00:00:00Z`),start=new Date(`${from}T00:00:00Z`);
   const entries=sources.size?await tx.journalEntry.findMany({where:{tenantId,companyId,entryDate:{lte:end},OR:[{number:{in:[...sources.keys()]}},{original:{number:{in:[...sources.keys()]}}}]},select:{id:true,number:true,entryDate:true,createdAt:true,currency:true,branchId:true,original:{select:{number:true}},lines:{select:{debit:true,credit:true,account:{select:{type:true}}}}},take:20001}):[];
   if(entries.length>20000)throw new SupplierStatementError("Statement exceeds 20000 historical journals.",413);

@@ -6,7 +6,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | --- | --- | --- |
 | Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events, an organization administration activity viewer and persistent per-email login throttling | Custom role editor, account recovery, verified email, network-level abuse controls |
 | CRM & sales | Customers, leads, quotes, orders, internal invoices | Contacts, imports, tax, payments, legal documents |
-| Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, stock return documents/register and source-linked receipt accruals/return credits, UTC receipt register and CSV, catalog and branch stock ledger | Cash supplier refunds/payments, reservations, valuation rules |
+| Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, stock return documents/register and source-linked receipt accruals/return credits, UTC receipt register and CSV, catalog and branch stock ledger | Reservations, valuation rules, unallocated supplier advances |
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections and scoped time reports | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
@@ -193,4 +193,12 @@ Receipt rows now distinguish original receipt lines whose stock movements have b
 - AR/EN as-of report groups receipt accruals, return credits and immutable correction journals by visible supplier and currency. Archived suppliers and zero balances with posted history stay visible.
 - Independent supplier, source-order, receiving-stock and ledger read scopes all apply before journal lookup. Receiving-branch and supplier-name/code filters narrow the same visible data; unposted sources and unrelated manual journals are excluded.
 - Exact Decimal net, positive and negative totals, journal/correction counts, source statement links and formula-safe CSV. One repeatable-read snapshot; reject more than 20000 source documents/historical journals or 5000 supplier/currency rows without partial totals.
-- Supplier payments, cash refunds, taxes/freight and due-date aging remain separate pending features. These balances are not confirmed supplier balances.
+- Taxes/freight, unallocated advances and due-date aging remain separate pending features. These balances are not confirmed supplier balances.
+
+### Receipt-linked supplier payments and refunds
+
+Supplier settlements now record actual payments and refunds against a posted goods receipt. Payments debit its original supplier liability and credit a selected company cash/bank asset. Refunds reverse that direction and require a negative receipt balance after posted return credits. These actions record movements already made; they do not transfer funds.
+
+The database enforces positive amounts, exact balanced journals, original account/currency/source scope, available balance, immutable settlement records and chronological dates. Receipt locking serializes competing settlements and corrections. A saved request ID supports exact retries without duplicate journals; altered retry payloads are rejected. Active settlements must be reversed before the original receipt accrual. Period locks and supplier/order/stock/ledger permissions apply.
+
+The new settlement register, receipt form, supplier statement and supplier balance overview include payments, refunds and journal corrections. There are now 34 migrations. Unallocated advances, bank feeds/transfers, tax/freight, currency conversion and due-date aging remain unfinished. Isolated API tests cover simultaneous requests, direct database overpayments, retry behavior, scope, periods and reversals.
