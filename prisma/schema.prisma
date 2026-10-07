@@ -120,6 +120,7 @@ enum StockMovementType {
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
   PURCHASE_RECEIPT
+  PURCHASE_RETURN
 }
 
 model Tenant {
@@ -469,6 +470,10 @@ model StockMovement {
   receiptLineId String?           @unique @db.Uuid
   receiptLine   GoodsReceiptLine? @relation(fields: [tenantId, receiptLineId], references: [tenantId, id], onDelete: Restrict)
 
+  returnLineId String? @unique @db.Uuid
+  returnLine GoodsReturnLine? @relation(fields: [tenantId, returnLineId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, returnLineId])
   @@unique([tenantId, receiptLineId])
   @@index([tenantId, balanceId, createdAt])
 }
@@ -532,6 +537,7 @@ model GoodsReceipt {
   branch    Branch             @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   order     PurchaseOrder      @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines     GoodsReceiptLine[]
+  returns   GoodsReturn[]
 
   @@index([orderId, createdAt])
   @@unique([tenantId, id])
@@ -552,8 +558,11 @@ model GoodsReceiptLine {
   orderLine   PurchaseOrderLine @relation(fields: [tenantId, orderId, orderLineId], references: [tenantId, orderId, id], onDelete: Restrict)
   item        InventoryItem     @relation(fields: [tenantId, companyId, itemId], references: [tenantId, companyId, id], onDelete: Restrict)
   movement    StockMovement?
+  returnedQuantity Int @default(0)
+  returnLines GoodsReturnLine[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, receiptId, id])
   @@unique([receiptId, orderLineId])
   @@index([tenantId, companyId, orderId])
 }
@@ -1104,4 +1113,35 @@ model LoginThrottle {
   expiresAt DateTime
 
   @@index([expiresAt])
+}
+
+
+model GoodsReturn {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  receiptId String @db.Uuid
+  reason String
+  createdBy String @db.Uuid
+  createdAt DateTime @default(now())
+  receipt GoodsReceipt @relation(fields: [tenantId, receiptId], references: [tenantId, id], onDelete: Restrict)
+  lines GoodsReturnLine[]
+
+  @@unique([tenantId, receiptId, id])
+  @@index([tenantId, receiptId, createdAt])
+}
+
+model GoodsReturnLine {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  receiptId String @db.Uuid
+  returnId String @db.Uuid
+  receiptLineId String @db.Uuid
+  quantity Int
+  goodsReturn GoodsReturn @relation(fields: [tenantId, receiptId, returnId], references: [tenantId, receiptId, id], onDelete: Restrict)
+  receiptLine GoodsReceiptLine @relation(fields: [tenantId, receiptId, receiptLineId], references: [tenantId, receiptId, id], onDelete: Restrict)
+  movement StockMovement?
+
+  @@unique([tenantId, id])
+  @@unique([returnId, receiptLineId])
+  @@index([tenantId, receiptId, receiptLineId])
 }

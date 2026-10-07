@@ -27,3 +27,6 @@ Provider access hardening was applied separately as Supabase migration `erp_priv
 
 ## Verified schema updates — 2026-10-06
 The backward-compatible partial-receipt migration is applied as the 32nd Prisma migration. Existing receipts and quantities are preserved. `Core checks` now applies committed migrations to the dedicated ERP project only after isolated checks pass, only for the same-repository `feature/core-auth-companies-branches` pull request. The project-bound helper uses the existing write-only secret and never logs connection details. It runs migration deploy and status; fixture tests remain isolated.
+
+
+Goods stock returns are available at `/purchasing/returns`. Create them from a saved receipt; no synthetic fixtures should be entered into production. Migration `20261007110000_goods_returns` was deployed before the app update. Supplier financial credits/refunds and stock valuation are not included in the stock-return document.

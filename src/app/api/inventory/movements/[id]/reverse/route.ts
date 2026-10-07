@@ -24,6 +24,11 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
     const result=await db.$transaction(async tx=>{
       // Serialize corrections of this exact immutable source movement.
       await tx.$queryRaw`SELECT id FROM "StockMovement" WHERE "tenantId"=${tenantId}::uuid AND id=${id}::uuid FOR UPDATE`;
+      if(original.type === "PURCHASE_RETURN")throw new StockConflict("Saved stock returns cannot be reversed");
+      if(original.receiptLineId){
+        const source=await tx.goodsReceiptLine.findUnique({where:{id:original.receiptLineId},select:{returnedQuantity:true}});
+        if(source && source.returnedQuantity>0)throw new StockConflict("Receipt has stock returns and cannot be fully reversed");
+      }
       const existing=await tx.auditLog.findFirst({where:{tenantId,entity:"StockMovement",entityId:id,action:{in:["inventory-stock.reversed","inventory-stock.reversal-created"]}}});
       if(existing)throw new StockConflict("Movement is already reversed or is itself a reversal");
       const delta=original.delta.negated(),max=new Prisma.Decimal("999999999999999.999");
@@ -44,3 +49,4 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
     return NextResponse.json(result,{status:201});
   }catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")return NextResponse.json({error:"Movement already reversed"},{status:409});if(error instanceof StockConflict)return NextResponse.json({error:error.message},{status:409});throw error;}
 }
+

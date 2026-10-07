@@ -6,7 +6,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | --- | --- | --- |
 | Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events, an organization administration activity viewer and persistent per-email login throttling | Custom role editor, account recovery, verified email, network-level abuse controls |
 | CRM & sales | Customers, leads, quotes, orders, internal invoices | Contacts, imports, tax, payments, legal documents |
-| Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, UTC receipt register and CSV, catalog and branch stock ledger | Supplier return / credit documents, reservations, valuation |
+| Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, stock return documents and register, UTC receipt register and CSV, catalog and branch stock ledger | Financial supplier credits/refunds, reservations, valuation |
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections and scoped time reports | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
@@ -77,7 +77,7 @@ Project task registers support title, status and deadline filters. Deadline summ
 
 ### Goods receipt documents
 - Authorized bilingual print/PDF and JSON/CSV goods-receipt documents show saved supplier/order descriptions and quantities, current item catalog fields and stock-movement references.
-- Requires both order-read access in the source scope and stock-read access in the receiving branch. Full receipts only; complete inventory-only corrections are available. No valuation, payments, partial receipts or supplier credit documents.
+- Requires both order-read access in the source scope and stock-read access in the receiving branch. Full and partial receipts, complete inventory-only corrections and source-linked stock returns are available. No valuation, payments or financial supplier credit documents.
 
 ### Manual-ledger income statement
 - Scoped income statement uses posted revenue/expense account movements, exact currency-separated revenue, expenses and net income/loss; reversals and closing journals remain included. Required inclusive entry dates, 366-day / 20000 relevant-line limits, CSV export.
@@ -134,7 +134,7 @@ Paid POS orders also support source-linked posting (SYSP- prefix): asset debit /
 
 Stock operators can reverse a complete historical stock movement with a required reason. The server copies the exact opposite Decimal quantity into a new movement dated now, keeps the original, prevents negative/overflow balances, and serializes duplicate corrections with a source row lock. A deterministic correction ID additionally enforces single-use through the stock movement primary key. Reversal movements cannot themselves be reversed.
 
-Recent movements identify corrected originals and correction rows. Purchase-receipt corrections additionally require read access to the originating purchase order. These correct inventory quantities only: receipt/order history stays intact; no supplier credit, refund, tax or valuation entry is created. Partial supplier returns remain pending. The isolated API flow covers insufficient stock, concurrent corrections, duplicate/reversal rejection, exact fractional quantities, access and full receipt quantity return. Stock list requests discard responses from a previous branch and show network failures.
+Recent movements identify corrected originals and correction rows. Purchase-receipt corrections additionally require read access to the originating purchase order. These correct inventory quantities only: receipt/order history stays intact; no supplier credit, refund, tax or valuation entry is created. Source-linked partial stock returns are available; financial supplier credits and refunds remain pending. The isolated API flow covers insufficient stock, concurrent corrections, duplicate/reversal rejection, exact fractional quantities, access and full receipt quantity return. Stock list requests discard responses from a previous branch and show network failures.
 
 ### Payroll accrual journals and branch readiness
 
@@ -160,3 +160,14 @@ Receipt rows now distinguish original receipt lines whose stock movements have b
 - Row locks and a database quantity guard reject excess receipt quantities under concurrency. Explicit quantities require a request UUID; identical retries return the saved receipt without adding stock or audit events again. The browser retains the request while a result is unconfirmed and offers retry of the same delivery.
 - Stock corrections preserve receipt history and fulfilment quantities. Supplier credits, purchase valuation, fractional-unit purchase orders and cancellation of a partly received order remain unfinished.
 - Receipt links require both source purchase read and receiving stock read permissions; order lists show the latest ten accessible receipts, with access to the full receipt register.
+
+
+### Goods stock returns — 2026-10-07
+
+- `/purchasing/returns` lists saved stock returns with company scope, search and 50-document pagination. Open a saved goods receipt to return a subset of its lines and print the immutable return document.
+- Positive whole quantities are capped by both the original receipt's unreturned quantity and available stock in its receiving branch. Receipt and purchase fulfilment quantities remain unchanged; the separate returned counter advances atomically with negative PURCHASE_RETURN movements.
+- Source order read/manage and receiving-stock read/adjust permissions are required to create a return. Both read permissions are required for return documents, registers and stock links; sibling branches and tenants cannot see them.
+- Request UUIDs retain the exact receipt, reason and line quantities for safe retries. The browser retains unconfirmed requests in session storage and retries the same payload. A successful retry creates no extra movement or audit event.
+- Returns and full receipt reversals lock the same source movements. A returned receipt movement cannot be fully reversed; a reversed receipt cannot be returned. Saved return movements cannot be generically reversed.
+- An isolated CI test covers permissions, malformed and excessive quantities, concurrent retries, exhausted-source races, reversal races, archived-item returns, immutable records, print/read paths and all-or-nothing rollback on stock shortages. Production has 33 Prisma migrations; no synthetic business records were added.
+- Financial supplier credits/refunds, tax and valuation remain separate future work. The repository's standalone ESLint script currently lacks a flat config; production build/type checks and database/API tests are the active checks.

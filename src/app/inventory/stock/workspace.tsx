@@ -8,7 +8,7 @@ type Option = { tenantId: string; companyId: string; branchId: string; label: st
 type Item = { id: string; sku: string; name: string; unit: string };
 type Balance = { itemId: string; quantity: string;
   item: { sku: string; name: string; unit: string; archivedAt: string | null } };
-type Movement = { receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT"; delta: string;
+type Movement = { returnId:string|null; hasReturns:boolean; receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT" | "PURCHASE_RETURN"; delta: string;
   reason: string; createdAt: string; balance: { item: Item } };
 
 export function StockWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
@@ -89,9 +89,11 @@ export function StockWorkspace({ options, locale }: { options: Option[]; locale:
       <div><h3>{movement.balance.item.name}</h3><p>{movement.reason} · {new Date(movement.createdAt).toLocaleString()}</p></div>
       <strong>{movement.delta} {movement.balance.item.unit}</strong>
       {movement.receiptId && <a href={`/purchasing/receipts/${movement.receiptId}`}>{t("View goods receipt", "عرض مستند الاستلام")}</a>}
+      {movement.returnId && <a href={`/purchasing/returns/${movement.returnId}`}>{t("View stock return", "عرض مرتجع المخزون")}</a>}
+      {movement.hasReturns && <p>{t("Receipt has stock returns", "الاستلام مرتبط بمرتجعات مخزون")}</p>}
       {movement.reversed && <p>{t("Reversed", "تم عكسها")}</p>}
       {movement.isReversal && <p>{t("Correction movement", "حركة تصحيحية")}</p>}
-      {scope.canAdjust && !movement.reversed && !movement.isReversal && <details><summary>{t("Reverse full movement", "عكس كامل الحركة")}</summary>
+      {scope.canAdjust && !movement.reversed && !movement.isReversal && !movement.hasReturns && movement.type!=="PURCHASE_RETURN" && <details><summary>{t("Reverse full movement", "عكس كامل الحركة")}</summary>
         <form className="formrow" onSubmit={event => void reverse(event, movement.id)}>
           <label>{t("Reason", "السبب")} <input name="reason" required minLength={3} maxLength={150}/></label>
           <button disabled={busy}>{t("Record opposite movement", "تسجيل الحركة المقابلة")}</button>
@@ -100,3 +102,4 @@ export function StockWorkspace({ options, locale }: { options: Option[]; locale:
     </article>)}</div>{!movements.length && <p>{t("No movements yet.", "لا توجد حركات بعد.")}</p>}
   </section>;
 }
+
