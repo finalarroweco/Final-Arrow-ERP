@@ -5,6 +5,7 @@ const groups = [
     ["/workspace", "Companies, branches & team", "الشركات والفروع والفريق"],
     ["/approvals", "Approvals", "الموافقات"], ["/audit", "Activity", "سجل النشاط"],
     ["/settings/security", "Account security", "أمان الحساب"],
+    ["/settings/roles", "Roles & permissions", "الأدوار والصلاحيات"],
   ] },
   { en: "Customers & sales", ar: "العملاء والمبيعات", links: [
     ["/crm", "Customers", "العملاء"], ["/crm/leads", "Leads", "العملاء المحتملون"],
@@ -12,7 +13,11 @@ const groups = [
   ] },
   { en: "Purchasing & inventory", ar: "المشتريات والمخزون", links: [
     ["/purchasing/suppliers", "Suppliers", "الموردون"], ["/purchasing/orders", "Purchase orders", "طلبات الشراء"],
-    ["/purchasing/receipts", "Goods receipts", "استلام البضائع"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],
+    ["/purchasing/receipts", "Goods receipts", "استلام البضائع"],
+    ["/purchasing/returns", "Goods returns", "مرتجعات البضائع"],
+    ["/purchasing/settlements", "Supplier settlements", "تسويات الموردين"],
+    ["/purchasing/supplier-statement", "Supplier statements", "كشوف الموردين"],
+    ["/purchasing/supplier-balances", "Supplier balances", "أرصدة الموردين"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],
   ] },
   { en: "People & operations", ar: "الموظفون والعمليات", links: [
     ["/hr/employees", "Employees", "الموظفون"], ["/hr/attendance", "Attendance", "الحضور"],
@@ -38,3 +43,4 @@ export function ModuleLauncher({ locale }: { locale: Locale }) {
     </div>)}</div>
   </nav>;
 }
+
