@@ -4,3 +4,5 @@ const actions:Record<string,[string,string]>={read:["View","عرض"],create:["Cr
 export function permissionGroup(key:string,locale:Locale){const name=key.split(":")[0],label=resources[name];return label?translate(locale,...label):name;}
 export function permissionLabel(key:string,locale:Locale){const action=key.split(":")[1],label=actions[action];return label?translate(locale,...label):action;}
 export function requiredReads(key:string,available:string[]){const read=`${key.split(":")[0]}:read`,linked:Record<string,string[]>={"ledger-account:manage":["ledger:read"],"ledger-period:manage":["ledger:read"],"project-task:read":["project:read"],"project-time:read":["project:read"]};return [...(available.includes(read)?[read]:[]),...(linked[key]??[])];}
+
+export function roleDisplay(name:string,locale:Locale){const labels:Record<string,string>={Owner:"مالك",Manager:"مدير",Viewer:"مشاهد"};return translate(locale,name,labels[name]??name);}
