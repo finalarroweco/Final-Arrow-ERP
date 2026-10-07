@@ -538,9 +538,11 @@ model GoodsReceipt {
   order     PurchaseOrder      @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines     GoodsReceiptLine[]
   returns   GoodsReturn[]
+  settlements SupplierSettlement[]
 
   @@index([orderId, createdAt])
   @@unique([tenantId, id])
+  @@unique([tenantId, companyId, branchId, id])
   @@unique([tenantId, companyId, orderId, id])
   @@index([tenantId, companyId, branchId, createdAt])
 }
@@ -998,6 +1000,7 @@ model JournalEntry {
   company Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   branch Branch? @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines JournalLine[]
+  supplierSettlement SupplierSettlement?
   @@unique([tenantId, companyId, id])
   @@unique([tenantId, companyId, reversalOf])
   @@unique([companyId, number])
@@ -1144,4 +1147,22 @@ model GoodsReturnLine {
   @@unique([tenantId, id])
   @@unique([returnId, receiptLineId])
   @@index([tenantId, receiptId, receiptLineId])
+}
+
+model SupplierSettlement {
+  id String @id @db.Uuid
+  tenantId String @db.Uuid
+  companyId String @db.Uuid
+  branchId String @db.Uuid
+  receiptId String @db.Uuid
+  entryId String @unique @db.Uuid
+  kind String @db.VarChar(7)
+  amount Decimal @db.Decimal(18,3)
+  reference String @db.VarChar(120)
+  createdBy String @db.Uuid
+  createdAt DateTime @default(now())
+  receipt GoodsReceipt @relation(fields:[tenantId,companyId,branchId,receiptId],references:[tenantId,companyId,branchId,id],onDelete:Restrict)
+  entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
+  @@index([tenantId,companyId,receiptId,createdAt])
+  @@unique([tenantId,companyId,entryId])
 }
