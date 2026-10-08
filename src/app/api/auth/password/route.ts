@@ -15,7 +15,8 @@ export async function POST(request:Request){
  const changed=await db.$transaction(async tx=>{
   const update=await tx.user.updateMany({where:{id:actor.id,passwordHash:user.passwordHash},data:{passwordHash}});
   if(update.count!==1)return false;
-  await tx.session.deleteMany({where:{userId:actor.id}});return true;
+  await tx.session.deleteMany({where:{userId:actor.id}});
+  await tx.recoveryCode.deleteMany({where:{userId:actor.id}});return true;
  });
  if(!changed)return NextResponse.json({error:"Account changed. Sign in again."},{status:409});
  await endSession();

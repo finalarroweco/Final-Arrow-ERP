@@ -31,6 +31,7 @@ export function LoginForm({ destination, locale }: { destination: string; locale
     <label>{t("Password", "كلمة المرور")}<input type="password" name="password" maxLength={1024} required autoComplete="current-password" /></label>
     {error && <p role="alert">{error}</p>}
     <button type="submit" disabled={busy}>{t("Sign in", "تسجيل الدخول")}</button>
+    <a href="/recover">{t("Forgot password? Use a saved backup code", "نسيت كلمة المرور؟ استخدم رمزًا احتياطيًا محفوظًا")}</a>
     <a href="/register">{t("Create a workspace", "إنشاء مساحة عمل")}</a>
   </form>;
 }

@@ -237,6 +237,7 @@ model User {
   createdAt    DateTime     @default(now())
   memberships  Membership[]
   sessions     Session[]
+  recoveryCodes RecoveryCode[]
 }
 
 model Session {
@@ -1246,4 +1247,13 @@ model BankMatch {
  bankLine BankStatementLine @relation(fields:[tenantId,companyId,accountId,bankLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
  journalLine JournalLine @relation(fields:[tenantId,companyId,accountId,journalLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
  @@index([tenantId,companyId,accountId,createdAt])
+}
+
+model RecoveryCode {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  codeHash String @unique @db.VarChar(64)
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
 }

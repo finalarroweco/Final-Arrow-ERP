@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {db} from "./db";
 // Reserve an attempt before password verification; the upsert serializes concurrent workers.
-export async function reserveLoginAttempt(email:string,purpose:"login"|"password"="login"){
+export async function reserveLoginAttempt(email:string,purpose:"login"|"password"|"recovery"|"recovery-setup"="login"){
  const keyHash=createHash("sha256").update(`${purpose}:${email.trim().toLowerCase()}`).digest("hex");
  const [bucket]=await db.$queryRaw<{attempts:number;expiresAt:Date;stamp:Date}[]>`
  INSERT INTO "LoginThrottle" ("keyHash","attempts","expiresAt")
