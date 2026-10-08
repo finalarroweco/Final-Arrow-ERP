@@ -1016,6 +1016,7 @@ model JournalEntry {
   lines JournalLine[]
   supplierSettlement SupplierSettlement?
   customerSettlement CustomerSettlement?
+  posRefund PosRefund?
   @@unique([tenantId, companyId, id])
   @@unique([tenantId, companyId, reversalOf])
   @@unique([companyId, number])
@@ -1108,6 +1109,7 @@ model PosOrder {
   branch Branch @relation(fields: [tenantId,companyId,branchId], references: [tenantId,companyId,id], onDelete: Restrict)
   creationTransaction String @default(dbgenerated("(txid_current())::text"))
   vat PosVat?
+  refunds PosRefund[]
   lines PosOrderLine[]
   @@unique([companyId,number])
   @@unique([tenantId,companyId,id])
@@ -1357,4 +1359,24 @@ model PosVat {
  order PosOrder @relation(fields:[tenantId,companyId,orderId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@unique([tenantId,companyId,orderId])
  @@index([tenantId,companyId])
+}
+
+model PosRefund {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ orderId String @db.Uuid
+ entryId String @unique @db.Uuid
+ originalEntryId String @db.Uuid
+ netAmount Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ amount Decimal @db.Decimal(18,3)
+ reference String @db.VarChar(120)
+ reason String @db.VarChar(500)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ order PosOrder @relation(fields:[tenantId,companyId,orderId],references:[tenantId,companyId,id],onDelete:Restrict)
+ entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([tenantId,companyId,entryId])
+ @@index([tenantId,companyId,orderId])
 }

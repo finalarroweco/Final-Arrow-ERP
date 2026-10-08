@@ -1,3 +1,4 @@
+import {posRefundOrder,posRefundAllowed,posRefundState,posRefundNumber} from "@/lib/pos-refund";
 import {invoiceGross} from "@/lib/invoice-vat";
 import {settlementInvoice,customerSettlementAllowed,invoiceSettlementState,customerSettlementDependencies,customerSettlementNumber} from "@/lib/customer-settlement";
 import {settlementReceipt,settlementAllowed,settlementDependencies,settlementNumber,receiptSettlementState} from "@/lib/supplier-settlement";
@@ -70,12 +71,24 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           if(dependencies.latestDate&&parsed.data.entryDate<dependencies.latestDate)throw new PayrollReversalConflict("Receipt reversal date cannot precede return-credit corrections");
         }
       }
+      if(original.number.startsWith("SYSU-")){
+        const refund=await tx.posRefund.findFirst({where:{tenantId:original.tenantId,entryId:original.id}});
+        if(!refund||posRefundNumber(refund.id)!==original.number)throw new PayrollReversalConflict("POS refund source could not be verified");
+        await lockDocument(tx,"pos",original.tenantId,refund.orderId);
+        const order=await posRefundOrder(tx,original.tenantId,refund.orderId);
+        if(!order||!(await posRefundAllowed(actor.id,order,true)))throw new PayrollReversalConflict("POS manage and ledger permissions are required for refund corrections");
+        if(parsed.data.entryDate<(await posRefundState(tx,order)).latest)throw new PayrollReversalConflict("Refund correction cannot precede later order activity");
+      }
       if (original.number.startsWith("SYSP-")) {
         const link=await tx.auditLog.findFirst({where:{tenantId:original.tenantId,entity:"PosOrder",action:"pos.ledger_posted",metadata:{path:["journalId"],equals:original.id}},select:{entityId:true}});
         if(!link?.entityId||!z.string().uuid().safeParse(link.entityId).success||documentJournalNumber("pos",link.entityId)!==original.number)throw new PayrollReversalConflict("POS source could not be verified");
         await lockDocument(tx,"pos",original.tenantId,link.entityId);
         const source=await tx.posOrder.findUnique({where:{id:link.entityId},select:{tenantId:true,companyId:true,branchId:true}});
         if(!source||source.tenantId!==original.tenantId||source.companyId!==original.companyId||source.branchId!==original.branchId||!(await canAccess({...scope,permission:"pos:read"})))throw new PayrollReversalConflict("POS and ledger permissions are required");
+        const order=await posRefundOrder(tx,original.tenantId,link.entityId);if(!order)throw new PayrollReversalConflict("POS source missing");
+        const state=await posRefundState(tx,order);
+        if(state.active)throw new PayrollReversalConflict("Reverse active POS refund before the original sale journal");
+        if(parsed.data.entryDate<state.latest)throw new PayrollReversalConflict("Sale correction cannot precede later refund activity");
       }
       if (original.number.startsWith("SYSE-")) {
         const link=await tx.auditLog.findFirst({where:{tenantId:original.tenantId,entity:"Expense",action:"expense.ledger_posted",metadata:{path:["journalId"],equals:original.id}},select:{entityId:true}});
