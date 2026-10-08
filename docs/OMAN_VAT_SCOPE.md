@@ -1,6 +1,6 @@
 # Oman VAT implementation scope — 2026-10-08
 
-The user selected Oman first. The implemented slices calculate output VAT on internal sales invoices and input VAT at purchase receipt/return and expense journal posting for explicitly registered OMR companies. POS does not calculate VAT. Do not describe internal printable documents as compliant tax invoices. No live company has been marked VAT-registered or assigned a tax rate by this work.
+The user selected Oman first. The implemented slices calculate output VAT on internal sales invoices and POS orders, and input VAT at purchase receipt/return and expense journal posting for explicitly registered OMR companies. Do not describe internal printable documents as compliant tax invoices. No live company has been marked VAT-registered or assigned a tax rate by this work.
 
 ## Verified source requirements
 
@@ -40,14 +40,22 @@ Source: https://tms.taxoman.gov.om/portal/e-invoicing-faq
 - Financial source fields and snapshots cannot be changed or appended later. A source with a VAT snapshot cannot reopen after posting; void requires reversing its original journal first. Reversal copies all original lines including the original input account and preserves the snapshot even after company settings change. Source expense-read and ledger-read/post permissions and period locks apply.
 - Previously posted non-tax expense journals remain unchanged. Actual company registration is never inferred or enabled as part of QA. Statutory supplier tax invoices/credit notes, expense payment allocation/refund workflows and filing are separate remaining work.
 
+## Implemented POS accounting slice
+
+- Effective enabled OMR registration requires STANDARD (5%), ZERO or EXEMPT explicitly for every order line at creation. Menu prices exclude VAT. Tax rounds each line half up to three decimals, then sums; cash/card settlement uses the saved gross total and cash change is tendered minus gross. Card recording is manual and never captures a payment.
+- Company locking serializes profile saves with order creation. Original-transaction immutable snapshots preserve seller details, output account and each line's net/treatment/tax. Price, name or registration changes cannot rewrite saved orders. Existing non-tax orders remain unchanged; late line/snapshot inserts are rejected.
+- Paid orders post once: gross cash/bank asset debit, net revenue credit and saved output liability credit for positive tax. Zero-tax classifications retain separate detail with two journal lines. Source-linked audit, exact amounts/accounts, company/branch permissions and period locks are database/server enforced. Reversal retains all original accounts and tax; it requires POS source-read and ledger-read/post and does not refund money or change the paid-order status.
+- POS cards and internal receipts display saved net, tax and gross. Receipt print displays saved seller and per-line classification. Paid-date JSON/CSV reports separate net and tax while retaining gross sales/cash/change. Reports remain a paid-order register and do not subtract journal reversals or represent cash refunds.
+- Isolated CI covers mixed/zero/exempt rounding, future and disabled profiles, required explicit choices, immutable and late/invalid snapshots, gross tendered/change, concurrent pay/cancel and postings, saved-account reversal, source/branch permissions, report/receipt output and period locks. No production orders, VAT settings or financial QA fixtures are created.
+
 ## Remaining implementation and verification
 
 1. Verify each company’s actual registration data and applicable e-invoicing scope. The invoice profile fields exist; registration data must be supplied by the company. Never infer registration from OMR currency or company location.
 2. Extend beyond the implemented VAT-exclusive invoice lines to inclusive pricing and discount/freight handling when agreed. Keep the legal treatment separate from its numeric rate.
 3. Extend immutable gross snapshots to remaining document families. Invoice snapshots and gross totals are implemented. Existing non-tax documents retain their original values; later company configuration changes must not rewrite issued history.
-4. Extend from the implemented invoice output and purchase input VAT accounts to POS. Preserve gross settlements and correction dependencies through coordinated additive migrations.
-5. Obtain accountant acceptance for manual purchase eligibility and receipt/return allocations. Review manual expense input-tax eligibility; implement POS taxes/refunds and document tax reporting with period locks and source permissions. Unsupported reverse charge, foreign exchange or special treatments must be explicit rather than silently approximated.
+4. Extend from implemented invoice/POS output and purchase/expense input VAT accounting to agreed remaining workflows. Preserve gross settlements and correction dependencies through additive migrations.
+5. Obtain accountant acceptance for manual purchase eligibility and receipt/return allocations. Review manual expense input-tax eligibility; implement POS cash refunds and document tax reporting with period locks and source permissions. Unsupported reverse charge, foreign exchange or special treatments must be explicit rather than silently approximated.
 6. Full statutory invoice/credit-note fields and numbering, required format/transmission where applicable, and accountant acceptance with real operating scenarios.
 7. Isolated tests for mixed treatments, inclusive/exclusive decimals, gross settlements, returns/corrections, concurrency, direct SQL guard bypass attempts and preservation of historical documents.
 
-This document distinguishes the implemented internal invoice, purchase and expense accounting slices from remaining work. It is not an assertion of legal compliance.
+This document distinguishes the implemented internal invoice, POS, purchase and expense accounting slices from remaining work. It is not an assertion of legal compliance.
