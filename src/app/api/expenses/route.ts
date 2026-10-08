@@ -29,9 +29,9 @@ export async function GET(request: Request) {
     ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, description: true, category: true, amount: true,
       currency: true, expenseDate: true, status: true, branchId: true, postedAt: true,
-      voidedAt: true, voidReason: true },
+      voidedAt: true, voidReason: true,vat:{select:{taxAmount:true,recoverableTax:true}} },
     orderBy: [{ expenseDate: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ expenses: expenses.slice(0, 50), nextPage: expenses.length > 50 ? page.data + 1 : null });
+  return NextResponse.json({ expenses: expenses.slice(0, 50).map(({vat,...expense})=>({...expense,grossAmount:expense.amount.plus(vat?.taxAmount??0).toFixed(3),expenseCost:expense.amount.plus(vat?.taxAmount??0).minus(vat?.recoverableTax??0).toFixed(3),taxAmount:vat?.taxAmount.toFixed(3)??"0.000",recoverableTax:vat?.recoverableTax.toFixed(3)??"0.000",vatRecorded:Boolean(vat)})), nextPage: expenses.length > 50 ? page.data + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request: Request) {

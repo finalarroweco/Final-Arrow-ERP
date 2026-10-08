@@ -9,7 +9,7 @@ type Rights = { canPostLedger: boolean; canCreate: boolean; canPost: boolean; ca
 type Option = { tenantId: string; companyId: string; label: string; currency: string; companyRights: Rights;
   branches: ({ id: string; name: string } & Rights)[] };
 type Expense = { id: string; number: string; description: string; category: string; amount: string;
-  currency: string; expenseDate: string; status: "DRAFT" | "POSTED" | "VOID";
+  grossAmount:string;expenseCost:string;taxAmount:string;recoverableTax:string;vatRecorded:boolean; currency: string; expenseDate: string; status: "DRAFT" | "POSTED" | "VOID";
   branchId: string | null; voidReason: string | null };
 
 export function ExpensesWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
@@ -60,7 +60,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
       <label>{t("Number", "الرقم") } <input name="number" required pattern="[A-Z0-9-]{2,30}" placeholder="EXP-001" /></label>
       <label>{t("Description", "الوصف") } <input name="description" required minLength={2} maxLength={300} /></label>
       <label>{t("Category", "التصنيف") } <input name="category" required minLength={2} maxLength={80} placeholder={t("Travel", "سفر")} /></label>
-      <label>{t("Amount", "المبلغ")} ({scope.currency}) <input name="amount" required type="number" min="0.001" max="999999999999999.999" step="0.001" /></label>
+      <label>{t("Amount before VAT", "المبلغ قبل الضريبة")} ({scope.currency}) <input name="amount" required type="number" min="0.001" max="999999999999999.999" step="0.001" /></label>
       <label>{t("Expense date", "تاريخ المصروف") } <input name="expenseDate" required type="date" /></label>
       <label>{t("Branch", "الفرع") } <select name="branchId">
         {scope.companyRights.canCreate && <option value="">{t("Company wide", "على مستوى الشركة")}</option>}
@@ -76,6 +76,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
       const rights = expense.branchId ? scope.branches.find((branch) => branch.id === expense.branchId) : scope.companyRights;
       return <article key={expense.id} className="card"><strong>{expense.number} · {expense.description}</strong>
         <p>{expense.category} · {expense.amount} {expense.currency} · {expense.expenseDate.slice(0, 10)} · {t(expense.status, ({ DRAFT: "مسودة", POSTED: "مرحّل", VOID: "ملغى" })[expense.status])} · {expense.branchId ? scope.branches.find((branch) => branch.id === expense.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>
+        {expense.vatRecorded&&<p>{t("Saved VAT","الضريبة المحفوظة")}: {expense.taxAmount} · {t("Deductible VAT","الضريبة القابلة للخصم")}: {expense.recoverableTax} · {t("Gross document amount","قيمة المستند شامل الضريبة")}: {expense.grossAmount} · {t("Expense cost","تكلفة المصروف")}: {expense.expenseCost} {expense.currency}</p>}
         {rights?.canPostLedger && expense.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${expense.id}:${expense.status}`} kind="expense" id={expense.id} scope={scope} locale={locale} amount={expense.amount} currency={expense.currency} eligible={expense.status === "POSTED"}/>}
         {expense.voidReason && <p>{t("Void reason:", "سبب الإلغاء:")} {expense.voidReason}</p>}
         {rights?.canPost && expense.status === "DRAFT" && <button disabled={busy}

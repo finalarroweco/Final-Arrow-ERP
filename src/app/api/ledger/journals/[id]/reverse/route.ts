@@ -70,6 +70,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           if(dependencies.latestDate&&parsed.data.entryDate<dependencies.latestDate)throw new PayrollReversalConflict("Receipt reversal date cannot precede return-credit corrections");
         }
       }
+      if (original.number.startsWith("SYSE-")) {
+        const link=await tx.auditLog.findFirst({where:{tenantId:original.tenantId,entity:"Expense",action:"expense.ledger_posted",metadata:{path:["journalId"],equals:original.id}},select:{entityId:true}});
+        if(!link?.entityId||!z.string().uuid().safeParse(link.entityId).success||documentJournalNumber("expense",link.entityId)!==original.number)throw new PayrollReversalConflict("Expense source could not be verified");
+        await lockDocument(tx,"expense",original.tenantId,link.entityId);
+        const source=await tx.expense.findUnique({where:{id:link.entityId},select:{tenantId:true,companyId:true,branchId:true}});
+        if(!source||source.tenantId!==original.tenantId||source.companyId!==original.companyId||source.branchId!==original.branchId||!(await canAccess({...scope,permission:"expense:read"})))throw new PayrollReversalConflict("Expense and ledger permissions are required");
+      }
       if (/^SYS[RW]-/.test(original.number)) {
         const link=await tx.auditLog.findFirst({where:{tenantId:original.tenantId,entity:"PayrollEntry",
           action:{in:["payroll.ledger_posted","payroll-payment.ledger_posted"]},metadata:{path:["journalId"],equals:original.id}},select:{entityId:true}});

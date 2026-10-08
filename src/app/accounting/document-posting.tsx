@@ -1,4 +1,5 @@
 "use client";
+import {ExpenseVatFields,ExpenseVatSummary,type ExpenseVatSetup} from "./expense-vat-fields";
 import {PurchaseVatFields,PurchaseVatSummary,type PurchaseVatSetup} from "./purchase-vat-fields";
 import { useState, type FormEvent } from "react";
 import { translate, type Locale } from "@/lib/locale";
@@ -12,6 +13,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
   const [accounts,setAccounts]=useState<Account[]>([]),[entry,setEntry]=useState<Entry|null>(null);
   const [nextPage,setNextPage]=useState<number|null>(null),[message,setMessage]=useState("");
   const [purchaseSetup,setPurchaseSetup]=useState<{entry:Entry;debitAccountId:string;creditAccountId:string;accounts:Account[]}|null>(null);
+  const [expenseVatSetup,setExpenseVatSetup]=useState<ExpenseVatSetup|null>(null);
   const [purchaseVatSetup,setPurchaseVatSetup]=useState<PurchaseVatSetup|null>(null);
   const [invoiceVat,setInvoiceVat]=useState<{taxAmount:string;outputAccount:{code:string;name:string}|null}|null>(null);
   const purchase=kind==="purchase-receipt"||kind==="purchase-return";
@@ -26,7 +28,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     try {
       const response=await fetch(`${endpoint}?${new URLSearchParams({tenantId:scope.tenantId})}`);
       if (!response.ok) throw new Error("journal");
-      const data=await response.json();setPurchaseVatSetup(data.purchaseVatSetup??null);setEntry(data.entry);setInvoiceVat(data.invoiceVat??null);setPurchaseSetup(data.purchaseSetup??null);
+      const data=await response.json();setExpenseVatSetup(data.expenseVatSetup??null);setPurchaseVatSetup(data.purchaseVatSetup??null);setEntry(data.entry);setInvoiceVat(data.invoiceVat??null);setPurchaseSetup(data.purchaseSetup??null);
       if (!data.entry) await accountPage(0);
       setLoaded(true);
     } catch {setMessage(t("Could not load ledger setup. Check your connection and ledger permissions.","تعذر تحميل إعداد الترحيل. تحقق من اتصالك وصلاحيات دفتر الأستاذ."));}
@@ -39,10 +41,11 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
         tenantId:scope.tenantId,entryDate:form.get("entryDate"),debitAccountId:form.get("debitAccountId"),creditAccountId:form.get("creditAccountId"),
         ...(kind==="purchase-receipt"&&purchaseVatSetup?.required?{purchaseVat:{supplierTaxNumber:String(form.get("supplierTaxNumber")??"").trim()||null,reference:form.get("purchaseReference"),lines:purchaseVatSetup.lines.map(l=>{const value=String(form.get(`purchase-tax-${l.id}`)??"");return{receiptLineId:l.id,treatment:value.split("-")[0],recoverable:value.endsWith("-R")};})}}:{}),
         ...(kind==="purchase-return"&&purchaseVatSetup?.snapshot?{creditReference:form.get("creditReference")} : {}),
+        ...(kind==="expense"&&expenseVatSetup?.required?{expenseVat:{supplierName:form.get("expenseSupplierName"),supplierTaxNumber:String(form.get("expenseSupplierTaxNumber")??"").trim()||null,reference:form.get("expenseReference"),treatment:String(form.get("expenseTreatment")).split("-")[0],recoverable:String(form.get("expenseTreatment")).endsWith("-R")}}:{}),
         ...(kind === "payroll" && hasDeductions ? {deductionAccountId:form.get("deductionAccountId")} : {}),
       })});const data=await response.json();
       if (!response.ok) {setMessage(data.error??t("Posting failed","تعذر الترحيل"));return;}
-      setEntry(data.entry);if(data.purchaseVat&&purchaseVatSetup)setPurchaseVatSetup({...purchaseVatSetup,recorded:true,snapshot:data.purchaseVat,amount:data.gross});setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));
+      setEntry(data.entry);if(data.expenseVat&&expenseVatSetup)setExpenseVatSetup({...expenseVatSetup,snapshot:data.expenseVat,amount:data.gross});if(data.purchaseVat&&purchaseVatSetup)setPurchaseVatSetup({...purchaseVatSetup,recorded:true,snapshot:data.purchaseVat,amount:data.gross});setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));
     } catch {setMessage(t("Connection failed. Recheck the journal before retrying.","فشل الاتصال. تحقق من القيد قبل إعادة المحاولة."));setLoaded(false);}
     finally {setBusy(false);}
   }
@@ -54,6 +57,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     <button type="button" disabled={busy} onClick={()=>open?setOpen(false):void inspect()}>{kind === "payroll-payment" ? t("Payment settlement journal","قيد تسوية صرف الراتب") : kind === "payroll" ? t("Payroll accrual journal","قيد استحقاق الراتب") : t("Ledger posting","الترحيل المحاسبي")}</button>
     {open&&<div>
       <p>{t("Posts this document once as a balanced journal. Select the correct accounts; this does not collect or send money.","يُرحّل هذا المستند مرة واحدة بقيد متوازن. اختر الحسابات المناسبة؛ لا تُحصّل أو تُحوّل أموالاً من هنا.")}</p>
+      {expenseVatSetup?.snapshot&&<ExpenseVatSummary snapshot={expenseVatSetup.snapshot} gross={expenseVatSetup.amount} currency={currency} locale={locale}/>}
       {purchaseVatSetup?.snapshot&&<PurchaseVatSummary recorded={purchaseVatSetup.recorded} snapshot={purchaseVatSetup.snapshot} currency={currency} locale={locale}/>}
       {invoiceVat&&<p>{t("Receivable includes VAT. Revenue uses the net invoice amount; output VAT is credited to the saved liability account:","المستحق على العميل شامل الضريبة. تُرحّل الإيرادات بالقيمة الصافية، وضريبة المخرجات إلى حساب الالتزام المحفوظ:")} {invoiceVat.outputAccount?.code} · {invoiceVat.outputAccount?.name} · {invoiceVat.taxAmount} {currency}</p>}
       {purchase&&<p>{t("Amount uses saved purchase-order unit prices and this document's quantities, in company currency. VAT classification is required for active registered-company receipts. Freight, currency conversion and money transfer are not included.","تُحسب القيمة من أسعار بنود أمر الشراء المحفوظة وكميات هذا المستند بعملة الشركة. يلزم تصنيف الضريبة لاستلامات الشركة المسجّلة ضريبيًا. لا يتضمن القيد الشحن أو تحويل العملة أو تحويل أموال.")}</p>}
@@ -71,7 +75,8 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
       {entry?<p><a href={`/accounting/ledger/journals/${entry.id}`}>{t("View journal","عرض القيد")} · {entry.number}</a>
         {entry.reversal&&<> · <a href={`/accounting/ledger/journals/${entry.reversal.id}`}>{t("Reversed","معكوس")} · {entry.reversal.number}</a></>}</p>:
         loaded&&eligible&&canPost&&(kind!=="purchase-return"||purchaseSetup)&&<form onSubmit={event=>void post(event)}>
-          <strong>{kind==="purchase-receipt"&&purchaseVatSetup?.required?t("Net before VAT:","الصافي قبل الضريبة:"):""} {purchaseVatSetup?.amount??amount} {currency}</strong>
+          <strong>{((kind==="purchase-receipt"&&purchaseVatSetup?.required)||(kind==="expense"&&expenseVatSetup?.required))?t("Net before VAT:","الصافي قبل الضريبة:"):""} {expenseVatSetup?.amount??purchaseVatSetup?.amount??amount} {currency}</strong>
+          {kind==="expense"&&expenseVatSetup?.required&&<ExpenseVatFields setup={expenseVatSetup} locale={locale} busy={busy}/>}
           {kind==="purchase-receipt"&&purchaseVatSetup?.required&&<PurchaseVatFields setup={purchaseVatSetup} locale={locale} busy={busy}/>}
           {kind==="purchase-return"&&purchaseVatSetup?.snapshot&&<label>{t("Supplier credit-note reference","مرجع إشعار دائن المورد")}<input name="creditReference" required disabled={busy} minLength={3} maxLength={120}/></label>}
           <label>{t("Journal date","تاريخ القيد")} <input name="entryDate" type="date" required disabled={busy}/></label>

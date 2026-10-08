@@ -1,3 +1,4 @@
+import {expenseVatInput,calculateExpenseVat,expenseGross} from "@/lib/expense-vat";
 import {purchaseVatInput,calculatePurchaseVat} from "@/lib/purchase-vat";
 import {VatConflict} from "@/lib/invoice-vat";
 import {invoiceGross} from "@/lib/invoice-vat";
@@ -13,7 +14,7 @@ import { documentJournal, documentJournalNumber, lockDocument, type DocumentKind
 import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
 const uuid = z.string().uuid();
 const pathSchema = z.object({ kind: z.enum(["invoice", "expense", "pos", "payroll", "payroll-payment", "purchase-receipt", "purchase-return"]), id: uuid });
-const bodySchema = z.object({ tenantId: uuid, entryDate: dueDate, debitAccountId: uuid, creditAccountId: uuid, deductionAccountId: uuid.optional(), purchaseVat:purchaseVatInput.optional(),creditReference:z.string().trim().min(3).max(120).optional() }).strict();
+const bodySchema = z.object({ tenantId: uuid, entryDate: dueDate, debitAccountId: uuid, creditAccountId: uuid, deductionAccountId: uuid.optional(), expenseVat:expenseVatInput.optional(), purchaseVat:purchaseVatInput.optional(),creditReference:z.string().trim().min(3).max(120).optional() }).strict();
 type Context = { params: Promise<{ kind: string; id: string }> };
 class PostingConflict extends Error {}
 async function source(kind: DocumentKind, tenantId: string, id: string, client: Prisma.TransactionClient = db) {
@@ -33,8 +34,8 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
     const row = await client.posOrder.findFirst({where:{tenantId,id}});
     return row && {...row,amount:row.total,date:row.paidAt?.toISOString().slice(0,10),eligible:row.status === "PAID"};
   }
-  const row = await client.expense.findUnique({ where: { tenantId_id: { tenantId, id } } });
-  return row && { ...row, date: row.expenseDate.toISOString().slice(0,10), eligible: row.status === "POSTED" };
+  const row = await client.expense.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true} });
+  return row && { ...row, netAmount:row.amount,amount:expenseGross(row), date: row.expenseDate.toISOString().slice(0,10), eligible: row.status === "POSTED" };
 }
 async function permitted(userId: string, kind: DocumentKind, tenantId: string, row: { companyId: string; branchId: string | null; orderBranchId?:string|null }, post: boolean) {
   const scope = { userId, tenantId, companyId: row.companyId, branchId: row.branchId ?? undefined };
@@ -62,10 +63,11 @@ export async function GET(request: Request, context: Context) {
     }
   }
   const purchaseTax="purchaseLines" in row?row.vat:null;
-  const profile="purchaseLines" in row?await db.companyVatProfile.findUnique({where:{companyId:row.companyId}}):null;
+  const profile=("purchaseLines" in row||path.data.kind==="expense")?await db.companyVatProfile.findUnique({where:{companyId:row.companyId}}):null;
   const purchaseVatSetup="purchaseLines" in row?{required:path.data.kind==="purchase-receipt"&&Boolean(profile?.enabled&&profile.effectiveFrom&&row.date>=profile.effectiveFrom.toISOString().slice(0,10)),lines:row.purchaseLines.map(l=>({...l,quantity:l.quantity.toFixed(3),unitPrice:l.unitPrice.toFixed(3),net:l.quantity.mul(l.unitPrice).toFixed(3)})),recorded:Boolean(purchaseTax&&"entryId" in purchaseTax),snapshot:purchaseTax,amount:row.amount.toFixed(3),inputAccountId:profile?.inputAccountId??null}:null;
+  const expenseVatSetup=path.data.kind==="expense"&&"expenseDate" in row?{required:Boolean(profile?.enabled&&profile.effectiveFrom&&row.date>=profile.effectiveFrom.toISOString().slice(0,10)),netAmount:row.netAmount.toFixed(3),snapshot:row.vat,amount:row.amount.toFixed(3),inputAccountId:profile?.inputAccountId??null}:null;
   const invoiceVat=path.data.kind==="invoice"&&"subtotal" in row&&row.vat?{taxAmount:row.vat.taxAmount.toFixed(3),outputAccount:await db.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId:tenant.data,companyId:row.companyId},select:{code:true,name:true}})}:null;
-  return NextResponse.json({entry,invoiceVat,purchaseVatSetup,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
+  return NextResponse.json({entry,invoiceVat,expenseVatSetup,purchaseVatSetup,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
 }
 export async function POST(request: Request, context: Context) {
   const actor = await currentUser(); if (!actor) return NextResponse.json({error:"Unauthenticated"},{status:401});
@@ -73,8 +75,8 @@ export async function POST(request: Request, context: Context) {
   const body = bodySchema.safeParse(await request.json().catch(()=>null));
   if (!path.success || !body.success) return NextResponse.json({error:"Invalid document posting"},{status:400});
   const {kind,id} = path.data;
-  const {tenantId,entryDate,debitAccountId,creditAccountId,deductionAccountId,purchaseVat,creditReference} = body.data;
-  if ((purchaseVat&&kind!=="purchase-receipt")||(creditReference&&kind!=="purchase-return")) return NextResponse.json({error:"Invalid purchase tax fields"},{status:400});
+  const {tenantId,entryDate,debitAccountId,creditAccountId,deductionAccountId,purchaseVat,creditReference,expenseVat} = body.data;
+  if ((expenseVat&&kind!=="expense")||(purchaseVat&&kind!=="purchase-receipt")||(creditReference&&kind!=="purchase-return")) return NextResponse.json({error:"Invalid purchase tax fields"},{status:400});
   if (kind !== "payroll" && deductionAccountId) return NextResponse.json({error:"Deduction account is only supported for payroll"},{status:400});
   const initial = await source(kind,tenantId,id);
   if (!initial) return NextResponse.json({error:"Document not found"},{status:404});
@@ -88,6 +90,13 @@ export async function POST(request: Request, context: Context) {
       if (await documentJournal(tx,kind,tenantId,row.companyId,id)) throw new PostingConflict("Document already has a ledger journal, including if reversed");
       const company = await writableLedgerCompany(tx,tenantId,row.companyId,entryDate);
       let purchaseTax="purchaseLines" in row?row.vat:null;
+      let expenseTax:(ReturnType<typeof calculateExpenseVat>&{inputAccountId:string|null})|null=null;
+      if(kind==="expense"&&"expenseDate" in row){
+        const profile=await tx.companyVatProfile.findUnique({where:{companyId:row.companyId}}),active=Boolean(profile?.enabled&&profile.effectiveFrom&&row.date>=profile.effectiveFrom.toISOString().slice(0,10));
+        if(active&&!expenseVat)throw new PostingConflict("Classify expense VAT and provide the supplier document");
+        if(!active&&expenseVat)throw new PostingConflict("Company VAT is not active for this expense date");
+        if(active&&expenseVat&&profile){expenseTax={...calculateExpenseVat(row.netAmount,expenseVat),inputAccountId:profile.inputAccountId};row.amount=expenseTax.netAmount.plus(expenseTax.taxAmount);}
+      }
       if(kind==="purchase-receipt"&&"purchaseLines" in row){
         const profile=await tx.companyVatProfile.findUnique({where:{companyId:row.companyId}}),active=Boolean(profile?.enabled&&profile.effectiveFrom&&row.date>=profile.effectiveFrom.toISOString().slice(0,10));
         if(active&&!purchaseVat)throw new PostingConflict("Classify purchase VAT and provide the supplier document reference");
@@ -129,7 +138,7 @@ export async function POST(request: Request, context: Context) {
       }
       const zero = new Prisma.Decimal(0);
       const purchaseCost=purchaseTax?row.amount.minus(purchaseTax.recoverableTax):row.amount;
-      const lines = [{position:0,accountId:debit.id,debit:kind==="purchase-receipt"?purchaseCost:row.amount,credit:zero}];
+      const lines = [{position:0,accountId:debit.id,debit:expenseTax?row.amount.minus(expenseTax.recoverableTax):kind==="purchase-receipt"?purchaseCost:row.amount,credit:zero}];
       if (kind === "payroll" && "deductions" in row) {
         if (!row.netPay.plus(row.deductions).eq(row.amount)) throw new PostingConflict("Payroll amounts are inconsistent");
         if (row.netPay.gt(0)) lines.push({position:lines.length,accountId:credit.id,debit:zero,credit:row.netPay});
@@ -146,6 +155,13 @@ export async function POST(request: Request, context: Context) {
           if(!input||[debit.id,credit.id].includes(input.id))throw new PostingConflict("Configure a separate input VAT asset account in company VAT settings");
           lines.push({position:2,accountId:input.id,debit:kind==="purchase-receipt"?purchaseTax.recoverableTax:zero,credit:kind==="purchase-return"?purchaseTax.recoverableTax:zero});
         }
+      } else if(kind==="expense"&&expenseTax){
+        lines.push({position:1,accountId:credit.id,debit:zero,credit:row.amount});
+        if(expenseTax.recoverableTax.gt(0)){
+          const input=await tx.ledgerAccount.findFirst({where:{id:expenseTax.inputAccountId??"00000000-0000-0000-0000-000000000000",tenantId,companyId:row.companyId,type:"ASSET"}});
+          if(!input||[debit.id,credit.id].includes(input.id))throw new PostingConflict("Configure a separate input VAT asset account in company VAT settings");
+          lines.push({position:2,accountId:input.id,debit:expenseTax.recoverableTax,credit:zero});
+        }
       } else if(kind==="invoice"&&"subtotal" in row&&row.vat?.taxAmount.gt(0)){
         const taxAccount=await tx.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId,companyId:row.companyId,type:"LIABILITY"}});if(!taxAccount||[debit.id,credit.id].includes(taxAccount.id))throw new PostingConflict("Invoice VAT output account is unavailable");
         lines.push({position:1,accountId:credit.id,debit:zero,credit:row.subtotal});lines.push({position:2,accountId:taxAccount.id,debit:zero,credit:row.vat.taxAmount});
@@ -155,12 +171,15 @@ export async function POST(request: Request, context: Context) {
         description:`${kind === "purchase-receipt" ? "Purchase receipt" : kind === "purchase-return" ? "Purchase return credit" : kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : kind === "payroll" ? "Payroll accrual" : kind === "payroll-payment" ? "Payroll payment" : "POS"} ${row.number}`,
         currency:row.currency,total:row.amount,createdBy:actor.id,lines:{create:lines}},select:{id:true,number:true}});
       if(purchaseTax&&"receiptId" in row&&isPurchaseDocument(kind))await tx.purchaseVat.create({data:{entryId:journal.id,tenantId,companyId:row.companyId,receiptId:row.receiptId,returnId:kind==="purchase-return"?id:null,netAmount:purchaseTax.netAmount,taxAmount:purchaseTax.taxAmount,recoverableTax:purchaseTax.recoverableTax,inputAccountId:purchaseTax.inputAccountId,supplierName:purchaseTax.supplierName,supplierTaxNumber:purchaseTax.supplierTaxNumber,reference:kind==="purchase-return"?creditReference!:purchaseTax.reference,details:purchaseTax.details as Prisma.InputJsonValue}});
+      if(expenseTax&&kind==="expense")await tx.expenseVat.create({data:{...expenseTax,entryId:journal.id,tenantId,companyId:row.companyId,expenseId:id}});
       await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:`${kind}.ledger_posted`,
         entity:kind === "purchase-receipt" ? "GoodsReceipt" : kind === "purchase-return" ? "GoodsReturn" : kind === "invoice" ? "Invoice" : kind === "expense" ? "Expense" : ["payroll","payroll-payment"].includes(kind) ? "PayrollEntry" : "PosOrder",entityId:id,metadata:{journalId:journal.id,journalNumber:journal.number,amount:row.amount.toString(),currency:row.currency}}});
       return journal;
     },{timeout:15000,maxWait:10000});
     const savedTax=isPurchaseDocument(kind)?await db.purchaseVat.findUnique({where:{entryId:entry.id}}):null;
-    return NextResponse.json({entry,purchaseVat:savedTax,gross:savedTax?.netAmount.plus(savedTax.taxAmount).toFixed(3)},{status:201});
+    const savedExpense=kind==="expense"?await db.expenseVat.findUnique({where:{entryId:entry.id}}):null;
+    const savedVat=savedTax??savedExpense;
+    return NextResponse.json({entry,purchaseVat:savedTax,expenseVat:savedExpense,gross:savedVat?.netAmount.plus(savedVat.taxAmount).toFixed(3)},{status:201});
   } catch(error) {
     if (error instanceof LedgerPeriodClosed) return NextResponse.json({error:error.message,lockedThrough:error.lockedThrough},{status:409});
     if (error instanceof VatConflict) return NextResponse.json({error:error.message},{status:409});

@@ -835,6 +835,7 @@ model AttendanceRecord {
 }
 
 model Expense {
+  vat ExpenseVat?
   id          String        @id @default(uuid()) @db.Uuid
   tenantId    String        @db.Uuid
   companyId   String        @db.Uuid
@@ -857,6 +858,7 @@ model Expense {
 
   @@unique([companyId, number])
   @@unique([tenantId, id])
+  @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId, branchId, status, expenseDate])
 }
 
@@ -994,6 +996,7 @@ model LedgerAccount {
 model JournalEntry {
  creationTransaction String @default(dbgenerated("(txid_current())::text"))
  purchaseVat PurchaseVat?
+ expenseVat ExpenseVat?
   id String @id @default(uuid()) @db.Uuid
   tenantId String @db.Uuid
   companyId String @db.Uuid
@@ -1315,4 +1318,25 @@ model PurchaseVat {
  @@unique([tenantId,companyId,entryId])
  @@unique([tenantId,receiptId,returnId])
  @@index([tenantId,receiptId])
+}
+
+model ExpenseVat {
+ entryId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ expenseId String @unique @db.Uuid
+ netAmount Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ recoverableTax Decimal @db.Decimal(18,3)
+ treatment String @db.VarChar(12)
+ recoverable Boolean
+ inputAccountId String? @db.Uuid
+ supplierName String @db.VarChar(200)
+ supplierTaxNumber String? @db.VarChar(40)
+ reference String @db.VarChar(120)
+ entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
+ expense Expense @relation(fields:[tenantId,companyId,expenseId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([tenantId,companyId,entryId])
+ @@unique([tenantId,companyId,expenseId])
+ @@index([tenantId,companyId])
 }

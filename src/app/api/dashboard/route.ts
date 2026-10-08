@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const base = { tenantId: tenantId.data, companyId: companyId.data };
   const branchFilter = (branches: string[] | null) => branches === null ? {} : { branchId: { in: branches } };
-  const [customers, leads, quotes, orders, projects, employees, expenses, company, tickets] = await Promise.all([
+  const [customers, leads, quotes, orders, projects, employees, expenses, company, tickets, expenseTaxes] = await Promise.all([
     customerBranches === false ? null : db.customer.count({ where: { ...base, ...branchFilter(customerBranches), archivedAt: null } }),
     leadBranches === false ? null : db.lead.groupBy({ by: ["stage"], where: { ...base, ...branchFilter(leadBranches) }, _count: { _all: true } }),
     quoteBranches === false ? null : db.quote.groupBy({ by: ["status"], where: { ...base, ...branchFilter(quoteBranches) }, _count: { _all: true } }),
@@ -38,6 +38,7 @@ export async function GET(request: Request) {
       id: companyId.data } }, select: { baseCurrency: true } }),
     ticketBranches === false ? null : db.ticket.groupBy({ by: ["status"], where: { ...base,
       ...branchFilter(ticketBranches) }, _count: { _all: true } }),
+    expenseBranches === false ? null : db.expenseVat.aggregate({where:{expense:{is:{...base,...branchFilter(expenseBranches),status:"POSTED"}}},_sum:{taxAmount:true,recoverableTax:true}}),
   ]);
   const counts = <T extends string>(rows: { [key: string]: unknown; _count: { _all: number } }[] | null, key: string, statuses: readonly T[]) =>
     rows === null ? null : Object.fromEntries(statuses.map((status) => [status,
@@ -52,6 +53,6 @@ export async function GET(request: Request) {
     employees,
     expenses: expenses === null ? null : { currency: company?.baseCurrency ?? "",
       postedCount: expenses._count._all,
-      postedAmount: expenses._sum.amount?.toString() ?? "0" },
+      postedAmount: expenses._sum.amount?.plus(expenseTaxes?._sum.taxAmount??0).minus(expenseTaxes?._sum.recoverableTax??0).toString() ?? "0" },
   });
 }

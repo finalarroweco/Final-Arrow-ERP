@@ -59,7 +59,7 @@ export function DashboardWorkspace({ options, locale }: { options: Option[]; loc
       {summary.employees !== null && <article><small>{t("HUMAN RESOURCES", "الموارد البشرية")}</small><h2>{summary.employees}</h2>
         <p>{t("Active employees", "الموظفون النشطون")}</p><a href="/hr/employees">{t("Open employees", "عرض الموظفين")}</a></article>}
       {summary.expenses && <article><small>{t("ACCOUNTING", "المحاسبة")}</small><h2>{summary.expenses.postedAmount} {summary.expenses.currency}</h2>
-        <p>{t("Posted expenses", "مصاريف مرحّلة")} · {summary.expenses.postedCount} {t("records", "سجلات")}</p><a href="/accounting/expenses">{t("Open expenses", "عرض المصاريف")}</a></article>}
+        <p>{t("Posted expense cost", "تكلفة المصاريف المرحّلة")} · {summary.expenses.postedCount} {t("records", "سجلات")}</p><a href="/accounting/expenses">{t("Open expenses", "عرض المصاريف")}</a></article>}
     </div>}
     <button onClick={() => void load(selected)}>{t("Refresh", "تحديث")}</button>
   </section>;
