@@ -1106,6 +1106,8 @@ model PosOrder {
   createdAt DateTime @default(now())
   company Company @relation(fields: [tenantId,companyId], references: [tenantId,id], onDelete: Restrict)
   branch Branch @relation(fields: [tenantId,companyId,branchId], references: [tenantId,companyId,id], onDelete: Restrict)
+  creationTransaction String @default(dbgenerated("(txid_current())::text"))
+  vat PosVat?
   lines PosOrderLine[]
   @@unique([companyId,number])
   @@unique([tenantId,companyId,id])
@@ -1338,5 +1340,21 @@ model ExpenseVat {
  expense Expense @relation(fields:[tenantId,companyId,expenseId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@unique([tenantId,companyId,entryId])
  @@unique([tenantId,companyId,expenseId])
+ @@index([tenantId,companyId])
+}
+
+model PosVat {
+ orderId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ netAmount Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ outputAccountId String @db.Uuid
+ taxNumber String @db.VarChar(40)
+ sellerName String @db.VarChar(200)
+ sellerAddress String @db.VarChar(500)
+ details Json
+ order PosOrder @relation(fields:[tenantId,companyId,orderId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([tenantId,companyId,orderId])
  @@index([tenantId,companyId])
 }

@@ -31,7 +31,7 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
     return row && { ...row, amount: invoiceGross(row), date: row.issuedAt?.toISOString().slice(0,10), eligible: row.status === "ISSUED" };
   }
   if (kind === "pos") {
-    const row = await client.posOrder.findFirst({where:{tenantId,id}});
+    const row = await client.posOrder.findFirst({where:{tenantId,id},include:{vat:true}});
     return row && {...row,amount:row.total,date:row.paidAt?.toISOString().slice(0,10),eligible:row.status === "PAID"};
   }
   const row = await client.expense.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true} });
@@ -67,7 +67,8 @@ export async function GET(request: Request, context: Context) {
   const purchaseVatSetup="purchaseLines" in row?{required:path.data.kind==="purchase-receipt"&&Boolean(profile?.enabled&&profile.effectiveFrom&&row.date>=profile.effectiveFrom.toISOString().slice(0,10)),lines:row.purchaseLines.map(l=>({...l,quantity:l.quantity.toFixed(3),unitPrice:l.unitPrice.toFixed(3),net:l.quantity.mul(l.unitPrice).toFixed(3)})),recorded:Boolean(purchaseTax&&"entryId" in purchaseTax),snapshot:purchaseTax,amount:row.amount.toFixed(3),inputAccountId:profile?.inputAccountId??null}:null;
   const expenseVatSetup=path.data.kind==="expense"&&"expenseDate" in row?{required:Boolean(profile?.enabled&&profile.effectiveFrom&&row.date>=profile.effectiveFrom.toISOString().slice(0,10)),netAmount:row.netAmount.toFixed(3),snapshot:row.vat,amount:row.amount.toFixed(3),inputAccountId:profile?.inputAccountId??null}:null;
   const invoiceVat=path.data.kind==="invoice"&&"subtotal" in row&&row.vat?{taxAmount:row.vat.taxAmount.toFixed(3),outputAccount:await db.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId:tenant.data,companyId:row.companyId},select:{code:true,name:true}})}:null;
-  return NextResponse.json({entry,invoiceVat,expenseVatSetup,purchaseVatSetup,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
+  const posVat=path.data.kind==="pos"&&"kitchenStatus" in row&&row.vat?{taxAmount:row.vat.taxAmount.toFixed(3),outputAccount:await db.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId:tenant.data,companyId:row.companyId},select:{code:true,name:true}})}:null;
+  return NextResponse.json({entry,posVat,invoiceVat,expenseVatSetup,purchaseVatSetup,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
 }
 export async function POST(request: Request, context: Context) {
   const actor = await currentUser(); if (!actor) return NextResponse.json({error:"Unauthenticated"},{status:401});
@@ -162,6 +163,9 @@ export async function POST(request: Request, context: Context) {
           if(!input||[debit.id,credit.id].includes(input.id))throw new PostingConflict("Configure a separate input VAT asset account in company VAT settings");
           lines.push({position:2,accountId:input.id,debit:expenseTax.recoverableTax,credit:zero});
         }
+      } else if(kind==="pos"&&"kitchenStatus" in row&&row.vat?.taxAmount.gt(0)){
+        const taxAccount=await tx.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId,companyId:row.companyId,type:"LIABILITY"}});if(!taxAccount||[debit.id,credit.id].includes(taxAccount.id))throw new PostingConflict("Saved POS output VAT account is unavailable");
+        lines.push({position:1,accountId:credit.id,debit:zero,credit:row.vat.netAmount});lines.push({position:2,accountId:taxAccount.id,debit:zero,credit:row.vat.taxAmount});
       } else if(kind==="invoice"&&"subtotal" in row&&row.vat?.taxAmount.gt(0)){
         const taxAccount=await tx.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId,companyId:row.companyId,type:"LIABILITY"}});if(!taxAccount||[debit.id,credit.id].includes(taxAccount.id))throw new PostingConflict("Invoice VAT output account is unavailable");
         lines.push({position:1,accountId:credit.id,debit:zero,credit:row.subtotal});lines.push({position:2,accountId:taxAccount.id,debit:zero,credit:row.vat.taxAmount});
