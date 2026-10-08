@@ -52,6 +52,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
     <label>{t("Company", "الشركة") } <select disabled={busy} value={selected} onChange={(event) => { requestNumber.current++; setSelected(Number(event.target.value)); setExpenses([]); setMessage(""); }}>
       {options.map((option, index) => <option key={option.companyId} value={index}>{option.label}</option>)}
     </select></label>
+    <p>{t("Amounts exclude VAT. For an active VAT-registered company, classify the tax from the supplier invoice when posting the ledger journal. Previously posted records retain their saved amounts.","المبالغ لا تشمل الضريبة. للشركة المسجّلة ضريبيًا، تُحدّد المعالجة من فاتورة المورد عند الترحيل المحاسبي. تحتفظ القيود السابقة بقيمها المحفوظة.")}</p>
     {(scope.companyRights.canCreate || createBranches.length > 0) && <form action={(form) => mutate("/api/expenses", "POST",
       { tenantId: scope.tenantId, companyId: scope.companyId, branchId: form.get("branchId") || null,
         number: form.get("number"), description: form.get("description"), category: form.get("category"),
@@ -77,7 +78,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
       return <article key={expense.id} className="card"><strong>{expense.number} · {expense.description}</strong>
         <p>{expense.category} · {expense.amount} {expense.currency} · {expense.expenseDate.slice(0, 10)} · {t(expense.status, ({ DRAFT: "مسودة", POSTED: "مرحّل", VOID: "ملغى" })[expense.status])} · {expense.branchId ? scope.branches.find((branch) => branch.id === expense.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>
         {expense.vatRecorded&&<p>{t("Saved VAT","الضريبة المحفوظة")}: {expense.taxAmount} · {t("Deductible VAT","الضريبة القابلة للخصم")}: {expense.recoverableTax} · {t("Gross document amount","قيمة المستند شامل الضريبة")}: {expense.grossAmount} · {t("Expense cost","تكلفة المصروف")}: {expense.expenseCost} {expense.currency}</p>}
-        {rights?.canPostLedger && expense.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${expense.id}:${expense.status}`} kind="expense" id={expense.id} scope={scope} locale={locale} amount={expense.amount} currency={expense.currency} eligible={expense.status === "POSTED"}/>}
+        {rights?.canPostLedger && expense.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${expense.id}:${expense.status}`} onPosted={()=>{setReportVersion(v=>v+1);void load(selected,page);}} kind="expense" id={expense.id} scope={scope} locale={locale} amount={expense.amount} currency={expense.currency} eligible={expense.status === "POSTED"}/>}
         {expense.voidReason && <p>{t("Void reason:", "سبب الإلغاء:")} {expense.voidReason}</p>}
         {rights?.canPost && expense.status === "DRAFT" && <button disabled={busy}
           onClick={() => void mutate(`/api/expenses/${expense.id}/status`, "PATCH",

@@ -5,8 +5,8 @@ import { useState, type FormEvent } from "react";
 import { translate, type Locale } from "@/lib/locale";
 type Account = {id:string;code:string;name:string;type:string};
 type Entry = {id:string;number:string;reversal?:{id:string;number:string}|null};
-export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,deductions,canPost=true}: {
-  kind:"invoice"|"expense"|"pos"|"payroll"|"payroll-payment"|"purchase-receipt"|"purchase-return";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;deductions?:string;canPost?:boolean;
+export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,deductions,canPost=true,onPosted}: {
+  kind:"invoice"|"expense"|"pos"|"payroll"|"payroll-payment"|"purchase-receipt"|"purchase-return";id:string;scope:{tenantId:string;companyId:string};locale:Locale;amount:string;currency:string;eligible:boolean;deductions?:string;canPost?:boolean;onPosted?:()=>void;
 }) {
   const t=(en:string,ar:string)=>translate(locale,en,ar);
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);
@@ -45,7 +45,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
         ...(kind === "payroll" && hasDeductions ? {deductionAccountId:form.get("deductionAccountId")} : {}),
       })});const data=await response.json();
       if (!response.ok) {setMessage(data.error??t("Posting failed","تعذر الترحيل"));return;}
-      setEntry(data.entry);if(data.expenseVat&&expenseVatSetup)setExpenseVatSetup({...expenseVatSetup,snapshot:data.expenseVat,amount:data.gross});if(data.purchaseVat&&purchaseVatSetup)setPurchaseVatSetup({...purchaseVatSetup,recorded:true,snapshot:data.purchaseVat,amount:data.gross});setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));
+      setEntry(data.entry);if(data.expenseVat&&expenseVatSetup)setExpenseVatSetup({...expenseVatSetup,snapshot:data.expenseVat,amount:data.gross});if(data.purchaseVat&&purchaseVatSetup)setPurchaseVatSetup({...purchaseVatSetup,recorded:true,snapshot:data.purchaseVat,amount:data.gross});setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));onPosted?.();
     } catch {setMessage(t("Connection failed. Recheck the journal before retrying.","فشل الاتصال. تحقق من القيد قبل إعادة المحاولة."));setLoaded(false);}
     finally {setBusy(false);}
   }
