@@ -104,7 +104,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
       return <article key={invoice.id}><div><h3>{invoice.number} · {invoice.customerName}</h3>
         <p>{t(invoice.status, ({ DRAFT: "مسودة", ISSUED: "مصدرة", VOID: "ملغاة" })[invoice.status])} · {invoice.subtotal} {invoice.currency}</p>
         {rights?.canPostLedger && invoice.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${invoice.id}:${invoice.status}`} kind="invoice" id={invoice.id} scope={scope} locale={locale} amount={invoice.subtotal} currency={invoice.currency} eligible={invoice.status === "ISSUED"}/>}
-        <a href={`/accounting/invoices/${invoice.id}`}>{t("View / print invoice", "عرض / طباعة الفاتورة")}</a>
+        <a href={`/accounting/invoices/${invoice.id}/settlements`}>{t("Collections / refunds", "التحصيلات / رد الدفعات")}</a> · <a href={`/accounting/invoices/${invoice.id}`}>{t("View / print invoice", "عرض / طباعة الفاتورة")}</a>
         <ul>{invoice.lines.map((line, index) => <li key={index}>
           {line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
         {invoice.voidReason && <p>{t("Void reason:", "سبب الإلغاء:")} {invoice.voidReason}</p>}

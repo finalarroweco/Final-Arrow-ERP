@@ -36,3 +36,9 @@ Receipt accruals and purchase-return credit journals can be posted from their do
 Receipt-linked supplier settlements are available at `/purchasing/settlements` and from each authorized receipt document. Post its accrual first, then record an actual payment using a company cash/bank asset account. A posted return credit can create a refundable balance. Payments/refunds update supplier statements and balances and support journal corrections. No bank transfer is initiated. Apply all 34 migrations before deploying this application revision.
 
 Organization owners can use `/settings/roles` to create operational role templates and replace a member's role/scope assignments. The workspace invitation form offers saved custom roles. Changes affect all members using the role and are audited; owner administration remains protected. Use isolated test members for access review and do not assign broader live permissions as a test.
+
+### Customer collection checks (2026-10-08)
+
+Open Accounting → Invoices, issue and post a test invoice to a receivable asset / revenue account, then select Collections / refunds. Use a separate cash/bank asset and the actual movement reference. Check balance before saving. The form preserves an unconfirmed request in the current browser tab for exact retry after a network failure. Collection records and journals remain immutable; use journal reversal to correct them, with dependent refunds corrected before collections when required. Never insert test financial movements in the live ERP.
+
+Review `/accounting/collections` and `/accounting/customer-statement` with a company/branch-scoped user. Statements are based on posted source journals, exclude tax and unrelated manual entries, and show each currency separately. Print the internal invoice to verify net collected and outstanding amounts. The isolated CI database exercises these actions automatically.

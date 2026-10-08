@@ -707,9 +707,11 @@ model Invoice {
   customer     Customer      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
   order        SalesOrder    @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        InvoiceLine[]
+  settlements CustomerSettlement[]
 
   @@unique([companyId, number])
   @@unique([tenantId, companyId, orderId])
+  @@unique([tenantId, companyId, id])
   @@unique([tenantId, id])
   @@index([tenantId, companyId, branchId, createdAt])
 }
@@ -1001,6 +1003,7 @@ model JournalEntry {
   branch Branch? @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines JournalLine[]
   supplierSettlement SupplierSettlement?
+  customerSettlement CustomerSettlement?
   @@unique([tenantId, companyId, id])
   @@unique([tenantId, companyId, reversalOf])
   @@unique([companyId, number])
@@ -1164,5 +1167,23 @@ model SupplierSettlement {
   receipt GoodsReceipt @relation(fields:[tenantId,companyId,branchId,receiptId],references:[tenantId,companyId,branchId,id],onDelete:Restrict)
   entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
   @@index([tenantId,companyId,receiptId,createdAt])
+  @@unique([tenantId,companyId,entryId])
+}
+
+model CustomerSettlement {
+  id String @id @db.Uuid
+  tenantId String @db.Uuid
+  companyId String @db.Uuid
+  branchId String? @db.Uuid
+  invoiceId String @db.Uuid
+  entryId String @unique @db.Uuid
+  kind String @db.VarChar(10)
+  amount Decimal @db.Decimal(18,3)
+  reference String @db.VarChar(120)
+  createdBy String @db.Uuid
+  createdAt DateTime @default(now())
+  invoice Invoice @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
+  entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
+  @@index([tenantId,companyId,invoiceId,createdAt])
   @@unique([tenantId,companyId,entryId])
 }

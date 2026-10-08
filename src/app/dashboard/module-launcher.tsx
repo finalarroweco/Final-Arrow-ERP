@@ -15,6 +15,8 @@ const groups = [
     ["/purchasing/suppliers", "Suppliers", "الموردون"], ["/purchasing/orders", "Purchase orders", "طلبات الشراء"],
     ["/purchasing/receipts", "Goods receipts", "استلام البضائع"],
     ["/purchasing/returns", "Goods returns", "مرتجعات البضائع"],
+    ["/accounting/collections", "Customer collections", "تحصيلات العملاء"],
+    ["/accounting/customer-statement", "Customer statements", "كشوف العملاء"],
     ["/purchasing/settlements", "Supplier settlements", "تسويات الموردين"],
     ["/purchasing/supplier-statement", "Supplier statements", "كشوف الموردين"],
     ["/purchasing/supplier-balances", "Supplier balances", "أرصدة الموردين"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],

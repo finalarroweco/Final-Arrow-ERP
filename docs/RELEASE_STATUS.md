@@ -210,3 +210,15 @@ Organization owners can create and update up to 100 custom roles at `/settings/r
 Assignments replace all prior grants for the selected member, retain suspension status, and revoke that member's pending invitations so old invitation links cannot restore superseded access. Invitations support custom roles and organization/company/branch scopes. Existing sessions use current permissions on their next authorized request. Changes and before/after access are audited.
 
 Tenant-row locks serialize role updates, membership edits and invitation acceptance; expected revisions reject stale competing changes. API fixtures cover cross-tenant isolation, reserved permissions, protected owners, mismatched branch/company scope, concurrent edits, immediate revocation, suspended members and pending invitation invalidation. No additional database migration is required; the existing 34-migration schema is reused.
+
+## 2026-10-08 — Customer invoice collections and statements
+
+Added partial collections and refunds against an issued invoice with an active original receivable journal. Collections debit a selected cash/bank asset and credit the original invoice receivable; refunds reverse that direction and are limited to net collections. Cash/bank and receivable accounts must differ. No external money transfer is initiated.
+
+Saved request IDs provide exact retries, including after a correction, and reject altered amount/date/account/reference/source payloads. Invoice source locks serialize collections, refunds, voids and corrections. The database validates source scope, amount, accounts and dates, rejects overcollection/overrefund, and preserves immutable settlement records. Corrections cannot leave net collections outside zero through invoice subtotal. Active settlements must be corrected before reversing the original invoice journal. Company period locks apply.
+
+Invoice, customer, source-order and ledger read permissions are all required; recording and correcting also require ledger posting. Registers respect each source branch independently. Customer statements include invoice accruals, collections/refunds and linked reversals, calculate only the original receivable account, keep currencies separate, and offer printable/CSV output with opening/closing balances. Internal invoice printing shows recorded net collections and outstanding balance to authorized users. Unposted sources and unrelated manual journals are excluded; tax is still not calculated.
+
+The new isolated CI fixture covers exact decimals, duplicate retries, competing collections, source permissions, foreign accounts, refund dependencies, direct database bypass attempts, immutable records, period locks, chronological corrections, CSV escaping, statements and four new/updated screens. Local production build and scope tests pass; CI verification is required before marking this slice complete.
+
+Remaining release work includes tax configuration/calculation, bank reconciliation, account recovery and broader acceptance testing of real operational flows. Full production readiness is not claimed.
