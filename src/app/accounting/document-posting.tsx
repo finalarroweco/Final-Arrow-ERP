@@ -1,4 +1,5 @@
 "use client";
+import {PurchaseVatFields,PurchaseVatSummary,type PurchaseVatSetup} from "./purchase-vat-fields";
 import { useState, type FormEvent } from "react";
 import { translate, type Locale } from "@/lib/locale";
 type Account = {id:string;code:string;name:string;type:string};
@@ -11,6 +12,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
   const [accounts,setAccounts]=useState<Account[]>([]),[entry,setEntry]=useState<Entry|null>(null);
   const [nextPage,setNextPage]=useState<number|null>(null),[message,setMessage]=useState("");
   const [purchaseSetup,setPurchaseSetup]=useState<{entry:Entry;debitAccountId:string;creditAccountId:string;accounts:Account[]}|null>(null);
+  const [purchaseVatSetup,setPurchaseVatSetup]=useState<PurchaseVatSetup|null>(null);
   const [invoiceVat,setInvoiceVat]=useState<{taxAmount:string;outputAccount:{code:string;name:string}|null}|null>(null);
   const purchase=kind==="purchase-receipt"||kind==="purchase-return";
   const endpoint=`/api/ledger/documents/${kind}/${id}`;
@@ -24,7 +26,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     try {
       const response=await fetch(`${endpoint}?${new URLSearchParams({tenantId:scope.tenantId})}`);
       if (!response.ok) throw new Error("journal");
-      const data=await response.json();setEntry(data.entry);setInvoiceVat(data.invoiceVat??null);setPurchaseSetup(data.purchaseSetup??null);
+      const data=await response.json();setPurchaseVatSetup(data.purchaseVatSetup??null);setEntry(data.entry);setInvoiceVat(data.invoiceVat??null);setPurchaseSetup(data.purchaseSetup??null);
       if (!data.entry) await accountPage(0);
       setLoaded(true);
     } catch {setMessage(t("Could not load ledger setup. Check your connection and ledger permissions.","تعذر تحميل إعداد الترحيل. تحقق من اتصالك وصلاحيات دفتر الأستاذ."));}
@@ -35,10 +37,12 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     try {
       const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
         tenantId:scope.tenantId,entryDate:form.get("entryDate"),debitAccountId:form.get("debitAccountId"),creditAccountId:form.get("creditAccountId"),
+        ...(kind==="purchase-receipt"&&purchaseVatSetup?.required?{purchaseVat:{supplierTaxNumber:String(form.get("supplierTaxNumber")??"").trim()||null,reference:form.get("purchaseReference"),lines:purchaseVatSetup.lines.map(l=>{const value=String(form.get(`purchase-tax-${l.id}`)??"");return{receiptLineId:l.id,treatment:value.split("-")[0],recoverable:value.endsWith("-R")};})}}:{}),
+        ...(kind==="purchase-return"&&purchaseVatSetup?.snapshot?{creditReference:form.get("creditReference")} : {}),
         ...(kind === "payroll" && hasDeductions ? {deductionAccountId:form.get("deductionAccountId")} : {}),
       })});const data=await response.json();
       if (!response.ok) {setMessage(data.error??t("Posting failed","تعذر الترحيل"));return;}
-      setEntry(data.entry);setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));
+      setEntry(data.entry);if(data.purchaseVat&&purchaseVatSetup)setPurchaseVatSetup({...purchaseVatSetup,recorded:true,snapshot:data.purchaseVat,amount:data.gross});setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));
     } catch {setMessage(t("Connection failed. Recheck the journal before retrying.","فشل الاتصال. تحقق من القيد قبل إعادة المحاولة."));setLoaded(false);}
     finally {setBusy(false);}
   }
@@ -50,8 +54,9 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     <button type="button" disabled={busy} onClick={()=>open?setOpen(false):void inspect()}>{kind === "payroll-payment" ? t("Payment settlement journal","قيد تسوية صرف الراتب") : kind === "payroll" ? t("Payroll accrual journal","قيد استحقاق الراتب") : t("Ledger posting","الترحيل المحاسبي")}</button>
     {open&&<div>
       <p>{t("Posts this document once as a balanced journal. Select the correct accounts; this does not collect or send money.","يُرحّل هذا المستند مرة واحدة بقيد متوازن. اختر الحسابات المناسبة؛ لا تُحصّل أو تُحوّل أموالاً من هنا.")}</p>
+      {purchaseVatSetup?.snapshot&&<PurchaseVatSummary recorded={purchaseVatSetup.recorded} snapshot={purchaseVatSetup.snapshot} currency={currency} locale={locale}/>}
       {invoiceVat&&<p>{t("Receivable includes VAT. Revenue uses the net invoice amount; output VAT is credited to the saved liability account:","المستحق على العميل شامل الضريبة. تُرحّل الإيرادات بالقيمة الصافية، وضريبة المخرجات إلى حساب الالتزام المحفوظ:")} {invoiceVat.outputAccount?.code} · {invoiceVat.outputAccount?.name} · {invoiceVat.taxAmount} {currency}</p>}
-      {purchase&&<p>{t("Amount uses saved purchase-order unit prices and this document's quantities, in company currency. No tax, freight, currency conversion or money transfer is included.","تُحسب القيمة من أسعار بنود أمر الشراء المحفوظة وكميات هذا المستند بعملة الشركة. لا يتضمن القيد الضرائب أو الشحن أو تحويل العملة أو تحويل أموال.")}</p>}
+      {purchase&&<p>{t("Amount uses saved purchase-order unit prices and this document's quantities, in company currency. VAT classification is required for active registered-company receipts. Freight, currency conversion and money transfer are not included.","تُحسب القيمة من أسعار بنود أمر الشراء المحفوظة وكميات هذا المستند بعملة الشركة. يلزم تصنيف الضريبة لاستلامات الشركة المسجّلة ضريبيًا. لا يتضمن القيد الشحن أو تحويل العملة أو تحويل أموال.")}</p>}
       {kind==="purchase-receipt"&&<p>{t("Debit the purchase asset or expense account and credit supplier payable. Returns post separate credits to those same accounts. Reverse active return credits before reversing this receipt journal.","اختر حساب أصل المشتريات أو المصروف مدينًا، وحساب مستحق المورد دائنًا. تُرحّل المرتجعات بقيود منفصلة على الحسابات نفسها. اعكس قيود المرتجعات السارية قبل عكس قيد الاستلام.")}</p>}
       {kind==="purchase-return"&&<p>{t("An active original receipt journal is required. Debit its supplier payable and credit its original purchase account. This records the return credit; cash refunds and supplier payments require separate settlement.","يلزم قيد استلام أصلي سارٍ. حساب مستحق المورد مدين وحساب المشتريات الأصلي دائن. يسجّل هذا إشعار المرتجع محاسبيًا؛ الاسترداد النقدي وسداد المورد يحتاجان تسوية منفصلة.")}</p>}
       {purchaseSetup&&<p><a href={`/accounting/ledger/journals/${purchaseSetup.entry.id}`}>{t("Original receipt journal","قيد الاستلام الأصلي")} · {purchaseSetup.entry.number}</a></p>}
@@ -66,7 +71,9 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
       {entry?<p><a href={`/accounting/ledger/journals/${entry.id}`}>{t("View journal","عرض القيد")} · {entry.number}</a>
         {entry.reversal&&<> · <a href={`/accounting/ledger/journals/${entry.reversal.id}`}>{t("Reversed","معكوس")} · {entry.reversal.number}</a></>}</p>:
         loaded&&eligible&&canPost&&(kind!=="purchase-return"||purchaseSetup)&&<form onSubmit={event=>void post(event)}>
-          <strong>{amount} {currency}</strong>
+          <strong>{kind==="purchase-receipt"&&purchaseVatSetup?.required?t("Net before VAT:","الصافي قبل الضريبة:"):""} {purchaseVatSetup?.amount??amount} {currency}</strong>
+          {kind==="purchase-receipt"&&purchaseVatSetup?.required&&<PurchaseVatFields setup={purchaseVatSetup} locale={locale} busy={busy}/>}
+          {kind==="purchase-return"&&purchaseVatSetup?.snapshot&&<label>{t("Supplier credit-note reference","مرجع إشعار دائن المورد")}<input name="creditReference" required disabled={busy} minLength={3} maxLength={120}/></label>}
           <label>{t("Journal date","تاريخ القيد")} <input name="entryDate" type="date" required disabled={busy}/></label>
           <label>{t("Debit account","الحساب المدين")} <select name="debitAccountId" required disabled={busy} defaultValue={purchaseSetup?.debitAccountId??""}>
             <option value="">{t("Select account","اختر الحساب")}</option>

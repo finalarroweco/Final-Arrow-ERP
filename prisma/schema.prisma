@@ -528,6 +528,8 @@ model PurchaseOrderLine {
 }
 
 model GoodsReceipt {
+ vatSnapshots PurchaseVat[]
+ @@unique([tenantId,companyId,id])
   id        String             @id @default(uuid()) @db.Uuid
   tenantId  String             @db.Uuid
   companyId String             @db.Uuid
@@ -990,6 +992,8 @@ model LedgerAccount {
 }
 
 model JournalEntry {
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ purchaseVat PurchaseVat?
   id String @id @default(uuid()) @db.Uuid
   tenantId String @db.Uuid
   companyId String @db.Uuid
@@ -1130,6 +1134,7 @@ model LoginThrottle {
 
 
 model GoodsReturn {
+ vat PurchaseVat?
   id String @id @default(uuid()) @db.Uuid
   tenantId String @db.Uuid
   receiptId String @db.Uuid
@@ -1262,6 +1267,7 @@ model RecoveryCode {
 }
 
 model CompanyVatProfile {
+ inputAccountId String? @db.Uuid
  companyId String @id @db.Uuid
  tenantId String @db.Uuid
  revision Int @default(1)
@@ -1287,4 +1293,26 @@ model InvoiceVat {
  invoice Invoice @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@index([tenantId,companyId])
  @@unique([tenantId,companyId,invoiceId])
+}
+
+model PurchaseVat {
+ entryId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ receiptId String @db.Uuid
+ returnId String? @unique @db.Uuid
+ netAmount Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ recoverableTax Decimal @db.Decimal(18,3)
+ inputAccountId String? @db.Uuid
+ supplierName String @db.VarChar(200)
+ supplierTaxNumber String? @db.VarChar(40)
+ reference String @db.VarChar(120)
+ details Json
+ entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
+ receipt GoodsReceipt @relation(fields:[tenantId,companyId,receiptId],references:[tenantId,companyId,id],onDelete:Restrict)
+ goodsReturn GoodsReturn? @relation(fields:[tenantId,receiptId,returnId],references:[tenantId,receiptId,id],onDelete:Restrict)
+ @@unique([tenantId,companyId,entryId])
+ @@unique([tenantId,receiptId,returnId])
+ @@index([tenantId,receiptId])
 }
