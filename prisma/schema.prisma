@@ -980,6 +980,7 @@ model LedgerAccount {
   createdBy String @db.Uuid
   company Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   lines JournalLine[]
+  bankStatements BankStatement[]
   @@unique([tenantId, companyId, id])
   @@unique([companyId, code])
 }
@@ -1021,6 +1022,8 @@ model JournalLine {
   credit Decimal @db.Decimal(18, 3)
   entry JournalEntry @relation(fields: [tenantId, companyId, entryId], references: [tenantId, companyId, id], onDelete: Restrict)
   account LedgerAccount @relation(fields: [tenantId, companyId, accountId], references: [tenantId, companyId, id], onDelete: Restrict)
+  bankMatches BankMatch[]
+  @@unique([tenantId, companyId, accountId, id])
   @@unique([entryId, position])
   @@index([tenantId, companyId, accountId])
 }
@@ -1186,4 +1189,61 @@ model CustomerSettlement {
   entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
   @@index([tenantId,companyId,invoiceId,createdAt])
   @@unique([tenantId,companyId,entryId])
+}
+
+model BankStatement {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ reference String @db.VarChar(120)
+ from DateTime @db.Date
+ to DateTime @db.Date
+ opening Decimal @db.Decimal(18,3)
+ closing Decimal @db.Decimal(18,3)
+ currency String @db.VarChar(3)
+ requestHash String @db.VarChar(64)
+ importTransaction String @default(dbgenerated("(txid_current())::text"))
+ voidedAt DateTime?
+ voidedBy String? @db.Uuid
+ voidReason String? @db.VarChar(300)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ account LedgerAccount @relation(fields:[tenantId,companyId,accountId],references:[tenantId,companyId,id],onDelete:Restrict)
+ lines BankStatementLine[]
+ @@unique([tenantId,companyId,accountId,id])
+ @@unique([accountId,reference])
+ @@index([tenantId,companyId,accountId,to])
+}
+model BankStatementLine {
+ id String @id @default(uuid()) @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ statementId String @db.Uuid
+ position Int
+ bookingDate DateTime @db.Date
+ reference String @db.VarChar(120)
+ amount Decimal @db.Decimal(18,3)
+ statement BankStatement @relation(fields:[tenantId,companyId,accountId,statementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
+ matches BankMatch[]
+ @@unique([tenantId,companyId,accountId,id])
+ @@unique([statementId,position])
+ @@index([tenantId,companyId,accountId,bookingDate])
+}
+model BankMatch {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ bankLineId String @db.Uuid
+ journalLineId String @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ cancelledAt DateTime?
+ cancelledBy String? @db.Uuid
+ cancelReason String? @db.VarChar(300)
+ bankLine BankStatementLine @relation(fields:[tenantId,companyId,accountId,bankLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
+ journalLine JournalLine @relation(fields:[tenantId,companyId,accountId,journalLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
+ @@index([tenantId,companyId,accountId,createdAt])
 }
