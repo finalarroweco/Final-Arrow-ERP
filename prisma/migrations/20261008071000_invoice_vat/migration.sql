@@ -40,7 +40,7 @@ BEGIN
  FOR d IN SELECT value FROM jsonb_array_elements(NEW.details) LOOP
   IF jsonb_typeof(d)<>'object' OR NOT (d ?& ARRAY['position','treatment','net','tax']) OR d->>'treatment' IS NULL OR d->>'treatment' NOT IN ('STANDARD','ZERO','EXEMPT') THEN RAISE EXCEPTION 'Invalid tax classification' USING ERRCODE='23514'; END IF;
   pos:=(d->>'position')::integer; n:=(d->>'net')::numeric; t:=(d->>'tax')::numeric;
-  IF n IS NULL OR t IS NULL OR pos IS NULL OR n<0 OR t<0 OR pos<0 OR pos=ANY(seen) OR NOT EXISTS(SELECT 1 FROM "InvoiceLine" WHERE "invoiceId"=i.id AND position=pos AND amount=n) OR t<>CASE d->>'treatment' WHEN 'STANDARD' THEN round(n*0.05,3) ELSE 0 END THEN RAISE EXCEPTION 'Invoice tax amounts do not match lines' USING ERRCODE='23514'; END IF;
+  IF n IS NULL OR t IS NULL OR pos IS NULL OR n<0 OR t<0 OR pos<0 OR pos=ANY(seen) OR NOT EXISTS(SELECT 1 FROM "InvoiceLine" WHERE "invoiceId"=i.id AND position=pos AND amount=n) OR t<>(CASE d->>'treatment' WHEN 'STANDARD' THEN round(n*0.05,3) ELSE 0 END) THEN RAISE EXCEPTION 'Invoice tax amounts do not match lines' USING ERRCODE='23514'; END IF;
   seen:=array_append(seen,pos);total_tax:=total_tax+t;total_net:=total_net+n;
  END LOOP;
  IF total_tax<>NEW."taxAmount" OR total_net<>i.subtotal THEN RAISE EXCEPTION 'Invoice VAT totals mismatch' USING ERRCODE='23514'; END IF;
