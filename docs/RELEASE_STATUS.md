@@ -4,13 +4,13 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 
 | Area | Current implementation | Remaining work |
 | --- | --- | --- |
-| Organization & access | Tenants, companies, branches, departments, roles, scoped invitations, team suspension, audit events, an organization administration activity viewer and persistent per-email login throttling | Account recovery, verified email, network-level abuse controls |
-| CRM & sales | Customers, leads, quotes, orders, internal invoices | Contacts, imports, tax, payments, legal documents |
+| Organization & access | Tenants, companies, branches, departments, custom roles, scoped invitations, team suspension, audit history, login throttles, password changes and offline backup-code recovery | Email recovery/verification and delivery, network-level abuse controls |
+| CRM & sales | Customers, leads, quotes, orders, printable internal invoices, source-linked collections/refunds and customer statements/balances | Contacts, imports, tax, unallocated advances, aging, statutory documents |
 | Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, stock return documents/register and source-linked receipt accruals/return credits, UTC receipt register and CSV, catalog and branch stock ledger | Reservations, valuation rules, unallocated supplier advances |
 | Projects | Projects, tasks, employee assignments, status transitions and manual project time entries with audited corrections and scoped time reports | Dependencies, time approval, billing, budgets, resource planning |
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow | Conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
-| Accounting | Internal invoice and expense registers, company chart of accounts, balanced manual and source-linked invoice/expense/POS/payroll/purchase receipt and return journals, reversals, period locks and financial reports | Payment settlement workflows, automated closing, bank reconciliation, taxes, accounts payable and receivable |
+| Accounting | Internal invoice/expense registers, chart of accounts, balanced manual and source-linked journals, customer/supplier settlements and statements/balances, reversals, period locks, financial reports and imported bank statement matching/corrections | Taxes, automated/final closing, unallocated settlements, aging, frozen bank reconciliation certificates, split matches and bank feeds |
 | Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
 | POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV and a kitchen queue | Shifts, refunds, tax, kitchen printers, device payment, stock recipes |
 | Other planned modules | Preview cards only | Subscriptions, documents, AI and automation |
@@ -19,12 +19,16 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 ## Before a real deployment
 
 1. Provision PostgreSQL, secrets, backups, monitoring and a deployment target.
-2. Add email verification, account recovery, login abuse controls and an invitation delivery channel.
+2. Configure email verification/recovery and invitation delivery; offline recovery codes and per-email throttles are available. Configure network-level abuse protection.
 3. Define financial, HR and document rules with real operating scenarios and test data.
 4. Run security, accessibility, performance and end-to-end reviews, including tenant isolation.
 5. Enable production registration only after account and abuse controls are ready.
 
 The CI workflow checks migrations, unit tests, database constraints, build and API flows against PostgreSQL. Passing CI means this code slice is internally verified; it does not mean the entire ERP is complete or production ready.
+
+## Implementation history
+
+The notes below describe incremental releases; older exclusions describe their original slice. The current matrix above and latest dated release entries are authoritative.
 
 Monthly payroll reports now summarize exact decimal amounts by status and currency across all matching pages, with scoped CSV export (maximum 5000 records). Void records have separate totals. Reports require a month and payroll read permission; no bank transfer is performed.
 
@@ -239,4 +243,4 @@ Authenticated users can generate ten private recovery codes at `/settings/securi
 
 `/recover` accepts an account email, a saved code and a different 12–128 character password. Per-email throttles reserve attempts before validation, including unknown accounts; responses do not distinguish unknown accounts from bad codes. User-row locks and password-hash comparisons serialize regeneration, password changes and recovery. Successful recovery invalidates every code and every session, creates no signed-in session, and retains existing memberships/permissions. Ordinary password changes also invalidate recovery codes. Separate setup/recovery throttles, no-store responses and no-referrer metadata protect these flows.
 
-One additive migration brings the schema to 41. Local production build passed. The new isolated tenth API flow verifies private storage, replacement, retries/concurrent code use, throttles, invalid codes, session revocation and password-change invalidation; application CI is pending. This supports users who previously saved backup codes; email recovery and recovery without a saved code remain unconfigured. No live user's credential or backup codes were changed during verification.
+One additive migration brings the schema to 41. Local production build passed. The new isolated tenth API flow verifies private storage, replacement, retries/concurrent code use, throttles, invalid codes, session revocation and password-change invalidation; CI run 133 passed six unit checks, two database checks, all ten API workflows, build and production migration. Vercel deployment succeeded; the authenticated Arabic security screen loaded with zero saved codes, without creating live codes or changing credentials. This supports users who previously saved backup codes; email recovery and recovery without a saved code remain unconfigured. No live user's credential or backup codes were changed during verification.
