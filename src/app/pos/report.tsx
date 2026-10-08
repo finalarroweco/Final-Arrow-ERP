@@ -1,0 +1,15 @@
+"use client";
+import {useState} from "react";
+import {translate,type Locale} from "@/lib/locale";
+type Scope={tenantId:string;companyId:string;branchId:string};
+type Filters={from:string;to:string;timeZone:string};
+type Summary={method:string;currency:string;count:number;netAmount:string;taxAmount:string;total:string;cashReceived:string;change:string};
+export function PosReport({scope,locale}:{scope:Scope;locale:Locale}){
+ const t=(en:string,ar:string)=>translate(locale,en,ar);const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");
+ const [result,setResult]=useState<{filters:Filters;count:number;summary:Summary[]}|null>(null);
+ return <section><h2>{t("Paid sales report","تقرير المبيعات المدفوعة")}</h2><p>{t("Reports use the payment date, include all matching pages and exclude open or cancelled orders. Choose up to 31 days. Cash sales equal cash received minus change; card payments are manual records. This paid-order register does not subtract ledger reversals or represent cash refunds.","يعتمد التقرير تاريخ الدفع ويشمل كل الصفحات المطابقة ويستثني الطلبات المفتوحة والملغاة. اختر فترة حتى 31 يوماً. المبيعات النقدية تساوي النقد المستلم ناقص الباقي؛ دفعات البطاقة سجلات يدوية. سجل الطلبات المدفوعة لا يخصم عكس القيود ولا يمثل استردادًا نقديًا.")}</p>
+ <form action={async(form)=>{setBusy(true);setMessage("");setResult(null);const filters={from:String(form.get("from")),to:String(form.get("to")),timeZone:String(form.get("timeZone"))};try{const response=await fetch(`/api/pos/report?${new URLSearchParams({...scope,...filters})}`);const data=await response.json();if(response.ok)setResult({filters,count:data.count,summary:data.summary});else setMessage(data.error);}catch{setMessage(t("Network request failed","فشل الاتصال بالشبكة"));}finally{setBusy(false);}}}>
+ <label>{t("From","من")} <input name="from" type="date" required/></label><label>{t("To","إلى")} <input name="to" type="date" required/></label><label>{t("Time zone","المنطقة الزمنية")} <select name="timeZone" defaultValue="Asia/Muscat"><option value="Asia/Muscat">{t("Muscat (UTC+4)","مسقط (UTC+4)")}</option><option value="UTC">UTC</option></select></label><button disabled={busy}>{t("Generate report","إنشاء التقرير")}</button></form>
+ {message&&<p role="status">{message}</p>}{result&&<><p>{result.filters.from} — {result.filters.to} · {result.filters.timeZone} · {result.count} {t("paid orders","طلبات مدفوعة")}</p><a href={`/api/pos/report?${new URLSearchParams({...scope,...result.filters,format:"csv"})}`}>{t("Download CSV","تنزيل CSV")}</a>{result.summary.map(group=><article className="card" key={`${group.method}:${group.currency}`}><strong>{t(group.method,group.method==="CASH"?"نقدي":"بطاقة")} · {group.total} {group.currency}</strong><p>{t("Net before VAT","الصافي قبل الضريبة")}: {group.netAmount} · {t("VAT","الضريبة")}: {group.taxAmount} {group.currency}</p><p>{group.count} {t("orders","طلبات")}</p>{group.method==="CASH"&&<p>{t("Cash received","النقد المستلم")}: {group.cashReceived} · {t("Change","الباقي")}: {group.change}</p>}</article>)}</>}
+ </section>;
+}

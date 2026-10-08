@@ -1,1 +1,52 @@
 :root{font-family:Arial,Helvetica,sans-serif;color:#1b1b1d;background:#f7f7f7}*{box-sizing:border-box}body{margin:0}main{max-width:1280px;margin:auto;padding:0 32px}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd;padding:28px 0}header strong{letter-spacing:.13em}header span,.hero>p:first-child{color:#d60000}small{color:#777}.hero{padding:95px 0 80px}.hero>p:first-child{font-size:12px;letter-spacing:.2em;font-weight:700}h1{font-size:clamp(40px,6vw,78px);line-height:1.05;letter-spacing:-.05em;margin:20px 0}.sub{color:#666;font-size:19px;max-width:560px;line-height:1.6}h2{font-size:26px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:26px 0 70px}article{background:white;border:1px solid #e8e8e8;border-radius:16px;padding:22px;min-height:155px}article h3{margin:16px 0 6px}article p{color:#888;font-size:13px;margin:0}.icon{width:42px;height:42px;border-radius:10px;background:#fbeaea;color:#d60000;display:grid;place-items:center;font-weight:700;font-size:12px}footer{border-top:1px solid #ddd;padding:30px 0;color:#777;font-size:13px}@media(max-width:600px){main{padding:0 20px}.hero{padding:65px 0}}
+.authform{display:grid;gap:17px;max-width:430px}.authform label{display:grid;gap:8px;color:#555;font-size:14px}input{padding:13px;border:1px solid #ccc;border-radius:8px;font:inherit;min-width:0}button,.button{display:inline-block;background:#d60000;color:#fff;border:0;border-radius:8px;padding:14px 18px;font:inherit;cursor:pointer;text-decoration:none;width:max-content}a{color:#b80000}.formrow,.branchform{display:flex;flex-wrap:wrap;gap:9px;margin:20px 0}.branchform{margin-bottom:0}.branchform input{width:100%}.branchform button{font-size:13px;padding:10px}article ul{padding-left:20px;color:#555;font-size:14px}
+.branchform select{padding:11px;border:1px solid #ccc;border-radius:8px;width:100%}.account{display:flex;align-items:center;gap:15px}.account button{font-size:12px;padding:8px 10px}
+.invite-panel{border-top:1px solid #ddd;padding:25px 0 60px}.invite-panel select{padding:11px;border:1px solid #ccc;border-radius:8px}.invite-panel a{overflow-wrap:anywhere}
+.team-panel{border-top:1px solid #ddd;padding:25px 0 80px}.team-panel ul{list-style:none;padding:0;max-width:850px}.team-panel li{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:15px 0;border-bottom:1px solid #e5e5e5}.team-panel button{font-size:12px;padding:8px 10px}.team-panel small{color:#666}
+.crm-form{display:flex;flex-wrap:wrap;gap:10px;margin:25px 0 45px;align-items:center}.crm-form h2{width:100%}.crm-form select,.crm-form input{padding:12px;border:1px solid #ccc;border-radius:8px}.customer-list{display:grid;gap:12px}.customer-list article{display:flex;justify-content:space-between;align-items:center;gap:20px;min-height:110px}.customer-list h3{margin:0 0 7px}.customer-actions{display:flex;gap:8px}.customer-actions button{font-size:12px;padding:8px 12px}
+.quote-form{display:grid;gap:15px;max-width:850px;margin:30px 0 60px}.quote-form label{display:grid;gap:6px}.quote-form select,section>label select{padding:12px;border:1px solid #ccc;border-radius:8px}.quote-line{display:grid;grid-template-columns:minmax(150px,3fr) minmax(90px,1fr) minmax(120px,1fr) auto;gap:8px}.quote-line button{padding:10px}@media(max-width:600px){.quote-line{grid-template-columns:1fr 1fr}.quote-line input:first-child{grid-column:span 2}}
+.quote-actions{display:flex;gap:8px;margin-top:12px}.quote-actions button,.customer-list article button{font-size:12px;padding:9px 12px}
+.branchform label{display:grid;gap:6px;width:100%;font-size:13px;color:#555}.branchform label input{width:100%}details{margin:14px 0}summary{cursor:pointer;color:#b80000;font-size:13px}
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:30px 0}.dashboard-grid article h2{font-size:45px;margin:12px 0}.dashboard-grid article p{margin-bottom:18px}.dashboard-grid article small{letter-spacing:.15em;font-weight:700;color:#d60000}
+
+/* Shared layout for the operational modules. */
+header{gap:20px;flex-wrap:wrap}
+header .account{flex-wrap:wrap;justify-content:flex-end}
+header a{text-decoration:none;font-size:13px;font-weight:600}
+header a:hover,article a:hover{text-decoration:underline}
+.panel{padding-bottom:80px}
+.panel>label{display:inline-grid;gap:7px;margin:0 0 22px;font-size:13px;color:#555}
+.panel>form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;
+  padding:26px;margin:12px 0 36px;background:#fff;border:1px solid #e8e8e8;border-radius:16px}
+.panel>form h2{grid-column:1/-1;margin:0 0 4px}
+.panel form label{display:grid;align-content:start;gap:7px;color:#555;font-size:13px}
+.panel form input,.panel form select,.panel select{width:100%;padding:12px;border:1px solid #ccc;
+  border-radius:8px;font:inherit;background:#fff}
+.panel form button{align-self:flex-end}
+.panel .card{margin:12px 0;min-height:0}
+.panel .card p{margin:10px 0;line-height:1.55;color:#666}
+.panel .card h3{margin:10px 0}
+.panel .card form{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin:14px 0}
+.panel .card form label{min-width:180px;flex:1}
+.panel .card .card{background:#fafafa}
+.panel button{font-size:13px;padding:10px 14px;margin:5px 7px 5px 0}
+button:disabled{opacity:.5;cursor:not-allowed}
+.panel [role="status"]{padding:13px 16px;background:#fff;border-left:3px solid #d60000;border-radius:5px}
+@media(max-width:720px){header{align-items:flex-start}header .account{justify-content:flex-start}
+  .panel>form{grid-template-columns:1fr;padding:18px}.panel .card form{display:grid}
+  .panel .card form label{min-width:0}.hero{padding:60px 0 45px}}
+.panel textarea{width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;font:inherit;resize:vertical}
+
+.header-actions{display:flex;align-items:center;gap:20px}.language-switcher{background:transparent;color:#b80000;border:1px solid #ddd;padding:8px 12px;font-size:13px}html[dir="rtl"]{font-family:Tahoma,Arial,sans-serif}html[dir="rtl"] h1{letter-spacing:0}html[dir="rtl"] article ul{padding-left:0;padding-right:20px}html[dir="rtl"] .panel [role="status"]{border-left:0;border-right:3px solid #d60000}
+
+.module-launcher{margin:0 0 35px;padding:24px;background:#fff;border:1px solid #e8e8e8;border-radius:16px}
+.module-launcher h2{margin:0 0 10px}.module-launcher>p{color:#666;line-height:1.6}
+.module-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:22px}
+.module-groups h3{font-size:15px}.module-groups ul{list-style:none;padding:0;margin:0}
+.module-groups a{display:block;padding:9px 0;font-size:14px;text-underline-offset:3px}
+.module-groups a:focus-visible{outline:2px solid #d60000;outline-offset:3px;border-radius:3px}
+
+.document-posting{margin-block:12px}.document-posting>div{padding:15px;border:1px solid #ddd;border-radius:8px;background:#fafafa;max-width:650px}
+.document-posting p{line-height:1.6!important}.document-posting form{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.document-posting form label{display:grid;gap:6px;min-width:170px}.document-posting select{padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;max-width:100%}
+.customer-list article:has(.document-posting){align-items:flex-start;flex-wrap:wrap}
