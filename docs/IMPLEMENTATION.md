@@ -1,6 +1,6 @@
 # Foundation implementation
 
-The public sample-data preview is separate from the working application. The authenticated routes provide the scoped workflows listed below.
+The public sample-data preview is separate from the working application. The authenticated application is deployed and connected to its dedicated database. The notes below record incremental implementation history; older exclusions describe their original slices. Consult [RELEASE_STATUS.md](RELEASE_STATUS.md) for current capabilities and [OMAN_VAT_SCOPE.md](OMAN_VAT_SCOPE.md) for the implemented invoice VAT scope.
 
 ## Database boundaries
 

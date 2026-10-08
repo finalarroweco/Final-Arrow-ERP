@@ -41,4 +41,10 @@ Organization owners can use `/settings/roles` to create operational role templat
 
 Open Accounting → Invoices, issue and post a test invoice to a receivable asset / revenue account, then select Collections / refunds. Use a separate cash/bank asset and the actual movement reference. Check balance before saving. The form preserves an unconfirmed request in the current browser tab for exact retry after a network failure. Collection records and journals remain immutable; use journal reversal to correct them, with dependent refunds corrected before collections when required. Never insert test financial movements in the live ERP.
 
-Review `/accounting/collections` and `/accounting/customer-statement` with a company/branch-scoped user. Statements are based on posted source journals, exclude tax and unrelated manual entries, and show each currency separately. Print the internal invoice to verify net collected and outstanding amounts. The isolated CI database exercises these actions automatically.
+Review `/accounting/collections` and `/accounting/customer-statement` with a company/branch-scoped user. Statements are based on posted source journals, include recorded invoice VAT and exclude unrelated manual entries, and show each currency separately. Print the internal invoice to verify net collected and outstanding amounts. The isolated CI database exercises these actions automatically.
+
+### Oman invoice VAT checks (2026-10-08)
+
+The 42nd migration adds opt-in company VAT profiles and immutable internal invoice VAT snapshots. Core checks #138 passed all 42 migrations, six unit checks, two database checks, build and eleven isolated API flows. No live registration was configured and no synthetic financial records were created. The authenticated Arabic VAT settings and invoice pages loaded successfully.
+
+Use `/accounting/vat-settings` only with actual registration data and a company output VAT liability account. Prices exclude VAT. Standard, zero-rated and exempt treatments are explicit per invoice line; per-line rounding uses three decimals, half up. Internal invoice posting credits net revenue plus recorded output VAT and debits the gross customer receivable. Collections/refunds and customer statements use gross values. Purchase/expense/POS VAT and statutory electronic invoices remain outside this slice.
