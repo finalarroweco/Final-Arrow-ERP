@@ -1,3 +1,4 @@
+import {invoiceGross} from "@/lib/invoice-vat";
 import {settlementInvoice,customerSettlementAllowed,invoiceSettlementState,customerSettlementDependencies,customerSettlementNumber} from "@/lib/customer-settlement";
 import {settlementReceipt,settlementAllowed,settlementDependencies,settlementNumber,receiptSettlementState} from "@/lib/supplier-settlement";
 import {purchaseDocument,purchaseJournalSource,returnJournalDependencies} from "@/lib/purchase-ledger";
@@ -32,7 +33,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const state=await invoiceSettlementState(tx,invoice);
         if(parsed.data.entryDate<state.latest)throw new PayrollReversalConflict("Correction cannot precede later invoice activity");
         const after=saved.kind==="COLLECTION"?state.collected.minus(saved.amount):state.collected.plus(saved.amount);
-        if(after.lt(0)||after.gt(invoice.subtotal))throw new PayrollReversalConflict("Reverse dependent refunds or later collections first");
+        if(after.lt(0)||after.gt(invoiceGross(invoice)))throw new PayrollReversalConflict("Reverse dependent refunds or later collections first");
       }
       if (original.number.startsWith("SYSI-")) {
         const link=await tx.auditLog.findFirst({where:{tenantId:original.tenantId,entity:"Invoice",action:"invoice.ledger_posted",metadata:{path:["journalId"],equals:original.id}},select:{entityId:true}});

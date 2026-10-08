@@ -1,3 +1,4 @@
+import {invoiceGross} from "@/lib/invoice-vat";
 import {purchaseDocument,isPurchaseDocument} from "@/lib/purchase-ledger";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
@@ -23,8 +24,8 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
       eligible:kind === "payroll" ? ["APPROVED","PAID"].includes(row.status) : row.status === "PAID"};
   }
   if (kind === "invoice") {
-    const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } } });
-    return row && { ...row, amount: row.subtotal, date: row.issuedAt?.toISOString().slice(0,10), eligible: row.status === "ISSUED" };
+    const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true} });
+    return row && { ...row, amount: invoiceGross(row), date: row.issuedAt?.toISOString().slice(0,10), eligible: row.status === "ISSUED" };
   }
   if (kind === "pos") {
     const row = await client.posOrder.findFirst({where:{tenantId,id}});
@@ -57,7 +58,8 @@ export async function GET(request: Request, context: Context) {
       if(lines.length===2)purchaseSetup={entry:original,debitAccountId:lines[1].accountId,creditAccountId:lines[0].accountId,accounts:lines.map(l=>l.account)};
     }
   }
-  return NextResponse.json({entry,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
+  const invoiceVat=path.data.kind==="invoice"&&"vat" in row&&row.vat?{taxAmount:row.vat.taxAmount.toFixed(3),outputAccount:await db.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId:tenant.data,companyId:row.companyId},select:{code:true,name:true}})}:null;
+  return NextResponse.json({entry,invoiceVat,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
 }
 export async function POST(request: Request, context: Context) {
   const actor = await currentUser(); if (!actor) return NextResponse.json({error:"Unauthenticated"},{status:401});
@@ -120,6 +122,9 @@ export async function POST(request: Request, context: Context) {
             throw new PostingConflict("Choose a separate deduction liability or expense-offset account in this company");
           lines.push({position:lines.length,accountId:deduction.id,debit:zero,credit:row.deductions});
         } else if (deductionAccountId) throw new PostingConflict("No payroll deductions to post");
+      } else if(kind==="invoice"&&"vat" in row&&row.vat?.taxAmount.gt(0)){
+        const taxAccount=await tx.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId,companyId:row.companyId,type:"LIABILITY"}});if(!taxAccount||[debit.id,credit.id].includes(taxAccount.id))throw new PostingConflict("Invoice VAT output account is unavailable");
+        lines.push({position:1,accountId:credit.id,debit:zero,credit:row.subtotal});lines.push({position:2,accountId:taxAccount.id,debit:zero,credit:row.vat.taxAmount});
       } else lines.push({position:1,accountId:credit.id,debit:zero,credit:row.amount});
       const journal = await tx.journalEntry.create({data:{tenantId,companyId:row.companyId,branchId:row.branchId,
         number:documentJournalNumber(kind,id),entryDate:new Date(`${entryDate}T00:00:00Z`),

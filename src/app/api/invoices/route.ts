@@ -1,3 +1,4 @@
+import {invoiceGross} from "@/lib/invoice-vat";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -22,9 +23,9 @@ export async function GET(request: Request) {
     companyId: companyId.data, ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, orderId: true, customerName: true, branchId: true,
       status: true, issuedAt: true, voidedAt: true, voidReason: true,
-      currency: true, subtotal: true, createdAt: true,
+      currency: true, subtotal: true, createdAt: true, vat:{select:{taxAmount:true}},
       lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ invoices: invoices.slice(0, 50), nextPage: invoices.length > 50 ? page.data + 1 : null });
+  return NextResponse.json({ invoices: invoices.slice(0, 50).map(i=>({...i,gross:invoiceGross(i).toFixed(3)})), nextPage: invoices.length > 50 ? page.data + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
 }

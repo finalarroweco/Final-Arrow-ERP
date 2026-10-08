@@ -146,6 +146,7 @@ model Company {
   baseCurrency   String          @default("OMR") @db.VarChar(3)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  vatProfile CompanyVatProfile?
   ledgerLockedThrough DateTime? @db.Date
   ledgerAccounts LedgerAccount[]
   branches       Branch[]
@@ -708,6 +709,8 @@ model Invoice {
   customer     Customer      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
   order        SalesOrder    @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        InvoiceLine[]
+  vat InvoiceVat?
+  creationTransaction String @default(dbgenerated("(txid_current())::text"))
   settlements CustomerSettlement[]
 
   @@unique([companyId, number])
@@ -1256,4 +1259,32 @@ model RecoveryCode {
   createdAt DateTime @default(now())
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId])
+}
+
+model CompanyVatProfile {
+ companyId String @id @db.Uuid
+ tenantId String @db.Uuid
+ revision Int @default(1)
+ enabled Boolean @default(false)
+ taxNumber String? @db.VarChar(40)
+ sellerName String? @db.VarChar(200)
+ sellerAddress String? @db.VarChar(500)
+ effectiveFrom DateTime? @db.Date
+ outputAccountId String? @db.Uuid
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ @@unique([tenantId,companyId])
+}
+model InvoiceVat {
+ invoiceId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ taxAmount Decimal @db.Decimal(18,3)
+ outputAccountId String @db.Uuid
+ taxNumber String @db.VarChar(40)
+ sellerName String @db.VarChar(200)
+ sellerAddress String @db.VarChar(500)
+ details Json
+ invoice Invoice @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@index([tenantId,companyId])
+ @@unique([tenantId,companyId,invoiceId])
 }

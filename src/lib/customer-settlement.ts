@@ -1,9 +1,10 @@
+import {invoiceGross} from "./invoice-vat";
 import {Prisma} from "@prisma/client";
 import {canAccess} from "./access";
 import {documentJournalNumber} from "./document-journal";
 export class CustomerSettlementConflict extends Error {}
 export function customerSettlementNumber(kind:"COLLECTION"|"REFUND",id:string){return `${kind==="COLLECTION"?"SYSK":"SYSF"}-${BigInt(`0x${id.replaceAll("-","")}`).toString(36).toUpperCase().padStart(25,"0")}`;}
-export async function settlementInvoice(tx:Prisma.TransactionClient,tenantId:string,id:string){return tx.invoice.findFirst({where:{id,tenantId},include:{order:{select:{branchId:true}},customer:{select:{branchId:true}}}});}
+export async function settlementInvoice(tx:Prisma.TransactionClient,tenantId:string,id:string){return tx.invoice.findFirst({where:{id,tenantId},include:{vat:true,order:{select:{branchId:true}},customer:{select:{branchId:true}}}});}
 export async function customerSettlementAllowed(userId:string,invoice:NonNullable<Awaited<ReturnType<typeof settlementInvoice>>>,post=false){
  const scope={userId,tenantId:invoice.tenantId,companyId:invoice.companyId};
  return (await Promise.all([canAccess({...scope,branchId:invoice.branchId??undefined,permission:"invoice:read"}),canAccess({...scope,branchId:invoice.order.branchId??undefined,permission:"order:read"}),canAccess({...scope,branchId:invoice.customer.branchId??undefined,permission:"customer:read"}),canAccess({...scope,branchId:invoice.branchId??undefined,permission:"ledger:read"}),...(post?[canAccess({...scope,branchId:invoice.branchId??undefined,permission:"ledger:post"})]:[])])).every(Boolean);
@@ -15,7 +16,11 @@ export async function invoiceSettlementState(tx:Prisma.TransactionClient,invoice
  const number=documentJournalNumber("invoice",invoiceId),numbers=[number,...settlements.map(s=>s.entry.number)];
  const entries=await tx.journalEntry.findMany({where:{tenantId,companyId,branchId:invoice.branchId,OR:[{number:{in:numbers}},{original:{number:{in:numbers}}}]},include:{reversal:{select:{id:true}},lines:{include:{account:{select:{id:true,code:true,name:true,type:true}}}}}});
  const original=entries.find(e=>e.number===number),receivable=original?.lines.find(l=>l.position===0)?.account;
- if(original&&(original.lines.length!==2||receivable?.type!=="ASSET"||!original.total.eq(invoice.subtotal)))throw new CustomerSettlementConflict("Original invoice receivable could not be verified");
+ if(original&&(original.lines.length!==(invoice.vat?.taxAmount.gt(0)?3:2)||receivable?.type!=="ASSET"||!original.total.eq(invoiceGross(invoice))))throw new CustomerSettlementConflict("Original invoice receivable could not be verified");
+ if(original&&invoice.vat?.taxAmount.gt(0)){
+  const netLine=original.lines.find(l=>l.position===1),taxLine=original.lines.find(l=>l.position===2);
+  if(netLine?.account.type!=="REVENUE"||!netLine.credit.eq(invoice.subtotal)||!netLine.debit.eq(0)||taxLine?.accountId!==invoice.vat.outputAccountId||!taxLine.credit.eq(invoice.vat.taxAmount)||!taxLine.debit.eq(0))throw new CustomerSettlementConflict("Original invoice revenue and VAT could not be verified");
+ }
  const collected=settlements.filter(s=>!s.entry.reversal).reduce((sum,s)=>s.kind==="COLLECTION"?sum.plus(s.amount):sum.minus(s.amount),new Prisma.Decimal(0));
  const balance=original&&!original.reversal?original.total.minus(collected):new Prisma.Decimal(0);
  const latest=entries.reduce((date,e)=>{const d=e.entryDate.toISOString().slice(0,10);return d>date?d:date;},(invoice.issuedAt??invoice.createdAt).toISOString().slice(0,10));

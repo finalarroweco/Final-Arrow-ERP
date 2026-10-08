@@ -13,7 +13,7 @@ export default async function InvoicesPage() {
   const user = await currentUser();
   if (!user) redirect("/login");
   const memberships = await db.membership.findMany({ where: { userId: user.id, status: "ACTIVE" },
-    include: { tenant: { include: { companies: { include: { branches: true }, orderBy: { name: "asc" } } } } } });
+    include: { tenant: { include: { companies: { include: { branches: true, vatProfile: true }, orderBy: { name: "asc" } } } } } });
   const candidates = memberships.flatMap(({ tenant }) => tenant.companies.map((company) => ({ tenant, company })));
   const options = (await Promise.all(candidates.map(async ({ tenant, company }) => {
     const visible = await readableCompanyBranches({ userId: user.id, tenantId: tenant.id,
@@ -30,11 +30,12 @@ export default async function InvoicesPage() {
         branchId, permission: "invoice:void" }),
     });
     return { tenantId: tenant.id, companyId: company.id, label: `${tenant.name} / ${company.name}`,
+      vatActive: Boolean(company.vatProfile?.enabled && company.vatProfile.effectiveFrom && company.vatProfile.effectiveFrom.toISOString().slice(0,10) <= new Date().toISOString().slice(0,10)),
       companyPermissions: await rights(),
       branches: await Promise.all(company.branches.filter((branch) => visible === null || visible.includes(branch.id))
         .map(async (branch) => ({ id: branch.id, name: branch.name, ...await rights(branch.id) }))) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/sales/orders">{t("Sales orders", "طلبات البيع")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/accounting/vat-settings">{t("VAT settings", "إعدادات الضريبة")}</a><a href="/sales/orders">{t("Sales orders", "طلبات البيع")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("ACCOUNTING", "المحاسبة")}</p><h1>{t("Invoices.", "الفواتير.")}</h1><p className="sub">{t("Internal billing records from completed sales orders.", "سجلات الفوترة الداخلية للطلبات المكتملة.")}</p></section>
     <InvoicesWorkspace options={options} locale={locale} />
   </main>;

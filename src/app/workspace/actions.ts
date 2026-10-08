@@ -38,6 +38,8 @@ export async function updateCompany(form: FormData) {
   if (name.length < 2 || name.length > 120 || (legalName && legalName.length > 200) || !/^[A-Z]{3}$/.test(baseCurrency))
     throw new Error("Invalid company settings");
   await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Company" WHERE id=${companyId}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+    if(baseCurrency!=="OMR" && (await tx.companyVatProfile.findUnique({where:{companyId}}))?.enabled) throw new Error("Disable Oman VAT before changing currency");
     const previous = await tx.company.findUnique({ where: { tenantId_id: { tenantId, id: companyId } },
       select: { baseCurrency: true } });
     if (!previous) throw new Error("Company not found");

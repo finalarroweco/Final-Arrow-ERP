@@ -29,6 +29,7 @@ const groups = [
     ["/projects", "Projects", "المشاريع"], ["/helpdesk", "Helpdesk", "الدعم الفني"],
   ] },
   { en: "Accounting & POS", ar: "المحاسبة ونقاط البيع", links: [
+    ["/accounting/vat-settings", "Oman VAT settings", "إعدادات ضريبة عُمان"],
     ["/accounting/invoices", "Invoices", "الفواتير"], ["/accounting/expenses", "Expenses", "المصاريف"],
     ["/accounting/ledger", "Ledger & financial reports", "دفتر الأستاذ والتقارير المالية"],
     ["/pos", "Point of sale", "نقاط البيع"], ["/pos/kitchen", "Kitchen queue", "طلبات المطبخ"],

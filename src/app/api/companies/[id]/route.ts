@@ -25,11 +25,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: id, permission: "company:update" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Company" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+    if(data.baseCurrency!=="OMR" && (await tx.companyVatProfile.findUnique({where:{companyId:id}}))?.enabled) return null;
     const updated = await tx.company.update({ where: { tenantId_id: { tenantId, id } }, data });
     await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: "company.updated",
       entity: "Company", entityId: id,
       metadata: { previousCurrency: company.baseCurrency, baseCurrency: updated.baseCurrency } } });
     return updated;
   });
+  if(!result)return NextResponse.json({error:"Disable Oman VAT before changing currency"},{status:409});
   return NextResponse.json({ company: result });
 }

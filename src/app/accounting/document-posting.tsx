@@ -11,6 +11,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
   const [accounts,setAccounts]=useState<Account[]>([]),[entry,setEntry]=useState<Entry|null>(null);
   const [nextPage,setNextPage]=useState<number|null>(null),[message,setMessage]=useState("");
   const [purchaseSetup,setPurchaseSetup]=useState<{entry:Entry;debitAccountId:string;creditAccountId:string;accounts:Account[]}|null>(null);
+  const [invoiceVat,setInvoiceVat]=useState<{taxAmount:string;outputAccount:{code:string;name:string}|null}|null>(null);
   const purchase=kind==="purchase-receipt"||kind==="purchase-return";
   const endpoint=`/api/ledger/documents/${kind}/${id}`;
   async function accountPage(page:number) {
@@ -23,7 +24,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     try {
       const response=await fetch(`${endpoint}?${new URLSearchParams({tenantId:scope.tenantId})}`);
       if (!response.ok) throw new Error("journal");
-      const data=await response.json();setEntry(data.entry);setPurchaseSetup(data.purchaseSetup??null);
+      const data=await response.json();setEntry(data.entry);setInvoiceVat(data.invoiceVat??null);setPurchaseSetup(data.purchaseSetup??null);
       if (!data.entry) await accountPage(0);
       setLoaded(true);
     } catch {setMessage(t("Could not load ledger setup. Check your connection and ledger permissions.","تعذر تحميل إعداد الترحيل. تحقق من اتصالك وصلاحيات دفتر الأستاذ."));}
@@ -49,6 +50,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
     <button type="button" disabled={busy} onClick={()=>open?setOpen(false):void inspect()}>{kind === "payroll-payment" ? t("Payment settlement journal","قيد تسوية صرف الراتب") : kind === "payroll" ? t("Payroll accrual journal","قيد استحقاق الراتب") : t("Ledger posting","الترحيل المحاسبي")}</button>
     {open&&<div>
       <p>{t("Posts this document once as a balanced journal. Select the correct accounts; this does not collect or send money.","يُرحّل هذا المستند مرة واحدة بقيد متوازن. اختر الحسابات المناسبة؛ لا تُحصّل أو تُحوّل أموالاً من هنا.")}</p>
+      {invoiceVat&&<p>{t("Receivable includes VAT. Revenue uses the net invoice amount; output VAT is credited to the saved liability account:","المستحق على العميل شامل الضريبة. تُرحّل الإيرادات بالقيمة الصافية، وضريبة المخرجات إلى حساب الالتزام المحفوظ:")} {invoiceVat.outputAccount?.code} · {invoiceVat.outputAccount?.name} · {invoiceVat.taxAmount} {currency}</p>}
       {purchase&&<p>{t("Amount uses saved purchase-order unit prices and this document's quantities, in company currency. No tax, freight, currency conversion or money transfer is included.","تُحسب القيمة من أسعار بنود أمر الشراء المحفوظة وكميات هذا المستند بعملة الشركة. لا يتضمن القيد الضرائب أو الشحن أو تحويل العملة أو تحويل أموال.")}</p>}
       {kind==="purchase-receipt"&&<p>{t("Debit the purchase asset or expense account and credit supplier payable. Returns post separate credits to those same accounts. Reverse active return credits before reversing this receipt journal.","اختر حساب أصل المشتريات أو المصروف مدينًا، وحساب مستحق المورد دائنًا. تُرحّل المرتجعات بقيود منفصلة على الحسابات نفسها. اعكس قيود المرتجعات السارية قبل عكس قيد الاستلام.")}</p>}
       {kind==="purchase-return"&&<p>{t("An active original receipt journal is required. Debit its supplier payable and credit its original purchase account. This records the return credit; cash refunds and supplier payments require separate settlement.","يلزم قيد استلام أصلي سارٍ. حساب مستحق المورد مدين وحساب المشتريات الأصلي دائن. يسجّل هذا إشعار المرتجع محاسبيًا؛ الاسترداد النقدي وسداد المورد يحتاجان تسوية منفصلة.")}</p>}
