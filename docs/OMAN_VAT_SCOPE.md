@@ -48,13 +48,21 @@ Source: https://tms.taxoman.gov.om/portal/e-invoicing-faq
 - POS cards and internal receipts display saved net, tax and gross. Receipt print displays saved seller and per-line classification. Paid-date JSON/CSV reports separate net and tax while retaining gross sales/cash/change. Reports remain a paid-order register and do not subtract journal reversals or represent cash refunds.
 - Isolated CI covers mixed/zero/exempt rounding, future and disabled profiles, required explicit choices, immutable and late/invalid snapshots, gross tendered/change, concurrent pay/cancel and postings, saved-account reversal, source/branch permissions, report/receipt output and period locks. No production orders, VAT settings or financial QA fixtures are created.
 
+## Implemented full POS refund recording
+
+- Records a full-order refund already performed, including saved output VAT, on the original sale's cash/bank, revenue and VAT liability accounts. It does not transfer funds, call a terminal, restore stock or issue a statutory credit note. Partial/line-specific refunds and a different refund asset account are unsupported.
+- Requires a PAID order with an active original POS sale journal. Exact UUID retry IDs retain immutable reference/reason/date and amounts; changing a retry's payload is rejected. One active full refund per order is allowed under the source lock. After reversing an incorrect refund, a new UUID can record a genuine replacement; replay of the old UUID always returns the original record.
+- POS-read, POS-manage and ledger-read/post are required to record or reverse a refund. Viewing history/reports requires POS-read and ledger-read. Branch scopes and period locks apply. Refund/correction dates cannot precede later source accounting activity; the original sale cannot reverse while an active refund exists. Database guards additionally enforce same-transaction source/audit, exact opposite original lines and audited exact corrections.
+- A refund does not change the immutable PAID order or original paid-date sales register. The separate refund register uses UTC journal dates and current reversal status, with net/tax/gross active totals and reversed counts/gross. It is not a historical balance, net sales report or tax return. CSV retains all matching source records, references and correction status. Original receipt print shows recent refund history without altering the original amounts.
+- Tests run only against isolated CI PostgreSQL. Production QA reads the empty real report and never records a refund or creates test sales.
+
 ## Remaining implementation and verification
 
 1. Verify each company’s actual registration data and applicable e-invoicing scope. The invoice profile fields exist; registration data must be supplied by the company. Never infer registration from OMR currency or company location.
 2. Extend beyond the implemented VAT-exclusive invoice lines to inclusive pricing and discount/freight handling when agreed. Keep the legal treatment separate from its numeric rate.
 3. Extend immutable gross snapshots to remaining document families. Invoice snapshots and gross totals are implemented. Existing non-tax documents retain their original values; later company configuration changes must not rewrite issued history.
 4. Extend from implemented invoice/POS output and purchase/expense input VAT accounting to agreed remaining workflows. Preserve gross settlements and correction dependencies through additive migrations.
-5. Obtain accountant acceptance for manual purchase eligibility and receipt/return allocations. Review manual expense input-tax eligibility; implement POS cash refunds and document tax reporting with period locks and source permissions. Unsupported reverse charge, foreign exchange or special treatments must be explicit rather than silently approximated.
+5. Obtain accountant acceptance for manual purchase eligibility and receipt/return allocations. Review manual expense input-tax eligibility; extend full POS refunds to partial returns and document tax reporting with period locks and source permissions. Unsupported reverse charge, foreign exchange or special treatments must be explicit rather than silently approximated.
 6. Full statutory invoice/credit-note fields and numbering, required format/transmission where applicable, and accountant acceptance with real operating scenarios.
 7. Isolated tests for mixed treatments, inclusive/exclusive decimals, gross settlements, returns/corrections, concurrency, direct SQL guard bypass attempts and preservation of historical documents.
 
