@@ -1379,4 +1379,6 @@ model PosRefund {
  entry JournalEntry @relation(fields:[tenantId,companyId,entryId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@unique([tenantId,companyId,entryId])
  @@index([tenantId,companyId,orderId])
+ @@index([orderId])
+ @@index([originalEntryId])
 }
