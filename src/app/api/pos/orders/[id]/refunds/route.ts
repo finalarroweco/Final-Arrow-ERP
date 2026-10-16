@@ -13,7 +13,7 @@ type Context={params:Promise<{id:string}>};
 function failure(error:unknown){
  if(error instanceof PosRefundConflict||error instanceof LedgerPeriodClosed)return NextResponse.json({error:error.message},{status:409});
  if(error instanceof LedgerCompanyMissing)return NextResponse.json({error:"Company not found"},{status:404});
- if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return NextResponse.json({error:"Refund conflicts with source history; reload the records"},{status:409});
+ if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return NextResponse.json({error:"Check refund history, the open branch shift and available drawer cash"},{status:409});
  throw error;
 }
 export async function GET(request:Request,context:Context){

@@ -215,6 +215,7 @@ model Branch {
   @@unique([companyId, code])
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId])
+  posShifts PosShift[]
 }
 
 model Department {
@@ -1114,6 +1115,7 @@ model PosOrder {
   @@unique([companyId,number])
   @@unique([tenantId,companyId,id])
   @@index([tenantId,companyId,branchId,status,createdAt])
+  shiftPayment PosShiftEvent?
 }
 model PosOrderLine {
   id String @id @default(uuid()) @db.Uuid
@@ -1384,6 +1386,7 @@ model PosRefund {
  @@index([tenantId,companyId,orderId])
  @@index([orderId])
  @@index([originalEntryId])
+ shiftRefund PosShiftEvent?
 }
 
 model PosRefundLine {
@@ -1396,4 +1399,44 @@ model PosRefundLine {
  orderLine PosOrderLine @relation(fields:[orderLineId],references:[id],onDelete:Restrict)
  @@id([refundId,orderLineId])
  @@index([orderLineId])
+}
+
+model PosShift {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ number String @db.VarChar(30)
+ currency String @db.VarChar(3)
+ openingCash Decimal @db.Decimal(18,3)
+ openedAt DateTime @default(now())
+ openedBy String @db.Uuid
+ closedAt DateTime?
+ closedBy String? @db.Uuid
+ countedCash Decimal? @db.Decimal(18,3)
+ expectedCash Decimal? @db.Decimal(18,3)
+ difference Decimal? @db.Decimal(18,3)
+ closeReason String? @db.VarChar(500)
+ branch Branch @relation(fields:[tenantId,companyId,branchId],references:[tenantId,companyId,id],onDelete:Restrict)
+ events PosShiftEvent[]
+ @@unique([tenantId,companyId,branchId,id])
+ @@unique([branchId,number])
+ @@index([tenantId,companyId,branchId,openedAt],map:"PosShift_scope_opened_idx")
+}
+model PosShiftEvent {
+ id String @id @db.Uuid
+ shiftId String @db.Uuid
+ kind String @db.VarChar(10)
+ orderId String? @unique @db.Uuid
+ refundId String? @unique @db.Uuid
+ amount Decimal @db.Decimal(18,3)
+ cashDelta Decimal @db.Decimal(18,3)
+ reference String @db.VarChar(120)
+ reason String @db.VarChar(500)
+ createdAt DateTime @default(now())
+ createdBy String? @db.Uuid
+ shift PosShift @relation(fields:[shiftId],references:[id],onDelete:Restrict)
+ order PosOrder? @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ refund PosRefund? @relation(fields:[refundId],references:[id],onDelete:Restrict)
+ @@index([shiftId,createdAt],map:"PosShiftEvent_shift_created_idx")
 }
