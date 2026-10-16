@@ -3,7 +3,7 @@ import {posScope,posMoney,posNumber} from "./pos";
 const uuid=z.string().uuid();
 export const posShiftAction=z.discriminatedUnion("action",[
  posScope.extend({action:z.literal("open"),requestId:uuid,number:posNumber,openingCash:posMoney}).strict(),
- posScope.extend({action:z.literal("close"),shiftId:uuid,countedCash:posMoney,reason:z.string().trim().max(500)}).strict(),
+ posScope.extend({action:z.literal("close"),shiftId:uuid,countedCash:z.string().regex(/^(?:0|[1-9]\d{0,14})(?:\.\d{1,3})?$/),reason:z.string().trim().max(500)}).strict(),
  posScope.extend({action:z.literal("move"),shiftId:uuid,requestId:uuid,kind:z.enum(["IN","OUT"]),amount:posMoney,reference:z.string().trim().min(3).max(120),reason:z.string().trim().min(3).max(500)}).strict()
 ]);
 export type PosShiftAction=z.infer<typeof posShiftAction>;
