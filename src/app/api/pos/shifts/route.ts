@@ -1,3 +1,4 @@
+import {drawerConflictMessage} from "@/lib/pos-drawer-conflict";
 import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
@@ -50,6 +51,7 @@ export async function POST(request:Request){
   const amount=new Prisma.Decimal(input.amount);if(!amount.gt(0))throw new ShiftConflict("Cash movement must be positive");const saved=await tx.posShiftEvent.findUnique({where:{id:input.requestId}});
   if(saved){if(saved.shiftId!==shift.id||saved.kind!==input.kind||!saved.amount.eq(amount)||saved.reference!==input.reference||saved.reason!==input.reason)throw new ShiftConflict("Retry ID belongs to another cash movement");return{event:saved,replayed:true};}
   if(shift.closedAt)throw new ShiftConflict("Shift is closed");
+  const recorded=await tx.posShiftEvent.aggregate({where:{shiftId:shift.id},_sum:{cashDelta:true},_count:{_all:true}});if(recorded._count._all>=5000)throw new ShiftConflict("Close this full shift and open another");if(input.kind==="OUT"&&amount.gt(shift.openingCash.plus(recorded._sum.cashDelta??0)))throw new ShiftConflict("Insufficient drawer cash for this recorded movement");
   const event=await tx.posShiftEvent.create({data:{id:input.requestId,shiftId:shift.id,kind:input.kind,amount,cashDelta:input.kind==="IN"?amount:amount.negated(),reference:input.reference,reason:input.reason,createdBy:actor.id}});
   await tx.auditLog.create({data:{tenantId,actorId:actor.id,entity:"PosShiftEvent",entityId:event.id,action:"pos-shift.cash-recorded",metadata:{shiftId:shift.id,kind:input.kind,amount:amount.toFixed(3)}}});return{event,replayed:false};
  }
@@ -60,5 +62,5 @@ export async function POST(request:Request){
  const closed=await tx.posShift.update({where:{id:shift.id},data:{closedAt:new Date(),closedBy:actor.id,countedCash:counted,expectedCash:expected,difference,closeReason:input.reason}});
  await tx.auditLog.create({data:{tenantId,actorId:actor.id,entity:"PosShift",entityId:shift.id,action:"pos-shift.closed",metadata:{expectedCash:expected.toFixed(3),countedCash:counted.toFixed(3),difference:difference.toFixed(3)}}});return{shift:closed,replayed:false};
  },{timeout:15000,maxWait:10000});return NextResponse.json(result,{status:201});}
- catch(error){if(error instanceof ShiftConflict)return NextResponse.json({error:error.message},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return NextResponse.json({error:"Check the open shift, available cash, movement limit and duplicate records"},{status:409});throw error;}
+ catch(error){const drawer=drawerConflictMessage(error);if(drawer)return NextResponse.json({error:drawer},{status:409});if(error instanceof ShiftConflict)return NextResponse.json({error:error.message},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return NextResponse.json({error:"Check the open shift, available cash, movement limit and duplicate records"},{status:409});throw error;}
 }

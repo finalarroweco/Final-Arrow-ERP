@@ -1,3 +1,4 @@
+import {drawerConflictMessage} from "@/lib/pos-drawer-conflict";
 import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
@@ -10,7 +11,7 @@ import {calculatePosPartial,posRefundOrder,posRefundAllowed,posRefundState,posRe
 const uuid=z.string().uuid();
 const schema=z.object({tenantId:uuid,requestId:uuid,entryDate:dueDate,reference:z.string().trim().min(3).max(120),reason:z.string().trim().min(3).max(500),lines:z.array(z.object({orderLineId:uuid,quantity:z.number().int().min(1).max(999)}).strict()).min(1).max(100).optional()}).strict();
 type Context={params:Promise<{id:string}>};
-function failure(error:unknown){
+function failure(error:unknown){const drawer=drawerConflictMessage(error);if(drawer)return NextResponse.json({error:drawer},{status:409});
  if(error instanceof PosRefundConflict||error instanceof LedgerPeriodClosed)return NextResponse.json({error:error.message},{status:409});
  if(error instanceof LedgerCompanyMissing)return NextResponse.json({error:"Company not found"},{status:404});
  if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return NextResponse.json({error:"Check refund history, the open branch shift and available drawer cash"},{status:409});

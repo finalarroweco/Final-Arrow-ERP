@@ -1,3 +1,4 @@
+import {drawerConflictMessage} from "@/lib/pos-drawer-conflict";
 import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
@@ -21,5 +22,5 @@ export async function PATCH(request:Request,context:{params:Promise<{id:string}>
  parsed.data.action==="pay-card"?{status:"PAID",paidAt:new Date(),paymentMethod:"CARD",paymentReference:parsed.data.reference}:{status:"PAID",paidAt:new Date(),paymentMethod:"CASH",tendered:new Prisma.Decimal(parsed.data.tendered),change:new Prisma.Decimal(parsed.data.tendered).minus(order.total)};
  if(parsed.data.action==="pay"&&new Prisma.Decimal(parsed.data.tendered).lt(order.total))return NextResponse.json({error:"Cash tendered is below the order total"},{status:400});
  try{await db.$transaction(async(tx)=>{await tx.$queryRaw`SELECT set_config('erp.pos_actor',${actor.id},true)`;const changed=await tx.posOrder.updateMany({where:{id,status:"OPEN"},data});if(changed.count!==1)throw new OrderConflict();await tx.auditLog.create({data:{tenantId:order.tenantId,actorId:actor.id,action:parsed.data.action==="cancel"?"pos-order.cancelled":"pos-order.paid",entity:"PosOrder",entityId:id}});});return NextResponse.json({ok:true});}
- catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2004")return NextResponse.json({error:"Check the open branch shift and its movement limit before recording payment"},{status:409});if(error instanceof OrderConflict)return NextResponse.json({error:"Order changed; refresh and retry"},{status:409});throw error;}
+ catch(error){const drawer=drawerConflictMessage(error);if(drawer)return NextResponse.json({error:drawer},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2004")return NextResponse.json({error:"Check the open branch shift and its movement limit before recording payment"},{status:409});if(error instanceof OrderConflict)return NextResponse.json({error:"Order changed; refresh and retry"},{status:409});throw error;}
 }
