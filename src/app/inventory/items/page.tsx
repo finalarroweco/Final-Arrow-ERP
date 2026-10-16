@@ -29,7 +29,7 @@ export default async function ItemsPage() {
       branches: await Promise.all(company.branches.filter((branch) => visible === null || visible.includes(branch.id))
         .map(async (branch) => ({ id: branch.id, name: branch.name, ...await permissions(branch.id) }))) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/purchasing/orders">{t("Purchase orders", "أوامر الشراء")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/data-import">{t("Import CSV", "استيراد CSV")}</a><a href="/purchasing/orders">{t("Purchase orders", "أوامر الشراء")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("INVENTORY", "المخزون")}</p><h1>{t("Item catalog.", "دليل الأصناف.")}</h1><p className="sub">{t("Company and branch item records.", "أصناف الشركات والفروع.")}</p></section>
     <ItemsWorkspace options={options} locale={locale} />
   </main>;

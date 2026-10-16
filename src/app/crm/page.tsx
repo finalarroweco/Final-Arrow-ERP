@@ -39,7 +39,7 @@ export default async function CRMPage() {
       canArchiveCompanyWide: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, permission: "customer:archive" }),
     };
   }))).filter((option): option is CompanyOption => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/crm/leads">{t("Leads", "الفرص البيعية")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/data-import">{t("Import CSV", "استيراد CSV")}</a><a href="/crm/leads">{t("Leads", "الفرص البيعية")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>CRM</p><h1>{t("Customers.", "العملاء.")}</h1><p className="sub">{t("Company and branch customer records with scoped access.", "سجلات عملاء الشركات والفروع ضمن صلاحياتك.")}</p></section>
     <CrmWorkspace options={options} locale={locale} />
   </main>;

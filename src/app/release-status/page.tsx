@@ -7,6 +7,7 @@ export default async function ReleaseStatusPage(){
  if(!await currentUser())redirect("/login");const locale=await getLocale(),t=(en:string,ar:string)=>translate(locale,en,ar);
  const groups=[
  {title:t("Implemented workflows","مسارات مطوّرة"),description:t("These modules have scoped application workflows and automated checks. Business acceptance with actual operating rules remains required.","تحتوي هذه الأقسام على مسارات عمل وصلاحيات وفحوص آلية. ما زال اعتمادها مع قواعد العمل الفعلية مطلوبًا."),items:[
+ ["/data-import",t("CSV import for customers, suppliers and catalog items with preview and atomic audited batches","استيراد العملاء والموردين والأصناف من CSV بمعاينة ودفعات مدققة تُحفظ كاملة")],
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
  ["/purchasing/orders",t("Purchases, partial receipts, returns and source settlements","المشتريات والاستلام الجزئي والمرتجعات والتسويات المرتبطة")],
  ["/accounting/ledger",t("Source journals, corrections, period locks and financial reports","قيود المستندات والعكس وإقفال الفترات والتقارير المالية")],
@@ -16,7 +17,7 @@ export default async function ReleaseStatusPage(){
  ["/projects",t("Projects, tasks, prerequisite dependencies, assignments, time recording and independent time review","المشاريع والمهام والمتطلبات السابقة والتكليف وتسجيل الوقت واعتماده بصلاحية مستقلة")],
  ["/helpdesk",t("Ticket workflow and permanent internal follow-up","مسار التذاكر وسجل المتابعة الداخلية الدائم")]]},
  {title:t("Remaining product development","تطوير منتج متبقٍ"),description:t("These items require additional implementation and verification; existing module screens do not mean these capabilities are complete.","تحتاج هذه البنود إلى تنفيذ وفحص إضافيين؛ وجود شاشة القسم لا يعني اكتمال هذه الإمكانات."),items:[
- ["",t("Sales: imports, payment terms/due dates, overdue aging and unallocated advances","المبيعات: الاستيراد وشروط ومواعيد الاستحقاق وأعمار التأخر والدفعات غير المخصصة")],
+ ["",t("Sales: payment terms/due dates, overdue aging and unallocated advances","المبيعات: شروط ومواعيد الاستحقاق وأعمار التأخر والدفعات غير المخصصة")],
  ["",t("Inventory: reservations, valuation and supplier advances","المخزون: الحجوزات والتقييم ودفعات الموردين المقدمة")],
  ["",t("Projects: budgets, billing and resource planning","المشاريع: الميزانيات والفوترة وتخطيط الموارد")],
  ["",t("Helpdesk: attachments, notifications, customer portal and SLA rules","الدعم: المرفقات والإشعارات وبوابة العميل وقواعد مستوى الخدمة")],
