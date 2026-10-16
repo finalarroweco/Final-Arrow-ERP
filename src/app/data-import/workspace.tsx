@@ -1,4 +1,5 @@
 "use client";
+import styles from "./import.module.css";
 import { useEffect, useRef, useState } from "react";
 import { pendingCatalogImport as pendingSchema, type PendingCatalogImport as Pending } from "@/lib/catalog-import-input";
 import { catalogHeaders, catalogTemplate, type CatalogKind, type CatalogIssue, type CatalogRecord } from "@/lib/catalog-csv";
@@ -24,7 +25,7 @@ export function ImportWorkspace({ options, locale, actorId }: { options: ImportO
   fetch("/api/catalog-imports?" + query, { signal: controller.signal, cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); if (!controller.signal.aborted) { setBatches(data.batches); setNextPage(data.nextPage); } }).catch(error => { if (!controller.signal.aborted) setHistoryError(String(error)); });
   return () => controller.abort();
  }, [scope, kind, page, restored]);
- if (!scope) return <section className="card"><p>{t("No scope allows both reading and creating these records.", "لا يوجد نطاق يسمح بقراءة هذه السجلات وإنشائها معًا.")}</p></section>;
+ if (!scope) return <section className={`panel ${styles.panel}`}><p>{t("No scope allows both reading and creating these records.", "لا يوجد نطاق يسمح بقراءة هذه السجلات وإنشائها معًا.")}</p></section>;
  function changed() { generation.current++; setPreview(null); setMessage(""); setPage(0); }
  function remember(value: Pending | null) { setPending(value); try { if (value) sessionStorage.setItem(key, JSON.stringify(value)); else sessionStorage.removeItem(key); } catch { if (value) setMessage(t("Browser storage is unavailable; keep this tab open to retry the same request.", "التخزين في المتصفح غير متاح؛ أبقِ هذه الصفحة مفتوحة لإعادة الطلب نفسه.")); } }
  async function previewFile() {
@@ -48,7 +49,7 @@ export function ImportWorkspace({ options, locale, actorId }: { options: ImportO
  }
  function template() { const url = URL.createObjectURL(new Blob(["\uFEFF" + catalogTemplate(kind)], { type: "text/csv;charset=utf-8" })); const a = document.createElement("a"); a.href = url; a.download = kind.toLowerCase() + "-template.csv"; a.click(); URL.revokeObjectURL(url); }
  return <>
- <section className="card"><h2>{t("Import setup", "إعداد الاستيراد")}</h2>
+ <section className={`panel ${styles.panel}`}><h2>{t("Import setup", "إعداد الاستيراد")}</h2>
  <label>{t("Company / branch", "الشركة / الفرع")}<select value={scopeIndex} disabled={busy || !!pending || !restored} onChange={event => { const index = Number(event.target.value); changed(); setScopeIndex(index); setKind(options[index].kinds[0]); }}>{options.map((option, index) => <option value={index} key={index}>{option.label}</option>)}</select></label>
  <label>{t("Record type", "نوع السجل")}<select value={kind} disabled={busy || !!pending || !restored} onChange={event => { changed(); setKind(event.target.value as CatalogKind); }}>{scope.kinds.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
  <button type="button" onClick={template}>{t("Download empty CSV template", "تنزيل قالب CSV فارغ")}</button>
@@ -60,10 +61,10 @@ export function ImportWorkspace({ options, locale, actorId }: { options: ImportO
  <p role="status">{message}</p>
  {pending && <div role="alert"><p>{t("The last save is unconfirmed. Retry the exact same request to retrieve its result. The pending file is retained in this browser tab until confirmed or discarded.", "نتيجة الحفظ السابق غير مؤكدة. أعد إرسال الطلب نفسه للحصول على نتيجته. يُحتفظ بالملف المعلق في علامة التبويب حتى التأكيد أو التجاهل.")}</p><button type="button" disabled={busy} onClick={commit}>{t("Retry same import", "إعادة الاستيراد نفسه")}</button><button type="button" disabled={busy} onClick={() => { remember(null); changed(); }}>{t("Discard pending request and preview again", "تجاهل الطلب المعلق وأعد المعاينة")}</button></div>}
  </section>
- {preview && <section className="card"><h2>{t("Preview", "المعاينة")} · {preview.rowCount}</h2>
+ {preview && <section className={`panel ${styles.panel}`}><h2>{t("Preview", "المعاينة")} · {preview.rowCount}</h2>
  {preview.errors.length > 0 && <><p role="alert">{t("Nothing has been saved. Fix every error and preview again.", "لم تُحفظ أي بيانات. أصلح جميع الأخطاء ثم أعد المعاينة.")}</p><ul>{preview.errors.map((error, index) => <li key={index}>{t("Record", "السجل")} {error.row} · {error.field}: {error.message}</li>)}</ul></>}
  <div style={{ overflowX: "auto", maxHeight: 480 }}><table><thead><tr>{catalogHeaders(kind).map(header => <th key={header}>{header}</th>)}</tr></thead><tbody>{preview.records.map((record, index) => <tr key={index}>{catalogHeaders(kind).map(header => <td key={header} style={{ whiteSpace: "pre-wrap" }}>{(record as Record<string, string | null>)[header] ?? "—"}</td>)}</tr>)}</tbody></table></div>
  <button type="button" disabled={busy || !!pending || !preview.canCommit} onClick={commit}>{t("Save all records", "حفظ جميع السجلات")}</button></section>}
- <section className="card"><h2>{t("Import history for this exact scope", "سجل الاستيراد لهذا النطاق تحديدًا")}</h2><p role="status">{historyError}</p><div style={{ overflowX: "auto" }}><table><thead><tr><th>{t("Batch", "الدفعة")}</th><th>{t("Created", "الإنشاء")}</th><th>{t("Records", "السجلات")}</th></tr></thead><tbody>{batches.map(batch => <tr key={batch.id}><td>{batch.id}</td><td>{new Date(batch.createdAt).toLocaleString(locale === "ar" ? "ar-OM" : "en-GB")}</td><td>{batch.rowCount}</td></tr>)}</tbody></table></div>{!batches.length && !historyError && <p>{t("No imports in this scope.", "لا توجد دفعات في هذا النطاق.")}</p>}<button disabled={busy || page === 0} onClick={() => setPage(page - 1)}>{t("Previous", "السابق")}</button><button disabled={busy || nextPage === null} onClick={() => setPage(nextPage!)}>{t("Next", "التالي")}</button></section>
+ <section className={`panel ${styles.panel}`}><h2>{t("Import history for this exact scope", "سجل الاستيراد لهذا النطاق تحديدًا")}</h2><p role="status">{historyError}</p><div style={{ overflowX: "auto" }}><table><thead><tr><th>{t("Batch", "الدفعة")}</th><th>{t("Created", "الإنشاء")}</th><th>{t("Records", "السجلات")}</th></tr></thead><tbody>{batches.map(batch => <tr key={batch.id}><td>{batch.id}</td><td>{new Date(batch.createdAt).toLocaleString(locale === "ar" ? "ar-OM" : "en-GB")}</td><td>{batch.rowCount}</td></tr>)}</tbody></table></div>{!batches.length && !historyError && <p>{t("No imports in this scope.", "لا توجد دفعات في هذا النطاق.")}</p>}<button disabled={busy || page === 0} onClick={() => setPage(page - 1)}>{t("Previous", "السابق")}</button><button disabled={busy || nextPage === null} onClick={() => setPage(nextPage!)}>{t("Next", "التالي")}</button></section>
  </>;
 }
