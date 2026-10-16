@@ -1,12 +1,15 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { translate, type Locale } from "@/lib/locale";
+import {TimeReview} from "./review";
 import {TimeReport} from "./report";
 type Project = { id: string; tenantId: string; companyId: string; branchId: string | null; status: string };
 type Employee = { id: string; code: string; fullName: string; branchId: string | null };
-type Entry = { id: string; workDate: string; minutes: number; description: string; employeeName: string | null; employeeCode: string | null; voidedAt: string | null; voidReason: string | null };
-export function TimeWorkspace({ project, canManage, locale }: { project: Project; canManage: boolean; locale: Locale }) {
+type Entry = { reviewState:string;reviewSequence:number; id: string; workDate: string; minutes: number; description: string; employeeName: string | null; employeeCode: string | null; voidedAt: string | null; voidReason: string | null };
+export function TimeWorkspace({ project, canManage, canApprove, locale }: { project: Project; canManage: boolean; canApprove:boolean; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
+  const loadSequence=useRef(0);
+  const [reviewState,setReviewState]=useState("");
   const [reportVersion,setReportVersion]=useState(0);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -15,12 +18,13 @@ export function TimeWorkspace({ project, canManage, locale }: { project: Project
   const [minutes, setMinutes] = useState(0); const [count, setCount] = useState(0);
   const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
   const load = useCallback(async (number = 0) => {
+    const sequence=++loadSequence.current;
     try {
-      const response = await fetch(`/api/projects/${project.id}/time?${new URLSearchParams({ tenantId: project.tenantId, page: String(number) })}`);
-      const data = await response.json(); if (!response.ok) { setMessage(data.error); return; }
+      const response = await fetch(`/api/projects/${project.id}/time?${new URLSearchParams({ tenantId: project.tenantId, page: String(number),...(reviewState?{reviewState}:{}) })}`);
+      const data = await response.json(); if(sequence!==loadSequence.current)return; if (!response.ok) { setMessage(data.error); return; }
       setEntries(data.entries); setMinutes(data.totalMinutes); setCount(data.count); setPage(number); setNext(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
-  }, [project, t]);
+  }, [project, t,reviewState]);
   const loadEmployees = useCallback(async (number = 0) => {
     if (!canManage) return;
     try {
@@ -29,7 +33,7 @@ export function TimeWorkspace({ project, canManage, locale }: { project: Project
       setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [project, canManage, t]);
-  useEffect(() => { void load(); void loadEmployees(); }, [load, loadEmployees]);
+  useEffect(() => { void load(); void loadEmployees();return()=>{loadSequence.current++;}; }, [load, loadEmployees]);
   async function save(form: FormData) {
     setBusy(true); setMessage("");
     try {
@@ -49,8 +53,9 @@ export function TimeWorkspace({ project, canManage, locale }: { project: Project
       if (response.ok) {setReportVersion(value=>value+1);await load(page);}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
+  const reviewed=useCallback(async()=>{setReportVersion(value=>value+1);await load(page);},[load,page]);
   const eligible = employees.filter((employee) => !project.branchId || !employee.branchId || employee.branchId === project.branchId);
-  return <section className="panel"><p>{t("Recorded hours", "الساعات المسجلة")}: {(minutes / 60).toFixed(2)} · {t("Entries", "السجلات")}: {count}</p>
+  return <section className="panel"><p>{t("Approval is a separate permission. A permitted reviewer can review their own recorded entries; this is not a mandatory two-person approval policy. Approved entries require a reset before correction. Decisions do not create payroll or invoices.","الاعتماد صلاحية مستقلة. يمكن للمراجع المخوّل مراجعة سجلاته التي أدخلها؛ هذا ليس اعتمادًا إلزاميًا من شخصين. يلزم إعادة السجل المعتمد للمراجعة قبل تصحيحه. لا تُنشئ القرارات رواتب أو فواتير.")}</p><label>{t("Current review status","حالة المراجعة الحالية")}<select value={reviewState} disabled={busy} onChange={e=>setReviewState(e.target.value)}><option value="">{t("All review states","كل حالات المراجعة")}</option><option value="PENDING">{t("Pending","بانتظار المراجعة")}</option><option value="APPROVED">{t("Approved","معتمد")}</option><option value="REJECTED">{t("Rejected","مرفوض")}</option></select></label><p>{t("Recorded hours", "الساعات المسجلة")}: {(minutes / 60).toFixed(2)} · {t("Entries", "السجلات")}: {count}</p>
     {canManage && project.status === "ACTIVE" && <form action={save}><h2>{t("New time entry", "سجل وقت جديد")}</h2>
       <label>{t("Employee", "الموظف")} <select name="employeeId" required defaultValue=""><option value="">{t("Select employee", "اختر موظفاً")}</option>
         {eligible.map((employee) => <option key={employee.id} value={employee.id}>{employee.code} · {employee.fullName}</option>)}</select></label>
@@ -65,8 +70,9 @@ export function TimeWorkspace({ project, canManage, locale }: { project: Project
     {entries.length === 0 && <p>{t("No entries on this page.", "لا توجد سجلات في هذه الصفحة.")}</p>}
     {entries.map((entry) => <article key={entry.id} className="card"><strong>{entry.employeeName ?? t("Employee details restricted", "بيانات الموظف مقيّدة")}</strong> {entry.employeeCode}
       <p>{entry.workDate.slice(0, 10)} · {(entry.minutes / 60).toFixed(2)} {t("hours", "ساعة")}</p><p>{entry.description}</p>
+      <TimeReview tenantId={project.tenantId} projectId={project.id} entryId={entry.id} state={entry.reviewState} sequence={entry.reviewSequence} voided={Boolean(entry.voidedAt)} canApprove={canApprove} open={["PLANNED","ACTIVE","ON_HOLD"].includes(project.status)} locale={locale} onChanged={reviewed}/>
       {entry.voidedAt && <p>{t("Voided", "ملغى")} · {entry.voidReason}</p>}
-      {canManage && !entry.voidedAt && ["PLANNED", "ACTIVE", "ON_HOLD"].includes(project.status) && <details><summary>{t("Correct entry", "تصحيح السجل")}</summary>
+      {canManage && entry.reviewState!=="APPROVED" && !entry.voidedAt && ["PLANNED", "ACTIVE", "ON_HOLD"].includes(project.status) && <details><summary>{t("Correct entry", "تصحيح السجل")}</summary>
         <p>{t("Void the incorrect entry and create a replacement. The original stays in the history.", "ألغِ السجل الخاطئ وأضف البديل. يبقى السجل الأصلي في التاريخ.")}</p>
         <form action={(form) => voidEntry(entry.id, form)}><label>{t("Reason", "السبب")} <input name="reason" required minLength={3} maxLength={500} /></label>
           <button disabled={busy}>{t("Void entry", "إلغاء السجل")}</button></form></details>}

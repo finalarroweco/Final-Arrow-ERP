@@ -16,9 +16,10 @@ export default async function TimePage({ params }: { params: Promise<{ id: strin
   if (!project) notFound();
   const scope = { userId: user.id, tenantId: project.tenantId, companyId: project.companyId, branchId: project.branchId ?? undefined };
   if (!(await canAccess({ ...scope, permission: "project:read" })) || !(await canAccess({ ...scope, permission: "project-time:read" }))) notFound();
+  const canApprove=await canAccess({...scope,permission:"project-time:approve"});
   const canManage = await canAccess({ ...scope, permission: "project-time:manage" });
   const locale = await getLocale(); const t = (en: string, ar: string) => translate(locale, en, ar);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/projects">{t("Projects", "المشاريع")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("PROJECT TIME", "وقت المشاريع")}</p><h1>{project.name}</h1><p className="sub">{project.code} · {t("Record staff effort and review project hours.", "سجّل جهد الموظفين وراجع ساعات المشروع.")}</p></section>
-    <TimeWorkspace project={project} canManage={canManage} locale={locale} /></main>;
+    <TimeWorkspace key={project.id} canApprove={canApprove} project={project} canManage={canManage} locale={locale} /></main>;
 }

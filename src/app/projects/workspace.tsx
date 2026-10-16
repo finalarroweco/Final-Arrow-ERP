@@ -3,7 +3,7 @@
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, useRef } from "react";
 
-type Permissions = { canCreate: boolean; canManage: boolean; canCreateTask: boolean; canManageTask: boolean };
+type Permissions = { canReadTime:boolean; canCreate: boolean; canManage: boolean; canCreateTask: boolean; canManageTask: boolean };
 type Option = { tenantId: string; companyId: string; label: string; companyPermissions: Permissions;
   branches: ({ id: string; name: string } & Permissions)[] };
 type Project = { id: string; code: string; name: string; description: string | null; branchId: string | null;
@@ -109,7 +109,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
         <strong>{project.name}</strong> · {project.code}<p><a href={`/projects/${project.id}/dependencies?tenantId=${option.tenantId}`}>{t("Task dependencies","اعتماديات المهام")}</a></p>
         <p>{t(project.status, ({ PLANNED: "مخطط", ACTIVE: "نشط", ON_HOLD: "متوقف مؤقتاً", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[project.status])} · {project._count.tasks} {t("tasks", "مهام")} · {project.branchId ? option.branches.find((branch) => branch.id === project.branchId)?.name : t("Company wide", "على مستوى الشركة")}{project.dueDate && ` · ${t("Due", "الاستحقاق")} ${project.dueDate.slice(0, 10)}`}</p>
         {project.description && <p>{project.description}</p>}
-        {(permissions?.canManage || permissions?.canManageTask) && <p><a href={`/projects/${project.id}/time`}>{t("Time tracking", "تسجيل ساعات العمل")}</a></p>}
+        {permissions?.canReadTime && <p><a href={`/projects/${project.id}/time`}>{t("Time tracking", "تسجيل ساعات العمل")}</a></p>}
         {permissions?.canManage && <div>
           {(project.status === "PLANNED" || project.status === "ON_HOLD") && <button disabled={busy} onClick={() => projectAction("activate")}>{t("Activate", "تفعيل")}</button>}
           {project.status === "ACTIVE" && <><button disabled={busy} onClick={() => projectAction("pause")}>{t("Pause", "إيقاف مؤقت")}</button><button disabled={busy} onClick={() => projectAction("complete")}>{t("Complete project", "إكمال المشروع")}</button></>}

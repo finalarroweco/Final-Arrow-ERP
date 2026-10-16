@@ -108,3 +108,10 @@ Open Internal follow-up on a helpdesk ticket; ticket read is needed to view, and
 ## Project prerequisites — 2026-10-16
 
 Apply all 58 migrations before using task dependencies. Open Task dependencies from a project. Add prerequisites only to a not-started task in a planned/active project. Every prerequisite must reach DONE to unblock starting/completing the dependent task. Cancellation does not satisfy a prerequisite: remove the active link while the dependent task is TODO if the dependency no longer applies. Dependencies freeze after the dependent task starts. Source read/task read plus task manage permissions are required for writes. Removed links remain in history. In-memory same-request retry is available on uncertain failures; reload does not retain dependency requests. Use isolated CI for cycles, task state races and raw SQL bypass cases; never create production test projects/tasks.
+
+
+## Project time review — 2026-10-16
+
+Apply all 59 migrations. Owner has time approval by default; Manager can record/correct time but is not automatically a reviewer. Delegate project read + time read + time approve through a scoped custom role as needed. A reviewer without employee read sees restricted employee details. No mandatory dual-person restriction is imposed.
+
+Open Time tracking from a project, filter review states and inspect an entry's review history. Approve/reject a pending active entry with a reason; reset approved/rejected decisions to pending before reconsidering them. Reset approved time before correction. Decisions do not calculate wages, bill clients or initiate payment. Closed projects and voided entries cannot receive new decisions. Date reports classify current review state, not historical approval state at the chosen work-date cutoff. Retry uncertain requests using their original versioned per-tab payload; definitive failures refresh current entry state. Test all mutations, audits, history and concurrency in the isolated project-time-review flow; do not add production test entries.

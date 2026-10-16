@@ -25,7 +25,7 @@ export async function validatePermissions(tx:Prisma.TransactionClient,tenantId:s
  const available=await allowedPermissions(tx,tenantId),selected=new Set(keys);
  if(selected.size!==keys.length||keys.some(k=>!available.includes(k)))throw new RoleError("Unknown or reserved permission",400);
  for(const key of keys){const resource=key.split(":")[0],read=`${resource}:read`;if(available.includes(read)&&!selected.has(read))throw new RoleError(`Add ${read} before an action in this module`,400);}
- const linked:Record<string,string[]>={"ledger-account:manage":["ledger:read"],"ledger-period:manage":["ledger:read"],"project-task:read":["project:read"],"project-time:read":["project:read"]};
+ const linked:Record<string,string[]>={"ledger-account:manage":["ledger:read"],"ledger-period:manage":["ledger:read"],"project-task:read":["project:read"],"project-time:read":["project:read"],"project-time:approve":["project:read"]};
  for(const key of keys)if(linked[key]?.some(k=>!selected.has(k)))throw new RoleError(`Required read permissions are missing for ${key}`,400);
 }
 export async function validateScope(tx:Prisma.TransactionClient,tenantId:string,scope:z.infer<typeof scopeSchema>){

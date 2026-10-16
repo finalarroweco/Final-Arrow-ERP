@@ -20,6 +20,7 @@ export default async function ProjectsPage() {
       companyId: company.id, permission: "project:read" });
     if (visible === false) return null;
     const permissions = async (branchId?: string) => ({
+      canReadTime: await canAccess({ userId:user.id,tenantId:tenant.id,companyId:company.id,branchId,permission:"project-time:read" }),
       canCreate: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "project:create" }),
       canManage: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "project:manage" }),
       canCreateTask: await canAccess({ userId: user.id, tenantId: tenant.id, companyId: company.id, branchId, permission: "project-task:create" }),
