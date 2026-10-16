@@ -924,6 +924,10 @@ model Ticket {
 }
 
 model ProjectTimeEntry {
+  reviewState String @default("PENDING") @db.VarChar(10)
+  reviewSequence Int @default(0)
+  reviews ProjectTimeReview[]
+  @@unique([tenantId,companyId,projectId,id])
   id          String   @id @default(uuid()) @db.Uuid
   tenantId    String   @db.Uuid
   companyId   String   @db.Uuid
@@ -1494,4 +1498,20 @@ model ProjectTaskDependency {
  @@index([tenantId,projectId,removedAt,createdAt,id])
  @@index([taskId,removedAt])
  @@index([dependsOnId,removedAt])
+}
+
+model ProjectTimeReview {
+ id String @id @default(uuid()) @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ projectId String @db.Uuid
+ entryId String @db.Uuid
+ sequence Int
+ state String @db.VarChar(10)
+ reason String @db.VarChar(500)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ entry ProjectTimeEntry @relation(fields:[tenantId,companyId,projectId,entryId],references:[tenantId,companyId,projectId,id],onDelete:Restrict)
+ @@unique([entryId,sequence])
+ @@index([tenantId,projectId,entryId,sequence])
 }
