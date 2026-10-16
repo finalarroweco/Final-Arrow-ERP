@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!(await canAccess({ ...scope, permission: "project:read" })) ||
     !(await canAccess({ ...scope, permission: "project-task:read" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const {tasks,summary}=await db.$transaction(async tx=>{
+  const {tasks,summary,blockers}=await db.$transaction(async tx=>{
     const [clock]=await tx.$queryRaw<{today:string}[]>`SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Muscat','YYYY-MM-DD') AS today`;
     const day=new Date(`${clock.today}T00:00:00Z`);const end=new Date(day.getTime()+3*86400000);
     const base={tenantId,companyId:project.companyId,projectId:id};const pending={status:{in:["TODO","IN_PROGRESS"] as ("TODO"|"IN_PROGRESS")[]}};
@@ -37,21 +37,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       dueDate: true, completedAt: true, createdAt: true, assigneeEmployeeId: true,
       assignee: { select: { fullName: true, branchId: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: page * 50, take: 51 });
+    const blockers=await tx.projectTaskDependency.groupBy({by:["taskId"],where:{tenantId,projectId:id,taskId:{in:tasks.slice(0,50).map(task=>task.id)},removedAt:null,dependsOn:{status:{not:"DONE"}}},_count:{_all:true}});
     const [active,overdue,dueSoon,undated]=await Promise.all([
       tx.projectTask.count({where:{...base,...pending}}),
       tx.projectTask.count({where:{...base,...pending,dueDate:{lt:day}}}),
       tx.projectTask.count({where:{...base,...pending,dueDate:{gte:day,lte:end}}}),
       tx.projectTask.count({where:{...base,...pending,dueDate:null}})]);
-    return {tasks,summary:{today:clock.today,nearEnd:end.toISOString().slice(0,10),active,overdue,dueSoon,undated}};
+    return {tasks,blockers,summary:{today:clock.today,nearEnd:end.toISOString().slice(0,10),active,overdue,dueSoon,undated}};
   },{isolationLevel:"RepeatableRead"});
   const visible = tasks.slice(0, 50);
+  const blockedCounts=new Map(blockers.map(row=>[row.taskId,row._count._all]));
   const branchKeys = [...new Set(visible.filter((task) => task.assignee)
     .map((task) => task.assignee?.branchId ?? ""))];
   const rights = new Map(await Promise.all(branchKeys.map(async (branchId) => [branchId,
     await canAccess({ userId: actor.id, tenantId: tenantId, companyId: project.companyId,
       branchId: branchId || undefined, permission: "employee:read" })] as const)));
   return NextResponse.json({ summary,tasks: visible.map(({ assignee, ...task }) => ({
-    ...task,dueBucket:["TODO","IN_PROGRESS"].includes(task.status)?!task.dueDate?"UNDATED":task.dueDate.toISOString().slice(0,10)<summary.today?"OVERDUE":task.dueDate.toISOString().slice(0,10)<=summary.nearEnd?"DUE_SOON":null:null, assigneeName: assignee && rights.get(assignee.branchId ?? "") ? assignee.fullName : null,
+    ...task,blockedBy:blockedCounts.get(task.id)??0,dueBucket:["TODO","IN_PROGRESS"].includes(task.status)?!task.dueDate?"UNDATED":task.dueDate.toISOString().slice(0,10)<summary.today?"OVERDUE":task.dueDate.toISOString().slice(0,10)<=summary.nearEnd?"DUE_SOON":null:null, assigneeName: assignee && rights.get(assignee.branchId ?? "") ? assignee.fullName : null,
   })), nextPage: tasks.length > 50 ? page + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
 }
 

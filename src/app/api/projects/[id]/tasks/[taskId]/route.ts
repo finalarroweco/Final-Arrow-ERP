@@ -1,3 +1,4 @@
+import {OperationalError,operationalFailure} from "@/lib/operational-records";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -31,11 +32,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (problem) return NextResponse.json({ error: problem.error }, { status: problem.status });
   }
   const expected: ("TODO" | "IN_PROGRESS")[] = action === "start" ? ["TODO"] : ["TODO", "IN_PROGRESS"];
-  const result = await db.$transaction(async (tx) => {
+  try { const result = await db.$transaction(async (tx) => {
     const active = await tx.project.updateMany({ where: { id, tenantId,
       status: action === "assign" ? { in: ["PLANNED", "ACTIVE"] } : "ACTIVE" },
       data: { updatedAt: new Date() } });
     if (active.count !== 1) return null;
+    if ((action === "start" || action === "complete") && await tx.projectTaskDependency.findFirst({where:{tenantId,projectId:id,taskId,removedAt:null,dependsOn:{status:{not:"DONE"}}},select:{id:true}})) throw new OperationalError("Complete every prerequisite before starting or completing this task");
     const changed = await tx.projectTask.updateMany({ where: { id: taskId, tenantId,
       projectId: id, companyId: project.companyId, status: { in: expected } },
       data: action === "assign" ? { assigneeEmployeeId: parsed.data.employeeId }
@@ -51,4 +53,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
   if (!result) return NextResponse.json({ error: "Task or project status does not allow this action" }, { status: 409 });
   return NextResponse.json({ task: result });
+  } catch(error) {const failure=operationalFailure(error);return NextResponse.json({error:failure.error},{status:failure.status});}
 }

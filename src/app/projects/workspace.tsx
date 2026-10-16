@@ -9,7 +9,7 @@ type Option = { tenantId: string; companyId: string; label: string; companyPermi
 type Project = { id: string; code: string; name: string; description: string | null; branchId: string | null;
   status: "PLANNED" | "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED"; dueDate: string | null;
   _count: { tasks: number } };
-type Task = { id: string; title: string; status: "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+type Task = { blockedBy:number; id: string; title: string; status: "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
   dueDate: string | null; dueBucket: "OVERDUE"|"DUE_SOON"|"UNDATED"|null; assigneeEmployeeId: string | null; assigneeName: string | null };
 type Employee = { id: string; fullName: string; code: string; branchId: string | null };
 
@@ -106,7 +106,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
       const projectAction = (action: "activate" | "pause" | "complete" | "cancel") => void mutate(
         `/api/projects/${project.id}`, "PATCH", { tenantId: option.tenantId, action }, t("Project updated", "تم تحديث المشروع"), () => load(selected, page));
       return <article key={project.id} className="card">
-        <strong>{project.name}</strong> · {project.code}
+        <strong>{project.name}</strong> · {project.code}<p><a href={`/projects/${project.id}/dependencies?tenantId=${option.tenantId}`}>{t("Task dependencies","اعتماديات المهام")}</a></p>
         <p>{t(project.status, ({ PLANNED: "مخطط", ACTIVE: "نشط", ON_HOLD: "متوقف مؤقتاً", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[project.status])} · {project._count.tasks} {t("tasks", "مهام")} · {project.branchId ? option.branches.find((branch) => branch.id === project.branchId)?.name : t("Company wide", "على مستوى الشركة")}{project.dueDate && ` · ${t("Due", "الاستحقاق")} ${project.dueDate.slice(0, 10)}`}</p>
         {project.description && <p>{project.description}</p>}
         {(permissions?.canManage || permissions?.canManageTask) && <p><a href={`/projects/${project.id}/time`}>{t("Time tracking", "تسجيل ساعات العمل")}</a></p>}
@@ -136,6 +136,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
           {tasks.length === 0 && <p>{t("No tasks on this page.", "لا توجد مهام في هذه الصفحة.")}</p>}
           {tasks.map((task) => <div key={task.id} className="card">
             <strong>{task.title}</strong> · {t(task.status, ({ TODO: "للعمل", IN_PROGRESS: "قيد التنفيذ", DONE: "مكتملة", CANCELLED: "ملغاة" })[task.status])}{task.dueDate && ` · ${t("Due", "الاستحقاق")} ${task.dueDate.slice(0, 10)}`}
+            {task.blockedBy>0&&<p>{t("Unfinished prerequisites","متطلبات سابقة غير مكتملة")}: {task.blockedBy}</p>}
             {task.dueBucket&&<p><strong>{t({OVERDUE:"Overdue",DUE_SOON:"Due soon",UNDATED:"No due date"}[task.dueBucket],{OVERDUE:"متأخرة",DUE_SOON:"قريبة الاستحقاق",UNDATED:"بدون موعد"}[task.dueBucket])}</strong></p>}
             {task.assigneeEmployeeId && <p>{t("Assigned to", "مكلف بها")} {task.assigneeName ?? t("employee", "موظف")}</p>}
             {permissions?.canManageTask && (project.status === "PLANNED" || project.status === "ACTIVE") &&
@@ -149,8 +150,8 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
                 </select></label><button disabled={busy}>{t("Save assignee", "حفظ التكليف")}</button>
               </form>}
             {permissions?.canManageTask && project.status === "ACTIVE" && (task.status === "TODO" || task.status === "IN_PROGRESS") && <div>
-              {task.status === "TODO" && <button disabled={busy} onClick={() => void mutate(`/api/projects/${project.id}/tasks/${task.id}`, "PATCH", { tenantId: option.tenantId, action: "start" }, t("Task started", "بدأ العمل على المهمة"), () => loadTasks(selected, project.id, taskPage))}>{t("Start", "بدء")}</button>}
-              <button disabled={busy} onClick={() => void mutate(`/api/projects/${project.id}/tasks/${task.id}`, "PATCH", { tenantId: option.tenantId, action: "complete" }, t("Task completed", "اكتملت المهمة"), () => loadTasks(selected, project.id, taskPage))}>{t("Complete", "إكمال")}</button>
+              {task.status === "TODO" && <button disabled={busy||task.blockedBy>0} onClick={() => void mutate(`/api/projects/${project.id}/tasks/${task.id}`, "PATCH", { tenantId: option.tenantId, action: "start" }, t("Task started", "بدأ العمل على المهمة"), () => loadTasks(selected, project.id, taskPage))}>{t("Start", "بدء")}</button>}
+              <button disabled={busy||task.blockedBy>0} onClick={() => void mutate(`/api/projects/${project.id}/tasks/${task.id}`, "PATCH", { tenantId: option.tenantId, action: "complete" }, t("Task completed", "اكتملت المهمة"), () => loadTasks(selected, project.id, taskPage))}>{t("Complete", "إكمال")}</button>
               <button disabled={busy} onClick={() => void mutate(`/api/projects/${project.id}/tasks/${task.id}`, "PATCH", { tenantId: option.tenantId, action: "cancel" }, t("Task cancelled", "ألغيت المهمة"), () => loadTasks(selected, project.id, taskPage))}>{t("Cancel", "إلغاء")}</button>
             </div>}
           </div>)}
