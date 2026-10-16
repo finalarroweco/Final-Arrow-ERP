@@ -764,6 +764,9 @@ model Project {
 }
 
 model ProjectTask {
+  dependencies ProjectTaskDependency[] @relation("TaskPrerequisites")
+  requiredBy ProjectTaskDependency[] @relation("TaskDependents")
+  @@unique([tenantId,companyId,projectId,id])
   id                 String            @id @default(uuid()) @db.Uuid
   tenantId           String            @db.Uuid
   companyId          String            @db.Uuid
@@ -1473,4 +1476,22 @@ model TicketMessage {
  createdAt DateTime @default(now())
  ticket Ticket @relation(fields:[tenantId,companyId,ticketId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@index([tenantId,ticketId,createdAt,id])
+}
+
+model ProjectTaskDependency {
+ id String @id @default(uuid()) @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ projectId String @db.Uuid
+ taskId String @db.Uuid
+ dependsOnId String @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ removedBy String? @db.Uuid
+ removedAt DateTime?
+ task ProjectTask @relation("TaskPrerequisites",fields:[tenantId,companyId,projectId,taskId],references:[tenantId,companyId,projectId,id],onDelete:Restrict)
+ dependsOn ProjectTask @relation("TaskDependents",fields:[tenantId,companyId,projectId,dependsOnId],references:[tenantId,companyId,projectId,id],onDelete:Restrict)
+ @@index([tenantId,projectId,removedAt,createdAt,id])
+ @@index([taskId,removedAt])
+ @@index([dependsOnId,removedAt])
 }
