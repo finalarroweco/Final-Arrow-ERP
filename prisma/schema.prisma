@@ -137,6 +137,7 @@ model Tenant {
 }
 
 model Company {
+  importBatches CatalogImportBatch[]
   id             String          @id @default(uuid()) @db.Uuid
   tenantId       String          @db.Uuid
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
@@ -180,6 +181,7 @@ model Company {
 }
 
 model Branch {
+  importBatches CatalogImportBatch[]
   id             String          @id @default(uuid()) @db.Uuid
   tenantId       String          @db.Uuid
   companyId      String          @db.Uuid
@@ -362,6 +364,9 @@ model Invitation {
 }
 
 model Customer {
+  importBatchId String? @db.Uuid
+  importBatch CatalogImportBatch? @relation(fields:[importBatchId],references:[id],onDelete:Restrict)
+  @@index([importBatchId])
   id             String       @id @default(uuid()) @db.Uuid
   tenantId       String       @db.Uuid
   companyId      String       @db.Uuid
@@ -393,6 +398,9 @@ model Customer {
 }
 
 model Supplier {
+  importBatchId String? @db.Uuid
+  importBatch CatalogImportBatch? @relation(fields:[importBatchId],references:[id],onDelete:Restrict)
+  @@index([importBatchId])
   id             String          @id @default(uuid()) @db.Uuid
   tenantId       String          @db.Uuid
   companyId      String          @db.Uuid
@@ -419,6 +427,9 @@ model Supplier {
 }
 
 model InventoryItem {
+  importBatchId String? @db.Uuid
+  importBatch CatalogImportBatch? @relation(fields:[importBatchId],references:[id],onDelete:Restrict)
+  @@index([importBatchId])
   id           String             @id @default(uuid()) @db.Uuid
   tenantId     String             @db.Uuid
   companyId    String             @db.Uuid
@@ -1514,4 +1525,23 @@ model ProjectTimeReview {
  entry ProjectTimeEntry @relation(fields:[tenantId,companyId,projectId,entryId],references:[tenantId,companyId,projectId,id],onDelete:Restrict)
  @@unique([entryId,sequence])
  @@index([tenantId,projectId,entryId,sequence])
+}
+
+model CatalogImportBatch {
+ id String @id @default(uuid()) @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ kind String @db.VarChar(10)
+ digest String @db.VarChar(64)
+ rowCount Int
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ branch Branch? @relation(fields:[tenantId,companyId,branchId],references:[tenantId,companyId,id],onDelete:Restrict)
+ customers Customer[]
+ suppliers Supplier[]
+ items InventoryItem[]
+ @@index([tenantId,companyId,branchId,kind,createdAt,id])
 }
