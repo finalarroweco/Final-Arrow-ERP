@@ -50,11 +50,18 @@ Source: https://tms.taxoman.gov.om/portal/e-invoicing-faq
 
 ## Implemented full POS refund recording
 
-- Records a full-order refund already performed, including saved output VAT, on the original sale's cash/bank, revenue and VAT liability accounts. It does not transfer funds, call a terminal, restore stock or issue a statutory credit note. Partial/line-specific refunds and a different refund asset account are unsupported.
+- Records a full-order refund already performed, including saved output VAT, on the original sale's cash/bank, revenue and VAT liability accounts. It does not transfer funds, call a terminal, restore stock or issue a statutory credit note. Partial/line-specific refunds are covered below; a different refund asset account is unsupported.
 - Requires a PAID order with an active original POS sale journal. Exact UUID retry IDs retain immutable reference/reason/date and amounts; changing a retry's payload is rejected. One active full refund per order is allowed under the source lock. After reversing an incorrect refund, a new UUID can record a genuine replacement; replay of the old UUID always returns the original record.
 - POS-read, POS-manage and ledger-read/post are required to record or reverse a refund. Viewing history/reports requires POS-read and ledger-read. Branch scopes and period locks apply. Refund/correction dates cannot precede later source accounting activity; the original sale cannot reverse while an active refund exists. Database guards additionally enforce same-transaction source/audit, exact opposite original lines and audited exact corrections.
 - A refund does not change the immutable PAID order or original paid-date sales register. The separate refund register uses UTC journal dates and current reversal status, with net/tax/gross active totals and reversed counts/gross. It is not a historical balance, net sales report or tax return. CSV retains all matching source records, references and correction status. Original receipt print shows recent refund history without altering the original amounts.
 - Tests run only against isolated CI PostgreSQL. Production QA reads the empty real report and never records a refund or creates test sales.
+
+## Implemented partial POS refund recording
+
+- Explicit original line quantities refund saved unit-price net amounts. Each line allocates `round(remaining saved tax × selected quantity / remaining quantity, 3)` half up. Returning all remaining units releases its exact remaining tax. This avoids negative tax and rounding drift after earlier corrections; rates and company profile changes never recalculate the original tax.
+- Remaining quantities/tax subtract active partial snapshots; a full refund consumes every line. Reversal restores the corrected record’s exact quantity/tax without rewriting later history. A whole-order full refund cannot overlap any active refund. Selecting all remaining quantities is supported after partial returns.
+- Immutable original-transaction line records, original sale accounts, source permissions, period locks, UUID idempotence, latest-activity dates and exact source/correction journals protect the flow. UI previews gross/net/tax before recording; ambiguous failures preserve the exact request for retry.
+- Reports and receipt/history distinguish full/partial without changing original PAID totals. Records describe refunds already made, not transfers, terminal capture, statutory credit notes, stock returns, tax returns or historical as-of balances.
 
 ## Remaining implementation and verification
 
@@ -62,7 +69,7 @@ Source: https://tms.taxoman.gov.om/portal/e-invoicing-faq
 2. Extend beyond the implemented VAT-exclusive invoice lines to inclusive pricing and discount/freight handling when agreed. Keep the legal treatment separate from its numeric rate.
 3. Extend immutable gross snapshots to remaining document families. Invoice snapshots and gross totals are implemented. Existing non-tax documents retain their original values; later company configuration changes must not rewrite issued history.
 4. Extend from implemented invoice/POS output and purchase/expense input VAT accounting to agreed remaining workflows. Preserve gross settlements and correction dependencies through additive migrations.
-5. Obtain accountant acceptance for manual purchase eligibility and receipt/return allocations. Review manual expense input-tax eligibility; extend full POS refunds to partial returns and document tax reporting with period locks and source permissions. Unsupported reverse charge, foreign exchange or special treatments must be explicit rather than silently approximated.
+5. Obtain accountant acceptance for manual purchase eligibility and receipt/return allocations. Review manual expense input-tax eligibility; extend document tax reporting and review refund allocation with an accountant with period locks and source permissions. Unsupported reverse charge, foreign exchange or special treatments must be explicit rather than silently approximated.
 6. Full statutory invoice/credit-note fields and numbering, required format/transmission where applicable, and accountant acceptance with real operating scenarios.
 7. Isolated tests for mixed treatments, inclusive/exclusive decimals, gross settlements, returns/corrections, concurrency, direct SQL guard bypass attempts and preservation of historical documents.
 
