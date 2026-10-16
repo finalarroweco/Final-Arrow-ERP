@@ -89,3 +89,10 @@ Apply all 56 migrations before using the cash-shift controls at /pos. Open a bra
 Record only actual cash in/out with a reason/reference. Accounting journal reversals do not automatically move or restore cash in the drawer. Count the real cash at closure and explain any difference; closure is immutable, keeps its own exact snapshot and creates no ledger journal or bank transfer. Refunds of earlier sales belong to the current open shift. Stop before the 5000-event limit, count/close and open another shift as appropriate.
 
 Use isolated CI to verify exact retries, scopes, cashier attribution, atomic source events, insufficient-cash rejection, signed variance, SQL lifecycle/audit guards and payment/close races. Live QA reads the initial shift status and history only; never create financial test records in production. Operational acceptance with the business's real cash-handling process is still required.
+
+
+## Source balance aging — 2026-10-16
+
+Open customer aging from the customer balance register or dashboard, and supplier aging from the supplier balance register or dashboard. Choose the company, original document branch, inclusive as-of journal date and optional party name/code. Age buckets use original posting date in UTC, never an assumed payment due date. Negative document credits stay separate; do not treat net party totals as allocations between sources. Details link to original invoice/receipt settlements. CSV contains summary and document row types; print styles support browser PDF.
+
+No migration is required beyond the existing 56 migrations. Verify in isolated CI that collection/refund and purchase-return/payment corrections change the original document's open amount as of their posting dates without restarting its age. Production checks must remain read-only. Operational acceptance against actual customer/supplier control-account records and payment terms remains required.

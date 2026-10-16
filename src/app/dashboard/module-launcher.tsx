@@ -17,11 +17,11 @@ const groups = [
     ["/purchasing/returns", "Goods returns", "مرتجعات البضائع"],
     ["/accounting/bank", "Bank reconciliation", "التسويات البنكية"],
     ["/accounting/collections", "Customer collections", "تحصيلات العملاء"],
-    ["/accounting/customer-balances", "Customer balances", "أرصدة العملاء"],
+    ["/accounting/customer-balances", "Customer balances", "أرصدة العملاء"], ["/accounting/customer-aging", "Customer aging", "أعمار أرصدة العملاء"],
     ["/accounting/customer-statement", "Customer statements", "كشوف العملاء"],
     ["/purchasing/settlements", "Supplier settlements", "تسويات الموردين"],
     ["/purchasing/supplier-statement", "Supplier statements", "كشوف الموردين"],
-    ["/purchasing/supplier-balances", "Supplier balances", "أرصدة الموردين"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],
+    ["/purchasing/supplier-balances", "Supplier balances", "أرصدة الموردين"], ["/purchasing/supplier-aging", "Supplier aging", "أعمار أرصدة الموردين"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],
   ] },
   { en: "People & operations", ar: "الموظفون والعمليات", links: [
     ["/hr/employees", "Employees", "الموظفون"], ["/hr/attendance", "Attendance", "الحضور"],
