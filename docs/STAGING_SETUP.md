@@ -80,3 +80,12 @@ Apply migration 54 before deploying the partial-refund client. In Refunds / hist
 Use only isolated CI to test out-of-order corrections, sub-mill tax rounding, racing last quantities, same-UUID reordered-line retries, changed-payload conflicts, full/partial overlap, foreign/late/wrong SQL lines, closed periods and exact total recovery. Correcting a record restores its saved quantities/tax, not a newly calculated tax amount. Old UUID retries always replay their original record, even after reversal. Production QA remains read-only; no synthetic sales/refunds or VAT configuration are created.
 
 Unconfirmed full/partial requests use a versioned per-tab session-storage payload scoped to tenant/order, so refreshing the page can restore the same UUID and original lines. Invalid cache payloads are ignored. Definitive responses clear the request; uncertain failures retain it for exact retry. If browser tab storage is unavailable, the open component retains an in-memory retry only.
+
+
+## Cash shifts — 2026-10-16
+
+Apply all 56 migrations before using the cash-shift controls at /pos. Open a branch shift only with an actual counted opening float. One shared shift per branch is supported. Once shifts have been activated, an open shift is required for payments and refunds, including card records. Cash sales contribute the gross order amount, not total tendered; cash refunds subtract their saved gross amount. Card records have zero drawer effect.
+
+Record only actual cash in/out with a reason/reference. Accounting journal reversals do not automatically move or restore cash in the drawer. Count the real cash at closure and explain any difference; closure is immutable, keeps its own exact snapshot and creates no ledger journal or bank transfer. Refunds of earlier sales belong to the current open shift. Stop before the 5000-event limit, count/close and open another shift as appropriate.
+
+Use isolated CI to verify exact retries, scopes, cashier attribution, atomic source events, insufficient-cash rejection, signed variance, SQL lifecycle/audit guards and payment/close races. Live QA reads the initial shift status and history only; never create financial test records in production. Operational acceptance with the business's real cash-handling process is still required.
