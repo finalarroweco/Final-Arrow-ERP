@@ -9,7 +9,7 @@ import {posShiftAction as schema} from "@/lib/pos-shift";
 import {queryInput} from "@/lib/ledger";
 const uuid=z.string().uuid();
 class ShiftConflict extends Error{}
-const cell=(value:string)=>'"'+(/^[\s\u0000-\\u001f]*[=+@-]/u.test(value)?"'"+value:value).replaceAll('"','""')+'"';
+const cell=(value:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(value)?`'${value}`:value).replaceAll('"','""')}"`;
 export async function GET(request:Request){
  const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
  const p=posScope.extend({page:z.coerce.number().int().min(0).max(100000).default(0),shiftId:uuid.optional(),format:z.enum(["json","csv"]).default("json")}).safeParse(queryInput(new URL(request.url).searchParams,["tenantId","companyId","branchId","page","shiftId","format"]));if(!p.success)return NextResponse.json({error:"Invalid shift filters"},{status:400});const {tenantId,companyId,branchId,page,shiftId,format}=p.data;
