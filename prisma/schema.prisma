@@ -378,6 +378,7 @@ model Customer {
   createdBy      String       @db.Uuid
   company        Company      @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   branch         Branch?      @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
+  contacts       CustomerContact[]
   convertedLeads Lead[]
   quotes         Quote[]
   orders         SalesOrder[]
@@ -890,6 +891,8 @@ model LeaveRequest {
 }
 
 model Ticket {
+  messages TicketMessage[]
+  @@unique([tenantId,companyId,id])
   id                 String         @id @default(uuid()) @db.Uuid
   tenantId           String         @db.Uuid
   companyId          String         @db.Uuid
@@ -1439,4 +1442,35 @@ model PosShiftEvent {
  order PosOrder? @relation(fields:[orderId],references:[id],onDelete:Restrict)
  refund PosRefund? @relation(fields:[refundId],references:[id],onDelete:Restrict)
  @@index([shiftId,createdAt],map:"PosShiftEvent_shift_created_idx")
+}
+
+model CustomerContact {
+ id String @id @default(uuid()) @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ customerId String @db.Uuid
+ displayName String @db.VarChar(160)
+ email String? @db.VarChar(255)
+ phone String? @db.VarChar(40)
+ title String? @db.VarChar(120)
+ notes String? @db.VarChar(2000)
+ archivedAt DateTime?
+ version Int @default(1)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @default(now())
+ createdBy String @db.Uuid
+ updatedBy String @db.Uuid
+ customer Customer @relation(fields:[tenantId,companyId,customerId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@index([tenantId,customerId,archivedAt,displayName])
+}
+model TicketMessage {
+ id String @id @default(uuid()) @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ ticketId String @db.Uuid
+ body String @db.VarChar(4000)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ ticket Ticket @relation(fields:[tenantId,companyId,ticketId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@index([tenantId,ticketId,createdAt,id])
 }
