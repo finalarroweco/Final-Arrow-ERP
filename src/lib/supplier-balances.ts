@@ -47,7 +47,7 @@ export async function supplierBalances(userId:string,raw:unknown,includeAging=fa
    t.balance=t.balance.plus(g.balance);if(g.balance.gt(0))t.positive=t.positive.plus(g.balance);if(g.balance.lt(0))t.negative=t.negative.plus(g.balance);t.suppliers++;
    return {...g,balance:g.balance.toFixed(3)};
   });
-  return {aging:includeAging?sourceAging(asOf,[...documents.values()]):null,asOf,q,branchId:branchId??null,format,rows,summary:[...totals.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(t=>({...t,balance:t.balance.toFixed(3),positive:t.positive.toFixed(3),negative:t.negative.toFixed(3)}))};
+  return {aging:includeAging?{...sourceAging(asOf,[...documents.values()]),tenantId,companyId,branchId:branchId??null,q}:null,asOf,q,branchId:branchId??null,format,rows,summary:[...totals.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(t=>({...t,balance:t.balance.toFixed(3),positive:t.positive.toFixed(3),negative:t.negative.toFixed(3)}))};
  },{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
 }
 const cell=(v:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(v)?`'${v}`:v).replaceAll('"','""')}"`;
