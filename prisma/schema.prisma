@@ -1129,6 +1129,7 @@ model PosOrderLine {
   order PosOrder @relation(fields: [tenantId,companyId,orderId], references: [tenantId,companyId,id], onDelete: Restrict)
   item PosItem @relation(fields: [tenantId,companyId,itemId], references: [tenantId,companyId,id], onDelete: Restrict)
   @@unique([orderId,position])
+  refundLines PosRefundLine[]
 }
 
 model LoginThrottle {
@@ -1363,6 +1364,8 @@ model PosVat {
 
 model PosRefund {
  id String @id @db.Uuid
+ kind String @default("FULL") @db.VarChar(10)
+ lines PosRefundLine[]
  tenantId String @db.Uuid
  companyId String @db.Uuid
  orderId String @db.Uuid
@@ -1381,4 +1384,16 @@ model PosRefund {
  @@index([tenantId,companyId,orderId])
  @@index([orderId])
  @@index([originalEntryId])
+}
+
+model PosRefundLine {
+ refundId String @db.Uuid
+ orderLineId String @db.Uuid
+ quantity Int
+ netAmount Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ refund PosRefund @relation(fields:[refundId],references:[id],onDelete:Restrict)
+ orderLine PosOrderLine @relation(fields:[orderLineId],references:[id],onDelete:Restrict)
+ @@id([refundId,orderLineId])
+ @@index([orderLineId])
 }
