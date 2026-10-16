@@ -96,3 +96,10 @@ Use isolated CI to verify exact retries, scopes, cashier attribution, atomic sou
 Open customer aging from the customer balance register or dashboard, and supplier aging from the supplier balance register or dashboard. Choose the company, original document branch, inclusive as-of journal date and optional party name/code. Age buckets use original posting date in UTC, never an assumed payment due date. Negative document credits stay separate; do not treat net party totals as allocations between sources. Details link to original invoice/receipt settlements. CSV contains summary and document row types; print styles support browser PDF.
 
 No migration is required beyond the existing 56 migrations. Verify in isolated CI that collection/refund and purchase-return/payment corrections change the original document's open amount as of their posting dates without restarting its age. Production checks must remain read-only. Operational acceptance against actual customer/supplier control-account records and payment terms remains required.
+
+
+## Contacts and internal follow-up — 2026-10-16
+
+Apply all 57 migrations before using the new source links. Open Contacts on a CRM customer; customer read is needed to view, and customer update plus read to manage. Archive the contact rather than deleting it. Restore the customer/contact before edits. Edits require the currently displayed version. Contact records are not login accounts and do not send messages.
+
+Open Internal follow-up on a helpdesk ticket; ticket read is needed to view, and ticket manage plus read to append. Notes are permanent internal records, not outbound customer conversations. Correct mistakes with a new note. Closed tickets are read-only. Both creation flows preserve ambiguous requests per tab for exact retry; if tab storage is unavailable, retry persistence is limited to the mounted component. Do not create demonstration customers, contacts or tickets in production for QA. Use the isolated operational-records flow for all mutations, SQL bypass cases and races. `/release-status` records product gaps and required provider/device/business-rule inputs.

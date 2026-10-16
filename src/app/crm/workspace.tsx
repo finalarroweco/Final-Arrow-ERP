@@ -119,7 +119,7 @@ export function CrmWorkspace({ options, locale }: { options: CompanyOption[]; lo
         </form> : <>
           <div><h3>{customer.displayName}</h3><p>{customer.code} · {branch?.name ?? t("Company-wide", "على مستوى الشركة")}</p>
             <p>{customer.email ?? ""} {customer.phone ?? ""}</p></div>
-          <div className="customer-actions">
+          <div className="customer-actions"><a href={`/crm/contacts?${new URLSearchParams({tenantId:option.tenantId,id:customer.id})}`}>{t("Contacts","جهات الاتصال")}</a>
             {canUpdate && !customer.archivedAt && <button type="button" onClick={() => setEditing(customer.id)}>{t("Edit", "تعديل")}</button>}
             {canArchive && <button type="button" onClick={() => void archive(customer, !customer.archivedAt)}>
               {customer.archivedAt ? t("Restore", "استعادة") : t("Archive", "أرشفة")}

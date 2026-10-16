@@ -3,12 +3,12 @@ import { translate, type Locale } from "@/lib/locale";
 const groups = [
   { en: "Organization", ar: "المؤسسة", links: [
     ["/workspace", "Companies, branches & team", "الشركات والفروع والفريق"],
-    ["/approvals", "Approvals", "الموافقات"], ["/audit", "Activity", "سجل النشاط"],
+    ["/release-status", "Delivery status", "حالة التطوير والمتبقي"], ["/approvals", "Approvals", "الموافقات"], ["/audit", "Activity", "سجل النشاط"],
     ["/settings/security", "Account security", "أمان الحساب"],
     ["/settings/roles", "Roles & permissions", "الأدوار والصلاحيات"],
   ] },
   { en: "Customers & sales", ar: "العملاء والمبيعات", links: [
-    ["/crm", "Customers", "العملاء"], ["/crm/leads", "Leads", "العملاء المحتملون"],
+    ["/crm", "Customers", "العملاء"], ["/crm/contacts", "Customer contacts", "جهات اتصال العملاء"], ["/crm/leads", "Leads", "العملاء المحتملون"],
     ["/sales/quotes", "Quotes", "عروض الأسعار"], ["/sales/orders", "Sales orders", "طلبات البيع"],
   ] },
   { en: "Purchasing & inventory", ar: "المشتريات والمخزون", links: [
@@ -26,7 +26,7 @@ const groups = [
   { en: "People & operations", ar: "الموظفون والعمليات", links: [
     ["/hr/employees", "Employees", "الموظفون"], ["/hr/attendance", "Attendance", "الحضور"],
     ["/hr/leave", "Leave", "الإجازات"], ["/hr/payroll", "Payroll", "الرواتب"],
-    ["/projects", "Projects", "المشاريع"], ["/helpdesk", "Helpdesk", "الدعم الفني"],
+    ["/projects", "Projects", "المشاريع"], ["/helpdesk", "Helpdesk", "الدعم الفني"], ["/helpdesk/messages", "Internal follow-up", "المتابعة الداخلية"],
   ] },
   { en: "Accounting & POS", ar: "المحاسبة ونقاط البيع", links: [
     ["/accounting/vat-settings", "Oman VAT settings", "إعدادات ضريبة عُمان"],
