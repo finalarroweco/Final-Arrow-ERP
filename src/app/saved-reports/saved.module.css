@@ -1,5 +1,5 @@
 .workspace > p { line-height: 1.8; color: #555; }
-.workspace > form { align-items: end; }
+.workspace > form { align-items: end; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
 .workspace input, .workspace select { min-width: 0; width: 100%; }
 .workspace [role="status"]:empty { display: none; }
 .workspace [role="alert"] { padding: 16px; background: #fff4f1; border-radius: 10px; line-height: 1.8; overflow-wrap: anywhere; }
@@ -7,4 +7,4 @@
 .workspace article p { line-height: 1.7; margin-block: 6px; color: #555; font-size: 14px; overflow-wrap: anywhere; }
 .workspace button, .workspace a { max-width: 100%; white-space: normal; }
 .list { display: grid; gap: 16px; }
-@media (max-width: 600px) { .workspace button, .workspace a.button { width: 100%; } }
+@media (max-width: 600px) { .workspace button, .workspace a { width: 100%; } }
