@@ -7,6 +7,7 @@ export default async function ReleaseStatusPage(){
  if(!await currentUser())redirect("/login");const locale=await getLocale(),t=(en:string,ar:string)=>translate(locale,en,ar);
  const groups=[
  {title:t("Implemented workflows","مسارات مطوّرة"),description:t("These modules have scoped application workflows and automated checks. Business acceptance with actual operating rules remains required.","تحتوي هذه الأقسام على مسارات عمل وصلاحيات وفحوص آلية. ما زال اعتمادها مع قواعد العمل الفعلية مطلوبًا."),items:[
+ ["/saved-reports",t("Private reusable presets for customer/supplier balances and posting-date aging","إعدادات خاصة قابلة لإعادة الاستخدام لأرصدة وأعمار العملاء والموردين من تاريخ القيد")],
  ["/data-import",t("CSV import for customers, suppliers and catalog items with preview and atomic audited batches","استيراد العملاء والموردين والأصناف من CSV بمعاينة ودفعات مدققة تُحفظ كاملة")],
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
  ["/purchasing/orders",t("Purchases, partial receipts, returns and source settlements","المشتريات والاستلام الجزئي والمرتجعات والتسويات المرتبطة")],
@@ -21,7 +22,7 @@ export default async function ReleaseStatusPage(){
  ["",t("Inventory: reservations, valuation and supplier advances","المخزون: الحجوزات والتقييم ودفعات الموردين المقدمة")],
  ["",t("Projects: budgets, billing and resource planning","المشاريع: الميزانيات والفوترة وتخطيط الموارد")],
  ["",t("Helpdesk: attachments, notifications, customer portal and SLA rules","الدعم: المرفقات والإشعارات وبوابة العميل وقواعد مستوى الخدمة")],
- ["",t("Management: configurable approval policies and saved reports","الإدارة: سياسات اعتماد قابلة للتهيئة وتقارير محفوظة")],
+ ["",t("Management: configurable approval policies and broader report preset coverage","الإدارة: سياسات اعتماد قابلة للتهيئة وتوسيع أنواع التقارير المحفوظة")],
  ["",t("Finance/POS: inclusive taxes, bank split matching, frozen certificates and multi-drawer supervision","المالية ونقاط البيع: الضريبة الشاملة وتقسيم مطابقة البنك وشهادات التسوية والرقابة على الصناديق المتعددة")],
  ["",t("Planned modules: subscriptions, documents, AI and automation","أقسام مخطط لها: الاشتراكات والمستندات والذكاء الاصطناعي والأتمتة")],
  ["",t("Full translation, accessibility, performance and operational acceptance review","مراجعة الترجمة والإتاحة والأداء واعتماد التشغيل بشكل كامل")]]},
@@ -36,5 +37,5 @@ export default async function ReleaseStatusPage(){
  ["",t("Statutory tax documents, e-invoicing/filing, imports/reverse charge and final closing","المستندات الضريبية النظامية والفوترة والتقديم الإلكتروني والاستيراد والاحتساب العكسي والإقفال النهائي")],
  ["",t("Backup/restore drills, monitoring, network abuse controls and real acceptance scenarios","تجربة النسخ والاستعادة والمراقبة وحماية الشبكة وسيناريوهات اعتماد التشغيل الفعلي")]]}
  ];
- return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale}/><a href="/dashboard">{t("Dashboard","لوحة التحكم")}</a><a href="/workspace">{t("Workspace","مساحة العمل")}</a></header><section className="hero"><p>{t("DELIVERY STATUS · 16 OCT 2026","حالة التسليم · ١٦ أكتوبر ٢٠٢٦")}</p><h1>{t("What is implemented and what remains.","المطوّر والمتبقي في النظام.")}</h1><p>{t("A clear product scope, not a claim that the entire ERP is finished. This is a maintained release checklist, not a live service-health monitor.","نطاق واضح للمنتج، ولا يعني اكتمال نظام ERP بالكامل. هذه قائمة حالة الإصدار وليست شاشة مراقبة فورية للخدمات.")}</p></section>{groups.map(group=><section className="panel" key={group.title}><h2>{group.title}</h2><p>{group.description}</p><ul>{group.items.map(([href,label])=><li key={label}>{href?<a href={href}>{label}</a>:label}</li>)}</ul></section>)}</main>;
+ return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale}/><a href="/dashboard">{t("Dashboard","لوحة التحكم")}</a><a href="/workspace">{t("Workspace","مساحة العمل")}</a></header><section className="hero"><p>{t("DELIVERY STATUS · 18 OCT 2026","حالة التسليم · ١٨ أكتوبر ٢٠٢٦")}</p><h1>{t("What is implemented and what remains.","المطوّر والمتبقي في النظام.")}</h1><p>{t("A clear product scope, not a claim that the entire ERP is finished. This is a maintained release checklist, not a live service-health monitor.","نطاق واضح للمنتج، ولا يعني اكتمال نظام ERP بالكامل. هذه قائمة حالة الإصدار وليست شاشة مراقبة فورية للخدمات.")}</p></section>{groups.map(group=><section className="panel" key={group.title}><h2>{group.title}</h2><p>{group.description}</p><ul>{group.items.map(([href,label])=><li key={label}>{href?<a href={href}>{label}</a>:label}</li>)}</ul></section>)}</main>;
 }

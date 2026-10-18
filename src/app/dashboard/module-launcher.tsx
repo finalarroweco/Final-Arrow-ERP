@@ -4,6 +4,7 @@ const groups = [
   { en: "Organization", ar: "المؤسسة", links: [
     ["/workspace", "Companies, branches & team", "الشركات والفروع والفريق"],
     ["/release-status", "Delivery status", "حالة التطوير والمتبقي"], ["/approvals", "Approvals", "الموافقات"], ["/audit", "Activity", "سجل النشاط"],
+    ["/saved-reports", "My saved reports", "تقاريري المحفوظة"],
     ["/data-import", "Import customers, suppliers & items", "استيراد العملاء والموردين والأصناف"],
     ["/settings/security", "Account security", "أمان الحساب"],
     ["/settings/roles", "Roles & permissions", "الأدوار والصلاحيات"],
