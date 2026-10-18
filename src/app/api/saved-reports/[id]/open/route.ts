@@ -12,6 +12,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const preset = publicReport(await ownedSavedReport(actor.id, search.get("tenantId")!, id));
   if (preset.archivedAt) throw new OperationalError("Restore this saved report before opening it", 409);
   const target = reportTarget({ ...preset, kind: reportKind.parse(preset.kind), dateMode: reportDateMode.parse(preset.dateMode) });
-  return NextResponse.redirect(new URL(target, request.url), { status: 303, headers: { "Cache-Control": "private, no-store" } });
+  return new Response(null, { status: 303, headers: { Location: target, "Cache-Control": "private, no-store" } });
  } catch (error) { const failure = operationalFailure(error); return NextResponse.json({ error: failure.error }, { status: failure.status }); }
 }
