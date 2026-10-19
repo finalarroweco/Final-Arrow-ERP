@@ -28,7 +28,7 @@ const groups = [
   { en: "People & operations", ar: "الموظفون والعمليات", links: [
     ["/hr/employees", "Employees", "الموظفون"], ["/hr/attendance", "Attendance", "الحضور"],
     ["/hr/leave", "Leave", "الإجازات"], ["/hr/payroll", "Payroll", "الرواتب"],
-    ["/projects", "Projects", "المشاريع"], ["/helpdesk", "Helpdesk", "الدعم الفني"], ["/helpdesk/messages", "Internal follow-up", "المتابعة الداخلية"],
+    ["/projects", "Projects", "المشاريع"], ["/helpdesk", "Helpdesk", "الدعم الفني"], ["/helpdesk/deadlines", "Ticket deadlines", "مواعيد التذاكر"], ["/helpdesk/messages", "Internal follow-up", "المتابعة الداخلية"],
   ] },
   { en: "Accounting & POS", ar: "المحاسبة ونقاط البيع", links: [
     ["/accounting/vat-settings", "Oman VAT settings", "إعدادات ضريبة عُمان"],

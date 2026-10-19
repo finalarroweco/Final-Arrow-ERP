@@ -109,7 +109,7 @@ export function HelpdeskWorkspace({ options, locale }: { options: Option[]; loca
     {tickets.map((ticket) => {
       const rights = ticket.branchId ? scope.branches.find((branch) => branch.id === ticket.branchId) : scope.companyRights;
       return <article className="card" key={ticket.id}>
-        <strong>{ticket.number} · {ticket.subject}</strong><p><a href={`/helpdesk/messages?${new URLSearchParams({tenantId:scope.tenantId,id:ticket.id})}`}>{t("Internal follow-up","المتابعة الداخلية")}</a></p>
+        <strong>{ticket.number} · {ticket.subject}</strong><p><a href={`/helpdesk/${ticket.id}/deadlines?tenantId=${scope.tenantId}`}>{t("Deadline and change history", "موعد التذكرة وسجل تغييره")}</a></p><p><a href={`/helpdesk/messages?${new URLSearchParams({tenantId:scope.tenantId,id:ticket.id})}`}>{t("Internal follow-up","المتابعة الداخلية")}</a></p>
         <p>{t(ticket.priority, ({ LOW: "منخفضة", NORMAL: "عادية", HIGH: "مرتفعة", URGENT: "عاجلة" })[ticket.priority])} · {t(ticket.status, ({ OPEN: "مفتوحة", IN_PROGRESS: "قيد التنفيذ", RESOLVED: "محلولة", CLOSED: "مغلقة" })[ticket.status])} · {ticket.branchId ? scope.branches.find((branch) => branch.id === ticket.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>
         <p>{ticket.description}</p>
         {ticket.customerId && <p>{t("Customer:", "العميل:")} {ticket.customerName ?? t("Restricted", "مقيّد")}</p>}
