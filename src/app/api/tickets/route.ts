@@ -1,3 +1,4 @@
+import { ticketDeadlineState } from "@/lib/ticket-deadline-input";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -25,11 +26,12 @@ export async function GET(request: Request) {
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permission: "ticket:read" });
   if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const evaluatedAt = new Date().toISOString();
   const tickets = await db.ticket.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, branchId: true, customerId: true, assigneeEmployeeId: true,
       number: true, subject: true, description: true, priority: true, status: true,
-      resolutionNote: true, createdAt: true,
+      resolutionNote: true, createdAt: true, resolutionDueAt: true, deadlineSequence: true,
       customer: { select: { displayName: true, branchId: true } },
       assignee: { select: { fullName: true, branchId: true } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
@@ -44,10 +46,10 @@ export async function GET(request: Request) {
   const [customerRights, employeeRights] = await Promise.all([
     rights(customerBranches, "customer:read"), rights(employeeBranches, "employee:read")]);
   return NextResponse.json({ tickets: visible.map(({ customer, assignee, ...ticket }) => ({
-    ...ticket,
+    ...ticket, deadlineState: ticketDeadlineState(ticket.status, ticket.resolutionDueAt?.toISOString() ?? null, evaluatedAt),
     customerName: customer && customerRights.get(customer.branchId ?? "") ? customer.displayName : null,
     assigneeName: assignee && employeeRights.get(assignee.branchId ?? "") ? assignee.fullName : null,
-  })), nextPage: tickets.length > 50 ? page.data + 1 : null });
+  })), evaluatedAt, nextPage: tickets.length > 50 ? page.data + 1 : null });
 }
 
 export async function POST(request: Request) {
