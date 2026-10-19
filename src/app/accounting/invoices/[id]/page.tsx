@@ -1,0 +1,23 @@
+import {invoiceGross} from "@/lib/invoice-vat";
+import {settlementInvoice,customerSettlementAllowed,invoiceSettlementState} from "@/lib/customer-settlement";
+import {notFound,redirect} from "next/navigation";
+import {z} from "zod";
+import {currentUser} from "@/lib/auth";
+import {canAccess} from "@/lib/access";
+import {db} from "@/lib/db";
+import {getLocale} from "@/lib/server-locale";
+import {translate} from "@/lib/locale";
+import {PrintReceipt} from "../../../pos/[id]/print";
+import {LanguageSwitcher} from "../../../language-switcher";
+export default async function InvoiceDocument({params}:{params:Promise<{id:string}>}){
+ const actor=await currentUser();if(!actor)redirect("/login");const {id}=await params;if(!z.string().uuid().safeParse(id).success)notFound();
+ const invoice=await db.invoice.findUnique({where:{id},include:{vat:true,company:{select:{name:true}},branch:{select:{name:true}},lines:{orderBy:{position:"asc"}}}});
+ if(!invoice||!(await canAccess({userId:actor.id,tenantId:invoice.tenantId,companyId:invoice.companyId,branchId:invoice.branchId??undefined,permission:"invoice:read"})))notFound();
+ const locale=await getLocale();const t=(en:string,ar:string)=>translate(locale,en,ar);
+ const source=await settlementInvoice(db,invoice.tenantId,id);
+ const settlement=source&&await customerSettlementAllowed(actor.id,source)?await db.$transaction(tx=>invoiceSettlementState(tx,source),{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000}):null;
+ const taxes=(invoice.vat?.details??[]) as {position:number;treatment:"STANDARD"|"ZERO"|"EXEMPT";net:string;tax:string}[];
+ const taxLabels={STANDARD:t("Standard 5%","أساسي ٥٪"),ZERO:t("Zero-rated 0%","صفري ٠٪"),EXEMPT:t("Exempt","معفى")};
+ const stamp=(date:Date)=>`${date.toISOString().replace("T"," ").slice(0,16)} UTC`;
+ return <main><style>{`@media print{.no-print{display:none!important}main{padding:0!important}.panel{border:0!important;box-shadow:none!important}tr{break-inside:avoid}thead{display:table-header-group}}`}</style><header className="no-print"><a href="/accounting/invoices">{t("Back to invoices","العودة للفواتير")}</a><LanguageSwitcher locale={locale}/><a href={`/accounting/invoices/${id}/settlements`}>{t("Collections / refunds","التحصيلات / رد الدفعات")}</a><PrintReceipt label={t("Print / save PDF","طباعة / حفظ PDF")}/></header><section className="panel"><h1>{invoice.vat?.sellerName??invoice.company.name}</h1>{invoice.vat&&<><p>{invoice.vat.sellerAddress}</p><p>{t("VAT registration number","رقم التسجيل الضريبي")}: {invoice.vat.taxNumber}</p></>}<h2>{t("Internal invoice","فاتورة داخلية")}: {invoice.number}</h2><p><strong>{t(invoice.status,{DRAFT:"مسودة — لم تُصدر",ISSUED:"مصدرة",VOID:"ملغاة"}[invoice.status])}</strong></p><p>{t("Customer","العميل")}: {invoice.customerName}</p><p>{t("Branch","الفرع")}: {invoice.branch?.name??t("Company wide","على مستوى الشركة")}</p><p>{t("Created","تاريخ الإنشاء")}: {stamp(invoice.createdAt)}</p>{invoice.issuedAt&&<p>{t("Issued","تاريخ الإصدار")}: {stamp(invoice.issuedAt)}</p>}{invoice.voidedAt&&<p>{t("Voided","تاريخ الإلغاء")}: {stamp(invoice.voidedAt)} · {invoice.voidReason}</p>}<table><thead><tr><th>{t("Description","الوصف")}</th><th>{t("Quantity","الكمية")}</th><th>{t("Unit price","سعر الوحدة")}</th><th>{t("Net amount","المبلغ الصافي")}</th>{invoice.vat&&<><th>{t("VAT treatment","المعالجة الضريبية")}</th><th>{t("VAT","الضريبة")}</th></>}</tr></thead><tbody>{invoice.lines.map(line=><tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitPrice.toFixed(3)}</td><td>{line.amount.toFixed(3)}</td>{invoice.vat&&<><td>{taxLabels[taxes.find(d=>d.position===line.position)!.treatment]}</td><td>{taxes.find(d=>d.position===line.position)!.tax}</td></>}</tr>)}</tbody></table><h2>{t("Subtotal","المجموع الفرعي")}: {invoice.subtotal.toFixed(3)} {invoice.currency}</h2>{invoice.vat&&<><p>{t("VAT","الضريبة")}: {invoice.vat.taxAmount.toFixed(3)} {invoice.currency}</p><h2>{t("Total including VAT","الإجمالي شامل الضريبة")}: {invoiceGross(invoice).toFixed(3)} {invoice.currency}</h2></>}{invoice.notes&&<p>{t("Notes","ملاحظات")}: {invoice.notes}</p>}<p>{invoice.vat?t("Internal billing document with VAT. This is not a statutory electronic invoice.","مستند فوترة داخلي مع الضريبة. ليس فاتورة إلكترونية نظامية."):t("Internal document. No VAT recorded.","مستند داخلي. لا توجد ضريبة مسجّلة.")}</p>{settlement?.original&&!settlement.original.reversed&&<p>{t("Net collected","صافي التحصيل")}: {settlement.collected.toFixed(3)} {invoice.currency} · {t("Outstanding balance","الرصيد المتبقي")}: {settlement.balance.toFixed(3)} {invoice.currency}</p>}</section></main>;
+}
