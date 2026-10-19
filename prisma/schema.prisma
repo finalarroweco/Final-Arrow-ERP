@@ -908,6 +908,10 @@ model LeaveRequest {
 }
 
 model Ticket {
+  resolutionDueAt DateTime? @db.Timestamptz(3)
+  deadlineSequence Int @default(0)
+  deadlineChanges TicketDeadlineChange[]
+  @@index([tenantId,companyId,branchId,status,resolutionDueAt,id])
   messages TicketMessage[]
   @@unique([tenantId,companyId,id])
   id                 String         @id @default(uuid()) @db.Uuid
@@ -1571,4 +1575,20 @@ model SavedReport {
  branch Branch? @relation(fields:[tenantId,companyId,branchId],references:[tenantId,companyId,id],onDelete:Restrict)
  owner Membership @relation(fields:[tenantId,ownerId],references:[tenantId,userId],onDelete:Restrict)
  @@index([tenantId,ownerId,companyId,archivedAt,updatedAt,id])
+}
+
+model TicketDeadlineChange {
+ id String @id @default(uuid()) @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ ticketId String @db.Uuid
+ sequence Int
+ dueAt DateTime? @db.Timestamptz(3)
+ reason String @db.VarChar(1000)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ ticket Ticket @relation(fields:[tenantId,companyId,ticketId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([ticketId,sequence])
+ @@index([tenantId,ticketId,sequence])
 }
