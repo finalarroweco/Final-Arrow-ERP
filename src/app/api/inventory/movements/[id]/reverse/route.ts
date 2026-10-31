@@ -39,6 +39,9 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
       if(existing)throw new StockConflict("Movement is already reversed or is itself a reversal");
       const delta=original.delta.negated(),max=new Prisma.Decimal("999999999999999.999");
       if(delta.eq(0))throw new StockConflict("A zero movement cannot be reversed");
+      await tx.$queryRaw`SELECT id FROM "StockBalance" WHERE id=${original.balanceId}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+      const current=await tx.stockBalance.findUniqueOrThrow({where:{id:original.balanceId}});
+      if(delta.lt(0)&&current.quantity.minus(current.reservedQuantity).lt(delta.negated()))throw new StockConflict("Insufficient available stock. Release reservations before reversing held goods.");
       const changed=await tx.stockBalance.updateMany({where:{id:original.balanceId,tenantId,
         quantity:delta.lt(0)?{gte:delta.negated()}:{lte:max.minus(delta)}},data:{quantity:{increment:delta}}});
       if(changed.count!==1)throw new StockConflict("Insufficient stock or balance limit reached");

@@ -81,6 +81,9 @@ export async function POST(request: Request) {
     const result = await db.$transaction(async (tx) => {
     const balance = await tx.stockBalance.upsert({ where: { tenantId_companyId_branchId_itemId: {
       tenantId, companyId, branchId, itemId } }, create: { tenantId, companyId, branchId, itemId }, update: {} });
+    await tx.$queryRaw`SELECT id FROM "StockBalance" WHERE id=${balance.id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+    const current=await tx.stockBalance.findUniqueOrThrow({where:{id:balance.id}});
+    if(action==="out"&&current.quantity.minus(current.reservedQuantity).lt(amount))throw new StockConflict();
     const changed = await tx.stockBalance.updateMany({ where: { id: balance.id,
       quantity: action === "out" ? { gte: amount } : { lte: max.sub(amount) } },
       data: { quantity: { increment: delta } } });
@@ -96,7 +99,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2004","P2010","P2034"].includes(error.code)) return NextResponse.json({error:"Stock is reserved or insufficient. Release reservations before removing stock."},{status:409});
     if (error instanceof StockConflict)
-      return NextResponse.json({ error: "Insufficient stock or balance limit reached" }, { status: 409 });
+      return NextResponse.json({ error: "Insufficient available stock or balance limit reached. Release reservations before removing held stock." }, { status: 409 });
     throw error;
   }
 }

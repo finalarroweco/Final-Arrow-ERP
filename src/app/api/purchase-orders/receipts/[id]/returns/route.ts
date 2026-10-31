@@ -38,6 +38,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
    const header=await tx.goodsReturn.create({data:{id:requestId,tenantId,receiptId:id,reason,createdBy:actor.id}});
    for(const source of sources.sort((a,b)=>a.id.localeCompare(b.id))){
     const quantity=lines.find(l=>l.receiptLineId===source.id)!.quantity;
+    const current=await tx.stockBalance.findUniqueOrThrow({where:{id:source.movement!.balanceId}});
+    if(current.quantity.minus(current.reservedQuantity).lt(quantity))throw new ReturnConflict("Insufficient available stock. Release reservations before returning held goods.");
     const changed=await tx.stockBalance.updateMany({where:{id:source.movement!.balanceId,tenantId,quantity:{gte:quantity}},data:{quantity:{decrement:quantity}}});
     if(changed.count!==1)throw new ReturnConflict("Insufficient stock in the receiving branch");
     const line=await tx.goodsReturnLine.create({data:{tenantId,receiptId:id,returnId:header.id,receiptLineId:source.id,quantity}});

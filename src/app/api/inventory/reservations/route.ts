@@ -32,6 +32,9 @@ export async function POST(request:Request){
    if(saved){if(saved.tenantId!==tenantId||saved.balanceId!==source.id||saved.createdBy!==actor.id||!saved.quantity.equals(input.quantity)||saved.reference!==input.reference)throw new ReservationConflict("Request ID was used for different reservation details");return saved;}
    const current=await tx.stockBalance.findUniqueOrThrow({where:{id:source.id}});
    if(current.quantity.minus(current.reservedQuantity).lt(input.quantity))throw new ReservationConflict("Insufficient available stock. Release existing reservations first.");
+   const item=await tx.inventoryItem.findUniqueOrThrow({where:{id:source.itemId},select:{archivedAt:true,tenantId:true,companyId:true,branchId:true}});
+   if(item.archivedAt||item.tenantId!==tenantId||item.companyId!==companyId||(item.branchId&&item.branchId!==branchId))throw new ReservationConflict("Item is archived or outside this branch");
+   if(await tx.stockReservation.count({where:{tenantId,balanceId:source.id}})>=5000)throw new ReservationConflict("Reservation history limit reached for this stock balance");
    const savedNew=await tx.stockReservation.create({data:{id:input.requestId,tenantId,balanceId:source.id,quantity:input.quantity,reference:input.reference,createdBy:actor.id}});
    await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:"inventory-stock.reserved",entity:"StockReservation",entityId:savedNew.id,metadata:{balanceId:source.id,transactionId:savedNew.creationTransaction,quantity:savedNew.quantity.toFixed(3),reference:input.reference}}});
    return savedNew;
