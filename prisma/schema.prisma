@@ -709,6 +709,7 @@ model SalesOrderLine {
 }
 
 model Invoice {
+ projectLinks ProjectInvoiceLink[]
   paymentTerms String? @db.VarChar(120)
   paymentDueDate DateTime? @db.Date
   id           String        @id @default(uuid()) @db.Uuid
@@ -760,6 +761,7 @@ model InvoiceLine {
 }
 
 model Project {
+ invoiceLinks ProjectInvoiceLink[]
   budgetEvents ProjectBudgetEvent[]
   id          String        @id @default(uuid()) @db.Uuid
   tenantId    String        @db.Uuid
@@ -1640,4 +1642,25 @@ model ProjectBudgetEvent {
  @@unique([tenantId,companyId,projectId,id])
  @@unique([projectId,sequence])
  @@index([tenantId,projectId,sequence])
+}
+
+model ProjectInvoiceLink {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ projectId String @db.Uuid
+ invoiceId String @db.Uuid
+ note String @db.VarChar(300)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ unlinkRequestId String? @unique @db.Uuid
+ unlinkedBy String? @db.Uuid
+ unlinkedAt DateTime? @db.Timestamptz(3)
+ unlinkReason String? @db.VarChar(300)
+ unlinkTransaction String?
+ project Project @relation(fields:[tenantId,companyId,projectId],references:[tenantId,companyId,id],onDelete:Restrict)
+ invoice Invoice @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@index([tenantId,projectId,createdAt,id])
+ @@index([invoiceId,unlinkedAt])
 }
