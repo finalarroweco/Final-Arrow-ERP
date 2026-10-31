@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     db.inventoryItem.findMany({ where: { tenantId: where.tenantId, companyId: where.companyId,
       branchId: { in: [where.branchId] }, archivedAt: null },
       select: { id: true, sku: true, name: true, unit: true }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 200 }),
-    db.stockBalance.findMany({ where, select: { itemId: true, quantity: true,
+    db.stockBalance.findMany({ where, select: { itemId: true, quantity: true,reservedQuantity:true,
       item: { select: { sku: true, name: true, unit: true, archivedAt: true } } }, orderBy: { item: { name: "asc" } } }),
     db.stockMovement.findMany({ where: { tenantId: where.tenantId, balance: where },
       select: { id: true, type: true, delta: true, reason: true, createdAt: true,
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
     isReversal: reversalEvents.some(event => event.entityId === movement.id && event.action === "inventory-stock.reversal-created"),
   }));
   return NextResponse.json({ items: [...items, ...sharedItems].sort((a, b) => a.name.localeCompare(b.name)),
-    balances, movements: decorated }, { headers: { "Cache-Control": "private, no-store" } });
+    balances:balances.map(b=>({...b,reservedQuantity:b.reservedQuantity.toFixed(3),availableQuantity:b.quantity.minus(b.reservedQuantity).toFixed(3)})), movements: decorated }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -94,6 +94,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ balance: result }, { status: 201 });
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2004","P2010","P2034"].includes(error.code)) return NextResponse.json({error:"Stock is reserved or insufficient. Release reservations before removing stock."},{status:409});
     if (error instanceof StockConflict)
       return NextResponse.json({ error: "Insufficient stock or balance limit reached" }, { status: 409 });
     throw error;

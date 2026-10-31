@@ -53,6 +53,6 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
       return {movement,balance:await tx.stockBalance.findUnique({where:{id:original.balanceId},select:{itemId:true,quantity:true}})};
     },{timeout:15000,maxWait:10000});
     return NextResponse.json(result,{status:201});
-  }catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")return NextResponse.json({error:"Movement already reversed"},{status:409});if(error instanceof StockConflict)return NextResponse.json({error:error.message},{status:409});throw error;}
+  }catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError && ["P2004","P2010","P2034"].includes(error.code))return NextResponse.json({error:"Stock is reserved or insufficient. Release reservations before reversing this movement."},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")return NextResponse.json({error:"Movement already reversed"},{status:409});if(error instanceof StockConflict)return NextResponse.json({error:error.message},{status:409});throw error;}
 }
 

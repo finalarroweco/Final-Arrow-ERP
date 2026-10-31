@@ -1615,4 +1615,5 @@ model StockReservation {
  releaseTransaction String?
  balance StockBalance @relation(fields:[tenantId,balanceId],references:[tenantId,id],onDelete:Restrict)
  @@index([tenantId,balanceId,createdAt,id])
+ @@index([balanceId,releasedAt])
 }

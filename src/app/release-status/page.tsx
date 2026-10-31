@@ -12,6 +12,7 @@ export default async function ReleaseStatusPage(){
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
  ["/purchasing/orders",t("Purchases, partial receipts, returns and source settlements","المشتريات والاستلام الجزئي والمرتجعات والتسويات المرتبطة")],
  ["/accounting/ledger",t("Source journals, corrections, period locks and financial reports","قيود المستندات والعكس وإقفال الفترات والتقارير المالية")],
+ ["/inventory/stock",t("Manual stock reservations, available quantities and permanent release history","حجز المخزون اليدوي والكميات المتاحة وسجل فك الحجز الدائم")],
  ["/accounting/customer-overdue",t("Explicit payment terms and customer/supplier due-date aging for new documents","شروط الدفع الصريحة وتقارير استحقاقات العملاء والموردين للمستندات الجديدة")],
  ["/accounting/customer-aging",t("Customer and supplier balances, statements and posting-date aging","أرصدة وكشوف العملاء والموردين وأعمار الأرصدة من تاريخ القيد")],
  ["/pos",t("POS, saved VAT, full/partial refunds, drawer shifts and cash counting","نقاط البيع والضريبة المحفوظة والاسترداد الكامل والجزئي وورديات الصندوق والعدّ")],
@@ -21,7 +22,7 @@ export default async function ReleaseStatusPage(){
  ["/helpdesk",t("Ticket workflow and permanent internal follow-up","مسار التذاكر وسجل المتابعة الداخلية الدائم")]]},
  {title:t("Remaining product development","تطوير منتج متبقٍ"),description:t("These items require additional implementation and verification; existing module screens do not mean these capabilities are complete.","تحتاج هذه البنود إلى تنفيذ وفحص إضافيين؛ وجود شاشة القسم لا يعني اكتمال هذه الإمكانات."),items:[
  ["",t("Sales: payment-term templates, audited renegotiation/legacy due dates and unallocated advances","المبيعات: قوالب شروط الدفع وتعديل الاتفاقات ومواعيد المستندات القديمة بسجل تدقيق والدفعات غير المخصصة")],
- ["",t("Inventory: reservations, valuation and supplier advances","المخزون: الحجوزات والتقييم ودفعات الموردين المقدمة")],
+ ["",t("Inventory: sales-order allocations/fulfilment, valuation and supplier advances","المخزون: تخصيص أوامر البيع وتنفيذها والتقييم ودفعات الموردين المقدمة")],
  ["",t("Projects: budgets, billing and resource planning","المشاريع: الميزانيات والفوترة وتخطيط الموارد")],
  ["",t("Helpdesk: attachments, notifications, customer portal and SLA rules","الدعم: المرفقات والإشعارات وبوابة العميل وقواعد مستوى الخدمة")],
  ["",t("Management: configurable approval policies and broader report preset coverage","الإدارة: سياسات اعتماد قابلة للتهيئة وتوسيع أنواع التقارير المحفوظة")],

@@ -25,6 +25,6 @@ export default async function StockPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/inventory/items">{t("Items", "الأصناف")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("INVENTORY", "المخزون")}</p><h1>{t("Branch stock.", "مخزون الفروع.")}</h1><p className="sub">{t("Balances and manual stock adjustments by branch.", "الأرصدة والتسويات اليدوية لكل فرع.")}</p></section>
-    <StockWorkspace options={options} locale={locale} />
+    <StockWorkspace actorId={user.id} options={options} locale={locale} />
   </main>;
 }

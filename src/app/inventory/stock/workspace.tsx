@@ -1,17 +1,18 @@
 "use client";
 
+import {StockReservations} from "./reservations";
 import {StockReport} from "./report";
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 type Option = { tenantId: string; companyId: string; branchId: string; label: string; canAdjust: boolean };
 type Item = { id: string; sku: string; name: string; unit: string };
-type Balance = { itemId: string; quantity: string;
+type Balance = { itemId: string; quantity: string; reservedQuantity:string;availableQuantity:string;
   item: { sku: string; name: string; unit: string; archivedAt: string | null } };
 type Movement = { returnId:string|null; hasReturns:boolean; receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT" | "PURCHASE_RETURN"; delta: string;
   reason: string; createdAt: string; balance: { item: Item } };
 
-export function StockWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
+export function StockWorkspace({ options, locale,actorId }: { actorId:string;options: Option[]; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [reportVersion,setReportVersion]=useState(0);
   const [selected, setSelected] = useState(0);
@@ -36,7 +37,7 @@ export function StockWorkspace({ options, locale }: { options: Option[]; locale:
     setItems(data.items); setBalances(data.balances); setMovements(data.movements); setError("");
     } catch { if (request === requestNumber.current) setError(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
-  useEffect(() => { void load(selected); }, [load, selected]);
+  useEffect(() => { void load(selected); }, [load, selected,reportVersion]);
   async function adjust(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!scope) return;
@@ -83,8 +84,9 @@ export function StockWorkspace({ options, locale }: { options: Option[]; locale:
     <StockReport key={`${scope.branchId}:${reportVersion}`} scope={{tenantId:scope.tenantId,companyId:scope.companyId,branchId:scope.branchId}} items={[...new Map([...items,...balances.map(balance=>({id:balance.itemId,...balance.item}))].map(item=>[item.id,item])).values()]} locale={locale}/>
     <h2>{t("Balances", "الأرصدة")}</h2><div className="customer-list">{balances.map((balance) => <article key={balance.itemId}>
       <div><h3>{balance.item.name}</h3><p>{balance.item.sku}{balance.item.archivedAt ? t(" · archived", " · مؤرشف") : ""}</p></div>
-      <strong>{balance.quantity} {balance.item.unit}</strong>
+      <strong>{t("Physical","الفعلي")}: {balance.quantity} · {t("Reserved","المحجوز")}: {balance.reservedQuantity} · {t("Available","المتاح")}: {balance.availableQuantity} {balance.item.unit}</strong>
     </article>)}</div>{!balances.length && <p>{t("No stock balances recorded in this branch.", "لا توجد أرصدة مسجلة لهذا الفرع.")}</p>}
+    <StockReservations key={`${actorId}:${scope.tenantId}:${scope.companyId}:${scope.branchId}`} actorId={actorId} scope={scope} canAdjust={scope.canAdjust} items={balances.filter(b=>!b.item.archivedAt).map(b=>({id:b.itemId,...b.item}))} locale={locale} onSaved={()=>setReportVersion(v=>v+1)}/>
     <h2>{t("Recent movements", "الحركات الأخيرة")}</h2><p>{t("A reversal records the full opposite quantity today, keeping the original movement. Receipt reversals affect stock only; supplier credits and refunds remain separate.", "يسجّل العكس كامل الكمية المقابلة بتاريخ اليوم مع الاحتفاظ بالحركة الأصلية. عكس الاستلام يؤثر على المخزون فقط؛ إشعارات المورد والمبالغ المستردة منفصلة.")}</p><div className="customer-list">{movements.map((movement) => <article key={movement.id}>
       <div><h3>{movement.balance.item.name}</h3><p>{movement.reason} · {new Date(movement.createdAt).toLocaleString()}</p></div>
       <strong>{movement.delta} {movement.balance.item.unit}</strong>
