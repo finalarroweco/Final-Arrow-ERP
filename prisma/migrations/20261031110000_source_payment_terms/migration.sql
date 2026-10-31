@@ -13,4 +13,8 @@ BEGIN
 END $$;
 CREATE TRIGGER invoice_payment_terms_immutable BEFORE UPDATE ON "Invoice" FOR EACH ROW EXECUTE FUNCTION erp_guard_source_payment_terms();
 CREATE TRIGGER receipt_payment_terms_immutable BEFORE UPDATE ON "GoodsReceipt" FOR EACH ROW EXECUTE FUNCTION erp_guard_source_payment_terms();
-REVOKE ALL ON FUNCTION erp_guard_source_payment_terms() FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION erp_guard_source_payment_terms() FROM PUBLIC;
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN EXECUTE 'REVOKE ALL ON FUNCTION erp_guard_source_payment_terms() FROM anon'; END IF;
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN EXECUTE 'REVOKE ALL ON FUNCTION erp_guard_source_payment_terms() FROM authenticated'; END IF;
+END $$;
