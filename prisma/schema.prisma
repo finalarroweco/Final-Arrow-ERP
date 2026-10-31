@@ -458,6 +458,8 @@ model InventoryItem {
 }
 
 model StockBalance {
+  reservedQuantity Decimal @default(0) @db.Decimal(18,3)
+  reservations StockReservation[]
   id        String          @id @default(uuid()) @db.Uuid
   tenantId  String          @db.Uuid
   companyId String          @db.Uuid
@@ -1595,4 +1597,22 @@ model TicketDeadlineChange {
  ticket Ticket @relation(fields:[tenantId,companyId,ticketId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@unique([ticketId,sequence])
  @@index([tenantId,ticketId,sequence])
+}
+
+model StockReservation {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ balanceId String @db.Uuid
+ quantity Decimal @db.Decimal(18,3)
+ reference String @db.VarChar(120)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ releaseRequestId String? @unique @db.Uuid
+ releasedBy String? @db.Uuid
+ releasedAt DateTime? @db.Timestamptz(3)
+ releaseReason String? @db.VarChar(200)
+ releaseTransaction String?
+ balance StockBalance @relation(fields:[tenantId,balanceId],references:[tenantId,id],onDelete:Restrict)
+ @@index([tenantId,balanceId,createdAt,id])
 }
