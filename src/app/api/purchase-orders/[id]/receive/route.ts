@@ -5,8 +5,9 @@ import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
 import { db } from "@/lib/db";
 
+import {paymentTermsInput,paymentTermsData} from "@/lib/payment-terms";
 const uuid = z.string().uuid();
-const schema = z.object({ tenantId: uuid, branchId: uuid, requestId: uuid.optional(),
+const schema = z.object({ tenantId: uuid, paymentTerms:paymentTermsInput.optional(), branchId: uuid, requestId: uuid.optional(),
   lines: z.array(z.object({ orderLineId: uuid, itemId: uuid,
     quantity: z.number().int().min(1).max(100000).optional() }).strict()).min(1).max(50),
 }).strict().refine(v => !v.lines.some(l => l.quantity !== undefined) ||
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
     return NextResponse.json({ error: "Invalid receipt: partial quantities require a request ID and whole units" }, { status: 400 });
-  const { tenantId, branchId, lines, requestId } = parsed.data;
+  const { tenantId, branchId, lines, requestId,paymentTerms } = parsed.data;
   const order = await db.purchaseOrder.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
   if (!order) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
@@ -50,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const saved = await tx.goodsReceipt.findUnique({where:{id:requestId},include:{lines:true}});
         if (saved) {
           if (saved.tenantId!==tenantId || saved.companyId!==companyId || saved.orderId!==id || saved.branchId!==branchId ||
-            saved.lines.length!==quantities.length || saved.lines.some(l => !quantities.some(q => q.orderLineId===l.orderLineId && q.itemId===l.itemId && l.quantity.equals(q.quantity))))
+            saved.paymentTerms!==(paymentTerms?.label??null) || saved.paymentDueDate?.toISOString().slice(0,10)!==paymentTerms?.dueDate || saved.lines.length!==quantities.length || saved.lines.some(l => !quantities.some(q => q.orderLineId===l.orderLineId && q.itemId===l.itemId && l.quantity.equals(q.quantity))))
             throw new ReceiptConflict("Request ID was already used for a different receipt");
           return {receipt:saved,orderStatus:current.status,replayed:true};
         }
@@ -67,7 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const items=await tx.inventoryItem.findMany({where:{tenantId,companyId,id:{in:itemIds}},select:{id:true,branchId:true,archivedAt:true}});
       if (items.length!==itemIds.length || items.some(item=>item.archivedAt || (item.branchId && item.branchId!==branchId)))
         throw new ReceiptConflict("Item is archived or outside receiving branch");
-      const receipt=await tx.goodsReceipt.create({data:{...(requestId?{id:requestId}:{}),tenantId,companyId,branchId,orderId:id,createdBy:actor.id}});
+      const receipt=await tx.goodsReceipt.create({data:{...(requestId?{id:requestId}:{}),tenantId,companyId,branchId,orderId:id,createdBy:actor.id,...paymentTermsData(paymentTerms)}});
       // Consistent item ordering prevents competing orders from acquiring stock locks in opposite order.
       for (const line of quantities.sort((a,b)=>a.itemId.localeCompare(b.itemId)||a.orderLineId.localeCompare(b.orderLineId))) {
         const quantity=new Prisma.Decimal(line.quantity),itemId=line.itemId;
@@ -80,7 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const remaining=await tx.purchaseOrderLine.findMany({where:{tenantId,orderId:id},select:{quantity:true,receivedQuantity:true}});
       const complete=remaining.every(l=>l.quantity===l.receivedQuantity);
       if (complete) await tx.purchaseOrder.update({where:{id},data:{status:"RECEIVED",receivedAt:new Date()}});
-      await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:complete?"purchase-order.received":"purchase-order.partially_received",entity:"PurchaseOrder",entityId:id,metadata:{receiptId:receipt.id,branchId,complete}}});
+      await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:complete?"purchase-order.received":"purchase-order.partially_received",entity:"PurchaseOrder",entityId:id,metadata:{paymentTerms:paymentTerms??null,receiptId:receipt.id,branchId,complete}}});
       return {receipt:await tx.goodsReceipt.findUniqueOrThrow({where:{id:receipt.id},include:{lines:true}}),orderStatus:complete?"RECEIVED":"ISSUED",replayed:false};
     },{timeout:20000,maxWait:10000});
     return NextResponse.json(result,{status:201});

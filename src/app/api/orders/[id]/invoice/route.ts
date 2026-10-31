@@ -5,8 +5,9 @@ import { canAccess } from "@/lib/access";
 import { db } from "@/lib/db";
 
 import {vatChoices,calculateInvoiceVat,VatConflict} from "@/lib/invoice-vat";
+import {paymentTermsInput,paymentTermsData} from "@/lib/payment-terms";
 const uuid = z.string().uuid();
-const schema = z.object({ tenantId: uuid,
+const schema = z.object({ tenantId: uuid, paymentTerms:paymentTermsInput.optional(),
   vat:vatChoices.optional(), number: z.string().trim().regex(/^[A-Z0-9-]{2,30}$/) }).strict();
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
     return NextResponse.json({ error: "Invalid invoice" }, { status: 400 });
-  const { tenantId, number,vat } = parsed.data;
+  const { tenantId, number,vat,paymentTerms } = parsed.data;
   const order = await db.salesOrder.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
   if (!order) return NextResponse.json({ error: "Sales order not found" }, { status: 404 });
@@ -36,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!source || source.status !== "COMPLETED") return null;
       const invoice = await tx.invoice.create({ data: { tenantId, companyId: source.companyId,
         branchId: source.branchId, customerId: source.customerId, orderId: source.id,
-        number, customerName: source.customerName, currency: source.currency,
+        ...paymentTermsData(paymentTerms), number, customerName: source.customerName, currency: source.currency,
         subtotal: source.subtotal, notes: source.notes, createdBy: actor.id,
         lines: { create: source.lines.map((line) => ({ position: line.position,
           description: line.description, quantity: line.quantity,
@@ -44,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if(taxable&&vat&&profile){if(source.currency!=="OMR")throw new VatConflict("Oman VAT currently requires OMR");const calculated=calculateInvoiceVat(source.lines,vat);await tx.invoiceVat.create({data:{invoiceId:invoice.id,tenantId,companyId:source.companyId,...calculated,outputAccountId:profile.outputAccountId!,taxNumber:profile.taxNumber!,sellerName:profile.sellerName!,sellerAddress:profile.sellerAddress!}});}
       await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: "invoice.created",
         entity: "Invoice", entityId: invoice.id,
-        metadata: { orderId: source.id, subtotal: source.subtotal.toString(), currency: source.currency } } });
+        metadata: { paymentTerms:paymentTerms??null, orderId: source.id, subtotal: source.subtotal.toString(), currency: source.currency } } });
       return tx.invoice.findUniqueOrThrow({where:{id:invoice.id},include:{lines:true,vat:true}});
     });
     if (!invoice) return NextResponse.json({ error: "Sales order must be completed" }, { status: 409 });

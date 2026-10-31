@@ -26,7 +26,7 @@ test("partial receipts are bounded, atomic, scoped and replay-safe",{timeout:900
   async function purchase(number,quantities=[5,4]){const {order}=await create("/api/purchase-orders",{companyId,branchId:branch.id,supplierId:supplier.id,number,lines:quantities.map((quantity,i)=>({description:`Delivery line ${i}`,quantity,unitPrice:"1.125"}))});assert.equal((await call(`/api/purchase-orders/${order.id}/status`,"PATCH",{tenantId,action:"issue"},cookie)).status,200);return order;}
   const order=await purchase("PO-PART"),path=`/api/purchase-orders/${order.id}/receive`;
   const lineA=order.lines.find(l=>l.position===0),lineB=order.lines.find(l=>l.position===1);
-  const body={tenantId,branchId:branch.id,requestId:randomUUID(),lines:[{orderLineId:lineA.id,itemId:itemA.id,quantity:2}]};
+  const body={paymentTerms:{label:"Net 30",dueDate:"2026-12-31"},tenantId,branchId:branch.id,requestId:randomUUID(),lines:[{orderLineId:lineA.id,itemId:itemA.id,quantity:2}]};
   assert.equal((await call(path,"POST",body)).status,401);
   assert.equal((await call(path,"POST",body,outsider.cookie)).status,403);
   const invitation=await create("/api/invitations",{email:`part-view-${randomUUID().slice(0,8)}@example.invalid`,role:"Viewer",scope:{type:"BRANCH",companyId,branchId:branch.id}});
@@ -45,8 +45,9 @@ test("partial receipts are bounded, atomic, scoped and replay-safe",{timeout:900
   const {company:other}=await create("/api/companies",{name:"Foreign",code:"FOREIGN"});
   const {item:foreignItem}=await create("/api/inventory/items",{companyId:other.id,sku:"FOREIGN",name:"Foreign item",unit:"unit"});
   assert.equal((await call(path,"POST",{...body,lines:[{...body.lines[0],itemId:foreignItem.id}]},cookie)).status,409);
+  for(const terms of [{label:"x",dueDate:"2026-12-31"},{label:"Net 30",dueDate:"2026-02-30"},{label:"Net 30"}])assert.equal((await call(path,"POST",{...body,paymentTerms:terms},cookie)).status,400);
   const first=await Promise.all([call(path,"POST",body,cookie),call(path,"POST",body,cookie)]);
-  assert.deepEqual(first.map(r=>r.status),[201,201]);
+  assert.deepEqual(first.map(r=>r.status),[201,201]);assert.equal(first[0].data.receipt.paymentDueDate.slice(0,10),"2026-12-31");assert.equal((await call(path,"POST",{...body,paymentTerms:{label:"Changed",dueDate:"2026-12-31"}},cookie)).status,409);assert.equal((await call(path,"POST",{...body,paymentTerms:undefined},cookie)).status,409);
   assert.deepEqual(first.map(r=>r.data.replayed).sort(),[false,true]);
   assert.ok(first.every(r=>r.data.receipt.id===body.requestId&&r.data.orderStatus==="ISSUED"));
   assert.equal(await db.goodsReceipt.count({where:{orderId:order.id}}),1);

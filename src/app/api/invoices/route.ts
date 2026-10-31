@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   const invoices = await db.invoice.findMany({ where: { tenantId: tenantId.data,
     companyId: companyId.data, ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, orderId: true, customerName: true, branchId: true,
-      status: true, issuedAt: true, voidedAt: true, voidReason: true,
+      paymentTerms:true,paymentDueDate:true,status: true, issuedAt: true, voidedAt: true, voidReason: true,
       currency: true, subtotal: true, createdAt: true, vat:{select:{taxAmount:true}},
       lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },

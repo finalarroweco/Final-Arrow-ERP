@@ -1,5 +1,7 @@
 "use client";
 
+import {paymentTermsInput} from "@/lib/payment-terms";
+import {PaymentTermsFields} from "../../payment-terms-fields";
 import {FinancialReport} from "@/app/accounting/financial-report";
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -13,7 +15,7 @@ type Order = { id: string; number: string; supplierName: string; branchId: strin
   receipts: { id: string; branchId: string; createdAt: string }[];
   _count: { receipts: number };
   lines: { id: string; description: string; quantity: number; receivedQuantity: number; unitPrice: string; amount: string }[] };
-type ReceiptRequest={tenantId:string;branchId:string;requestId:string;lines:{orderLineId:string;itemId:string;quantity:number}[]};
+type ReceiptRequest={paymentTerms?:{label:string;dueDate:string};tenantId:string;branchId:string;requestId:string;lines:{orderLineId:string;itemId:string;quantity:number}[]};
 type Item = { id: string; sku: string; name: string; unit: string };
 
 export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]; locale: Locale }) {
@@ -99,7 +101,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
     receiptRequest.current=null;setReceiptPending(false);
     try{
       const saved=JSON.parse(sessionStorage.getItem(receiptStorageKey(order))??"null") as ReceiptRequest|null;
-      if(saved&&saved.tenantId===scope.tenantId&&typeof saved.requestId==="string"&&typeof saved.branchId==="string"&&Array.isArray(saved.lines)&&saved.lines.length&&saved.lines.every(l=>order.lines.some(o=>o.id===l.orderLineId)&&typeof l.itemId==="string"&&Number.isInteger(l.quantity)&&l.quantity>0)){
+      if(saved&&(!saved.paymentTerms||paymentTermsInput.safeParse(saved.paymentTerms).success)&&saved.tenantId===scope.tenantId&&typeof saved.requestId==="string"&&typeof saved.branchId==="string"&&Array.isArray(saved.lines)&&saved.lines.length&&saved.lines.every(l=>order.lines.some(o=>o.id===l.orderLineId)&&typeof l.itemId==="string"&&Number.isInteger(l.quantity)&&l.quantity>0)){
         receiptRequest.current=saved;targetBranchId=saved.branchId;setReceiptPending(true);
       }
     }catch{}
@@ -120,7 +122,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       const values=new FormData(event.currentTarget);
       const selectedLines=order.lines.filter(l=>(receiptQuantities[l.id]??0)>0).map(l=>({orderLineId:l.id,itemId:String(values.get(l.id)??""),quantity:receiptQuantities[l.id]}));
       if(!selectedLines.length){setError(t("Enter a quantity on at least one line.","أدخل كمية في بند واحد على الأقل."));return;}
-      receiptRequest.current={tenantId:scope.tenantId,branchId:receiptBranchId,requestId:crypto.randomUUID(),lines:selectedLines};
+      receiptRequest.current={tenantId:scope.tenantId,branchId:receiptBranchId,requestId:crypto.randomUUID(),...(values.get("paymentDueDate")||String(values.get("paymentTermsLabel")??"").trim()?{paymentTerms:{label:String(values.get("paymentTermsLabel")??"").trim(),dueDate:String(values.get("paymentDueDate")??"")}}:{}),lines:selectedLines};
       try{sessionStorage.setItem(receiptStorageKey(order),JSON.stringify(receiptRequest.current));}catch{}
     }
     setBusy(true);setReceiptPending(true);setError("");
@@ -200,7 +202,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
             <select key={`${line.id}:${receiptItems.length}:${receiptPending?receiptRequest.current?.requestId:"new"}`} name={line.id} required={(receiptQuantities[line.id]??0)>0} disabled={busy||receiptPending||(receiptQuantities[line.id]??0)===0} defaultValue={receiptRequest.current?.lines.find(l=>l.orderLineId===line.id)?.itemId??""}><option value="">{t("Choose inventory item","اختر صنفًا من المخزون")}</option>
               {receiptItems.map(item=><option key={item.id} value={item.id}>{item.sku} · {item.name} ({item.unit})</option>)}
             </select></label><label>{t("Receive now","استلام الآن")} · {line.description}<input type="number" min={0} max={line.quantity-line.receivedQuantity} step={1} required disabled={busy||receiptPending} value={receiptQuantities[line.id]??0} onChange={event=>setReceiptQuantities(v=>({...v,[line.id]:Number(event.target.value)}))}/></label></div>)}
-          <button disabled={busy||(!receiptPending&&!receiptItems.length)}>{receiptPending?t("Retry same receipt","إعادة محاولة نفس الاستلام"):t("Record this delivery","تسجيل هذه الدفعة")}</button>
+          <PaymentTermsFields key={`${order.id}:${receiptPending?receiptRequest.current?.requestId:"new"}`} locale={locale} disabled={busy||receiptPending} initial={receiptRequest.current?.paymentTerms}/><button disabled={busy||(!receiptPending&&!receiptItems.length)}>{receiptPending?t("Retry same receipt","إعادة محاولة نفس الاستلام"):t("Record this delivery","تسجيل هذه الدفعة")}</button>
         </form>}
       </div></article>;
     })}</div>
