@@ -1,0 +1,55 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {randomUUID} from "node:crypto";
+import {spawn} from "node:child_process";
+import {PrismaClient} from "@prisma/client";
+const origin="http://127.0.0.1:3242";
+async function call(path,method="GET",body,cookie){const r=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cookie:r.headers.get("set-cookie")?.split(";")[0]};}
+test("private project budgets keep permanent cost/revision history, exact retries and branch-safe totals",{timeout:90000},async()=>{
+ // Isolated CI database only. No live project costs, budgets or journals are created.
+ const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-p","3242"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+ try{
+  let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
+  async function owner(){const s=randomUUID().slice(0,8),r=await call("/api/auth/register","POST",{name:"Budget QA",email:`budget-${s}@example.invalid`,password:"Budget-password-2026",organization:"Budget QA",slug:`budget-${s}`});assert.equal(r.status,201);return r;}
+  const actor=await owner(),outsider=await owner(),tenantId=actor.data.tenantId,cookie=actor.cookie;
+  const create=async(path,body)=>{const r=await call(path,"POST",{tenantId,...body},cookie);assert.equal(r.status,201,JSON.stringify(r.data));return r.data;};
+  const {company}=await create("/api/companies",{name:"Budget company",code:"BUD",baseCurrency:"OMR"}),companyId=company.id;
+  const {branch}=await create("/api/branches",{companyId,name:"Main",code:"MAIN"}),{branch:sibling}=await create("/api/branches",{companyId,name:"Sibling",code:"SIB"});
+  const makeProject=async(code,branchId=branch.id)=>(await create("/api/projects",{companyId,...(branchId?{branchId}:{}),code,name:"Budget project"})).project;
+  const project=await makeProject("BUD-MAIN"),other=await makeProject("BUD-SIB",sibling.id),wide=await makeProject("BUD-WIDE",null),path=`/api/projects/${project.id}/budget`,query=`?tenantId=${tenantId}`;
+  assert.equal((await call("/api/roles","POST",{tenantId,name:"Missing project read",permissions:["project-budget:read"]},cookie)).status,400);
+  const {role:writerRole}=await create("/api/roles",{name:"Budget writer",permissions:["project:read","project-budget:read","project-budget:manage"]}),{role:readerRole}=await create("/api/roles",{name:"Budget reader",permissions:["project:read","project-budget:read"]});
+  async function member(roleId,role){const invitation=await create("/api/invitations",{email:`budget-member-${randomUUID().slice(0,8)}@example.invalid`,...(roleId?{roleId}:{role}),scope:{type:"BRANCH",companyId,branchId:branch.id}});const r=await call("/api/invitations/accept","POST",{token:invitation.path.split("/").at(-1),name:"Budget member",password:"Budget-member-2026"});assert.equal(r.status,200);return r.cookie;}
+  const writer=await member(writerRole.id),reader=await member(readerRole.id),manager=await member(null,"Manager"),viewer=await member(null,"Viewer");
+  const initial={tenantId,requestId:randomUUID(),kind:"SET_BUDGET",expectedSequence:0,currency:"OMR",amount:"10",note:"Initial project budget"};
+  assert.equal((await call(path,"POST",initial)).status,401);assert.equal((await call(path+query)).status,401);
+  for(const c of [outsider.cookie,manager,viewer]){assert.equal((await call(path+query,"GET",undefined,c)).status,403);assert.equal((await call(path,"POST",initial,c)).status,403);}
+  assert.equal((await call(path,"POST",initial,reader)).status,403);assert.equal((await call(`/api/projects/${other.id}/budget`+query,"GET",undefined,writer)).status,403);assert.equal((await call(`/api/projects/${wide.id}/budget`+query,"GET",undefined,writer)).status,403);
+  const empty=await call(path+query,"GET",undefined,reader);assert.equal(empty.status,200);assert.equal(empty.data.summary.budget,null);
+  const day=new Date().toISOString().slice(0,10),tomorrow=new Date(Date.parse(day)+86400000).toISOString().slice(0,10);
+  for(const changed of [{amount:"-1"},{amount:"0.0001"},{note:"x"},{extra:true}])assert.equal((await call(path,"POST",{...initial,...changed},cookie)).status,400);
+  assert.equal((await call(path,"POST",{...initial,currency:"USD"},cookie)).status,409);
+  assert.equal((await call(path,"POST",{...initial,kind:"COST",costDate:day},cookie)).status,409);
+  const exact=await Promise.all([call(path,"POST",initial,cookie),call(path,"POST",initial,cookie)]);assert.ok(exact.every(r=>r.status===201),JSON.stringify(exact));assert.equal(exact[0].data.event.id,exact[1].data.event.id);assert.equal((await call(path,"POST",{...initial,amount:"11"},cookie)).status,409);
+  const cost={tenantId,requestId:randomUUID(),expectedSequence:1,kind:"COST",currency:"OMR",amount:"12.125",costDate:day,note:"=Cost reference"};assert.equal((await call(path,"POST",{...cost,costDate:tomorrow},writer)).status,400);assert.equal((await call(path,"POST",{...cost,costDate:"2026-02-30"},writer)).status,400);
+  const savedCost=await call(path,"POST",cost,writer);assert.equal(savedCost.status,201,JSON.stringify(savedCost.data));let report=(await call(path+query,"GET",undefined,reader)).data;assert.equal(report.summary.cost,"12.125");assert.equal(report.summary.remaining,"-2.125");assert.equal(report.summary.overBudget,"2.125");
+  const competing=await Promise.all(["20","30"].map(amount=>call(path,"POST",{...initial,requestId:randomUUID(),expectedSequence:2,amount,note:"Concurrent budget revision"},cookie)));assert.deepEqual(competing.map(r=>r.status).sort(),[201,409]);const chosen=competing.find(r=>r.status===201).data.event.amount;
+  assert.equal((await call(path,"POST",{...cost,requestId:randomUUID()},writer)).status,409);
+  const userId=(await db.membership.findFirstOrThrow({where:{tenantId}})).userId;
+  await assert.rejects(db.projectBudgetEvent.create({data:{id:randomUUID(),tenantId,companyId,projectId:project.id,sequence:4,kind:"COST",amount:"1",currency:"OMR",costDate:new Date(day),note:"Missing event audit",createdBy:userId}}));
+  await assert.rejects(db.projectBudgetEvent.update({where:{id:cost.requestId},data:{amount:"1"}}));await assert.rejects(db.projectBudgetEvent.delete({where:{id:cost.requestId}}));await assert.rejects(db.project.update({where:{id:project.id},data:{branchId:sibling.id}}));
+  const correction={tenantId,requestId:randomUUID(),expectedSequence:3,kind:"REVERSE_COST",costId:cost.requestId,currency:"OMR",note:"Correct cost entry"};const corrections=await Promise.all([call(path,"POST",correction,writer),call(path,"POST",correction,writer)]);assert.ok(corrections.every(r=>r.status===201),JSON.stringify(corrections));
+  report=(await call(path+query,"GET",undefined,reader)).data;assert.equal(report.summary.cost,"0.000");assert.equal(Number(report.summary.budget),Number(chosen));assert.equal(report.events.find(e=>e.id===cost.requestId).reversed,true);assert.equal((await call(path,"POST",{...correction,requestId:randomUUID(),expectedSequence:4},writer)).status,409);assert.equal((await call(path,"POST",cost,writer)).status,201,"original exact cost replay remains valid after correction");
+  const nextCost={...cost,requestId:randomUUID(),expectedSequence:4,amount:"3"};assert.equal((await call(path,"POST",nextCost,writer)).status,201);
+  await db.company.update({where:{id:companyId},data:{baseCurrency:"USD"}});report=(await call(path+query,"GET",undefined,reader)).data;assert.equal(report.summary.currency,"OMR");assert.equal(report.summary.cost,"3.000");assert.equal((await call(path,"POST",{...initial,requestId:randomUUID(),expectedSequence:5,currency:"USD"},cookie)).status,409);
+  const privateListing=await call(`/api/projects?${new URLSearchParams({tenantId,companyId})}`,"GET",undefined,viewer);assert.equal(privateListing.status,200);assert.ok(!JSON.stringify(privateListing.data).includes('budgetEvents'));assert.ok(!JSON.stringify(privateListing.data).includes('12.125'));
+  await db.$transaction(async tx=>{for(let i=0;i<52;i++){const row=await tx.projectBudgetEvent.create({data:{id:randomUUID(),tenantId,companyId,projectId:project.id,sequence:6+i,kind:"SET_BUDGET",amount:"50",currency:"OMR",note:`Recorded budget revision ${i}`,createdBy:userId}});await tx.auditLog.create({data:{tenantId,actorId:userId,entity:"ProjectBudgetEvent",entityId:row.id,action:"project-budget.recorded",metadata:{parentId:project.id,version:row.sequence,transaction:row.transactionId}}});}},{timeout:15000});
+  report=(await call(path+query,"GET",undefined,reader)).data;assert.equal(report.events.length,50);assert.equal(report.nextPage,1);assert.equal(report.summary.sequence,57);assert.equal(report.summary.cost,"3.000");assert.equal(report.summary.remaining,"47.000");const older=await call(path+query+"&page=1","GET",undefined,reader);assert.equal(older.data.events.length,7);assert.equal(older.data.events.find(e=>e.id===cost.requestId).reversed,true);
+  const csv=await fetch(origin+path+query+"&format=csv",{headers:{Cookie:reader}});assert.equal(csv.status,200);const text=await csv.text();assert.match(text,/"'=Cost reference"/);assert.match(text,/NET_COST/);
+  const page=await fetch(origin+`/projects/${project.id}/budget`,{headers:{Cookie:reader}});assert.equal(page.status,200);assert.match(await page.text(),/Current budget and net recorded costs/);assert.equal((await fetch(origin+`/projects/${project.id}/budget`,{headers:{Cookie:viewer}})).status,404);
+  assert.equal((await call(`/api/projects/${project.id}`,"PATCH",{tenantId,action:"activate"},cookie)).status,200);assert.equal((await call(`/api/projects/${project.id}`,"PATCH",{tenantId,action:"complete"},cookie)).status,200);
+  assert.equal((await call(path,"POST",{...nextCost,requestId:randomUUID(),expectedSequence:57},writer)).status,409);assert.equal((await call(path,"POST",initial,cookie)).status,201);
+  await db.rolePermission.delete({where:{tenantId_roleId_permissionKey:{tenantId,roleId:writerRole.id,permissionKey:"project-budget:manage"}}});assert.equal((await call(path,"POST",cost,writer)).status,403);await db.rolePermission.delete({where:{tenantId_roleId_permissionKey:{tenantId,roleId:readerRole.id,permissionKey:"project-budget:read"}}});assert.equal((await call(path+query,"GET",undefined,reader)).status,403);
+  assert.equal(await db.journalEntry.count({where:{tenantId}}),0,"manual project tracking never creates ledger entries");assert.equal((await db.$queryRaw`SELECT relrowsecurity FROM pg_class WHERE oid='"ProjectBudgetEvent"'::regclass`)[0].relrowsecurity,true);
+ }finally{server.kill("SIGTERM");await db.$disconnect();}
+});
