@@ -448,3 +448,7 @@ QA writes only disposable fixtures: concurrent exclusive assignment, exact retri
 
 ## Private due-date report presets — 31 October 2026
 Migration 68 adds explicit CUSTOMER_OVERDUE and SUPPLIER_OVERDUE preset kinds. The two due-date pages transfer company/branch/search/fixed UTC date filters into private presets. Opening reauthorizes source permissions and recalculates amounts through dedicated due-date routes; posting-date presets retain their existing meaning. Fixed/today/previous-month-end rules, private ownership, versioning, archive/restore and bounded retries retain existing guarantees. No balances are frozen and no notifications are scheduled.
+
+
+## Reviewed calendar-day payment terms — 31 October 2026
+Invoice and receipt forms now offer immediate/7/15/30/60/90-day and custom 0–3650 calendar-day calculations from an explicitly selected UTC start date. Apply copies a descriptive label and calculated due date into the existing editable fields for review; editing the description does not recalculate the date. Weekends are included. Date arithmetic rejects invalid calendar days and dates outside 2000–2099. Existing saved terms and pending receipt payloads remain unchanged. This is an input calculator, not a company-managed terms catalog, business-day schedule or amendment/backfill workflow.
