@@ -7,7 +7,7 @@ export default async function ReleaseStatusPage(){
  if(!await currentUser())redirect("/login");const locale=await getLocale(),t=(en:string,ar:string)=>translate(locale,en,ar);
  const groups=[
  {title:t("Implemented workflows","مسارات مطوّرة"),description:t("These modules have scoped application workflows and automated checks. Business acceptance with actual operating rules remains required.","تحتوي هذه الأقسام على مسارات عمل وصلاحيات وفحوص آلية. ما زال اعتمادها مع قواعد العمل الفعلية مطلوبًا."),items:[
- ["/saved-reports",t("Private reusable presets for customer/supplier balances and posting-date aging","إعدادات خاصة قابلة لإعادة الاستخدام لأرصدة وأعمار العملاء والموردين من تاريخ القيد")],
+ ["/saved-reports",t("Private reusable presets for customer/supplier balances, posting-date aging and due-date aging","إعدادات خاصة قابلة لإعادة الاستخدام لأرصدة وأعمار العملاء والموردين من تاريخ القيد والاستحقاق")],
  ["/data-import",t("CSV import for customers, suppliers and catalog items with preview and atomic audited batches","استيراد العملاء والموردين والأصناف من CSV بمعاينة ودفعات مدققة تُحفظ كاملة")],
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
  ["/purchasing/orders",t("Purchases, partial receipts, returns and source settlements","المشتريات والاستلام الجزئي والمرتجعات والتسويات المرتبطة")],

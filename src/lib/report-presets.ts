@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const reportKind = z.enum(["CUSTOMER_BALANCES", "CUSTOMER_AGING", "SUPPLIER_BALANCES", "SUPPLIER_AGING"]);
+export const reportKind = z.enum(["CUSTOMER_BALANCES", "CUSTOMER_AGING", "SUPPLIER_BALANCES", "SUPPLIER_AGING", "CUSTOMER_OVERDUE", "SUPPLIER_OVERDUE"]);
 export type ReportKind = z.infer<typeof reportKind>;
 export const reportDateMode = z.enum(["FIXED", "TODAY_UTC", "PREVIOUS_MONTH_END_UTC"]);
 export const reportDate = z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/).refine(value => {
@@ -15,7 +15,7 @@ export const createReportInput = z.object({ ...reportScope, ...reportFields, req
 export const updateReportInput = z.object({ tenantId: z.string().uuid(), ...reportFields, archived: z.boolean(), expectedVersion: z.number().int().min(1).max(999), requestId: z.string().uuid() }).strict().superRefine(checkReportDate);
 export type CreateReportInput = z.infer<typeof createReportInput>;
 export type UpdateReportInput = z.infer<typeof updateReportInput>;
-const paths: Record<ReportKind, string> = { CUSTOMER_BALANCES: "/accounting/customer-balances", CUSTOMER_AGING: "/accounting/customer-aging", SUPPLIER_BALANCES: "/purchasing/supplier-balances", SUPPLIER_AGING: "/purchasing/supplier-aging" };
+const paths: Record<ReportKind, string> = { CUSTOMER_OVERDUE: "/accounting/customer-overdue", SUPPLIER_OVERDUE: "/purchasing/supplier-overdue", CUSTOMER_BALANCES: "/accounting/customer-balances", CUSTOMER_AGING: "/accounting/customer-aging", SUPPLIER_BALANCES: "/purchasing/supplier-balances", SUPPLIER_AGING: "/purchasing/supplier-aging" };
 export function reportTarget(value: { kind: ReportKind; tenantId: string; companyId: string; branchId: string | null; dateMode: z.infer<typeof reportDateMode>; asOf: string | null; q: string }, now = new Date()) {
  let asOf = value.asOf;
  if (value.dateMode !== "FIXED") {
