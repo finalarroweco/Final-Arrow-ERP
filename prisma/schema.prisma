@@ -544,6 +544,8 @@ model PurchaseOrderLine {
 }
 
 model GoodsReceipt {
+  paymentTerms String? @db.VarChar(120)
+  paymentDueDate DateTime? @db.Date
  vatSnapshots PurchaseVat[]
  @@unique([tenantId,companyId,id])
   id        String             @id @default(uuid()) @db.Uuid
@@ -705,6 +707,8 @@ model SalesOrderLine {
 }
 
 model Invoice {
+  paymentTerms String? @db.VarChar(120)
+  paymentDueDate DateTime? @db.Date
   id           String        @id @default(uuid()) @db.Uuid
   tenantId     String        @db.Uuid
   companyId    String        @db.Uuid
