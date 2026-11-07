@@ -1,0 +1,7 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {decodePosRefundRetry,posRefundRetryKey} from "../src/lib/pos-refund-retry.ts";
+const tenantId="00000000-0000-4000-8000-000000000001",requestId="00000000-0000-4000-8000-000000000002",lineId="00000000-0000-4000-8000-000000000003",payload={tenantId,requestId,entryDate:"2026-10-16",reference:"Actual refund",reason:"Selected items refunded"};
+const encode=payload=>JSON.stringify({version:1,payload});
+test("refund retry survives tab reload with the original UUID and selected quantities",()=>{assert.deepEqual(decodePosRefundRetry(encode(payload),tenantId),payload);const partial={...payload,lines:[{orderLineId:lineId,quantity:3}]};assert.deepEqual(decodePosRefundRetry(encode(partial),tenantId),partial);assert.notEqual(posRefundRetryKey(tenantId,lineId),posRefundRetryKey(tenantId,requestId));});
+test("refund retry rejects wrong scopes, versions and malformed or excessive quantities",()=>{for(const raw of [null,"not json",JSON.stringify({version:2,payload}),encode({...payload,tenantId:requestId}),encode({...payload,lines:[]}),encode({...payload,lines:[{orderLineId:lineId,quantity:1.5}]}),encode({...payload,lines:[{orderLineId:lineId,quantity:1000}]}),encode({...payload,lines:[{orderLineId:lineId,quantity:1},{orderLineId:lineId,quantity:1}]}),encode({...payload,reason:"x".repeat(501)})])assert.equal(decodePosRefundRetry(raw,tenantId),null);});

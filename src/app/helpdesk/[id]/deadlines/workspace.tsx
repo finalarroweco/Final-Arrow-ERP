@@ -1,0 +1,46 @@
+"use client";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { deadlineChangeInput, deadlineFromEditor, decodeDeadlineRetry, type PendingDeadline, type DeadlineState } from "@/lib/ticket-deadline-input";
+import { translate, type Locale } from "@/lib/locale";
+import styles from "../../deadlines/deadlines.module.css";
+type Snapshot = { evaluatedAt: string; ticket: { id: string; number: string; status: string; resolutionDueAt: string | null; deadlineSequence: number; deadlineState: DeadlineState }; changes: { id: string; sequence: number; dueAt: string | null; reason: string; authorName: string | null; createdAt: string }[]; nextPage: number | null };
+export function DeadlineWorkspace({ tenantId, ticketId, actorId, canManage, locale }: { tenantId: string; ticketId: string; actorId: string; canManage: boolean; locale: Locale }) {
+ const t = (en: string, ar: string) => translate(locale, en, ar);
+ const [snapshot, setSnapshot] = useState<Snapshot | null>(null), [page, setPage] = useState(0), [refresh, setRefresh] = useState(0), [error, setError] = useState(""), [message, setMessage] = useState("");
+ const [mode, setMode] = useState<"SET" | "CLEAR">("SET"), [editor, setEditor] = useState(""), [reason, setReason] = useState(""), [pending, setPending] = useState<PendingDeadline | null>(null), [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [loading, setLoading] = useState(true), [storageError, setStorageError] = useState(false);
+ const key = `erp-ticket-deadline:v1:${actorId}:${tenantId}:${ticketId}`, root = `/api/tickets/${ticketId}/deadlines`, format = (value: string | null) => value ? new Date(value).toLocaleString(locale === "ar" ? "ar-OM" : "en-GB", { timeZone: "UTC", dateStyle: "medium", timeStyle: "medium" }) + " UTC" : t("No deadline", "دون موعد");
+ const stateLabel = (state: DeadlineState) => ({ OVERDUE: t("Overdue", "متأخرة"), UPCOMING: t("Upcoming", "موعد قادم"), NO_DEADLINE: t("No deadline", "دون موعد"), INACTIVE: t("Resolved / closed", "محلولة / مغلقة") })[state];
+ useEffect(() => { try { const value = decodeDeadlineRetry(sessionStorage.getItem(key), actorId, tenantId, ticketId); if (value && canManage) { setPending(value); setMode(value.payload.dueAt ? "SET" : "CLEAR"); setEditor(value.payload.dueAt?.slice(0, -1) ?? ""); setReason(value.payload.reason); } else sessionStorage.removeItem(key); } catch { setStorageError(true); } setReady(true); }, [key, actorId, tenantId, ticketId, canManage]);
+ useEffect(() => {
+  const controller = new AbortController(); setLoading(true); setError("");
+  fetch(root + "?" + new URLSearchParams({ tenantId, page: String(page) }), { cache: "no-store", signal: controller.signal }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); if (!controller.signal.aborted) setSnapshot(data); }).catch(error => { if (!controller.signal.aborted) setError(String(error)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+  return () => controller.abort();
+ }, [root, tenantId, page, refresh]);
+ const remember = useCallback((value: PendingDeadline | null) => { setPending(value); try { if (value) sessionStorage.setItem(key, JSON.stringify(value)); else sessionStorage.removeItem(key); } catch { setStorageError(true); } }, [key]);
+ async function send(value: PendingDeadline) {
+  setBusy(true); setMessage(""); remember(value);
+  try { const response = await fetch(root, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value.payload) }); const data = await response.json();
+   if (!response.ok) { if (response.status < 500) { remember(null); setRefresh(value => value + 1); } throw new Error(data.error); }
+   remember(null); setReason(""); setEditor(""); setMode("SET"); setPage(0); setRefresh(value => value + 1); setMessage(t("Deadline change saved.", "تم حفظ تغيير الموعد."));
+  } catch (error) { setMessage(String(error)); } finally { setBusy(false); }
+ }
+ async function submit(event: FormEvent) {
+  event.preventDefault(); if (!snapshot || pending || busy || loading || !ready) return;
+  try { const dueAt = mode === "CLEAR" ? null : deadlineFromEditor(editor); if (mode === "SET" && !dueAt) throw new Error(t("Enter a UTC deadline.", "أدخل الموعد بتوقيت UTC.")); const parsed = deadlineChangeInput.safeParse({ tenantId, requestId: crypto.randomUUID(), expectedSequence: snapshot.ticket.deadlineSequence, dueAt, reason }); if (!parsed.success) throw new Error(t("Check the UTC date and reason.", "راجع التاريخ بتوقيت UTC وسبب التغيير.")); await send({ version: 1, actorId, ticketId, payload: parsed.data }); }
+  catch (error) { setMessage(String(error)); }
+ }
+ const active = snapshot && ["OPEN", "IN_PROGRESS"].includes(snapshot.ticket.status), locked = busy || !!pending || loading || !ready;
+ return <section className={`panel ${styles.workspace}`}>
+ <p>{t("This is a manual resolution deadline in UTC. Open and in-progress tickets become overdue after it passes. Resolved/closed tickets are inactive. Reopening retains the previous deadline until you explicitly change or clear it. This view does not measure an SLA agreement or pause time.", "هذا موعد حل يُحدد يدويًا بتوقيت UTC. تتأخر التذاكر المفتوحة وقيد التنفيذ بعد تجاوزه. التذاكر المحلولة والمغلقة غير نشطة، وإعادة الفتح تُبقي الموعد السابق حتى تغييره أو إلغائه صراحة. هذا العرض لا يقيس اتفاقية مستوى خدمة أو وقت التوقف.")}</p>
+ {error && <p role="alert">{error}</p>}{loading && <p>{t("Loading…", "جارٍ التحميل…")}</p>}
+ {snapshot && <article><h2>{snapshot.ticket.number} · {stateLabel(snapshot.ticket.deadlineState)}</h2><p>{t("Current resolution deadline", "موعد الحل الحالي")}: {format(snapshot.ticket.resolutionDueAt)}</p><p>{t("Deadline version", "إصدار الموعد")}: {snapshot.ticket.deadlineSequence} · {t("Evaluated", "التقييم")}: {format(snapshot.evaluatedAt)}</p><button disabled={locked} onClick={() => setRefresh(value => value + 1)}>{t("Refresh status", "تحديث الحالة")}</button></article>}
+ {canManage && active && snapshot.ticket.deadlineSequence < 1000 && <form onSubmit={submit}><h2>{t("Change resolution deadline", "تغيير موعد الحل")}</h2><label>{t("Action", "الإجراء")}<select value={mode} disabled={locked} onChange={event => setMode(event.target.value as "SET" | "CLEAR")}><option value="SET">{t("Set / change deadline", "تحديد / تغيير الموعد")}</option><option value="CLEAR" disabled={!snapshot.ticket.resolutionDueAt}>{t("Clear deadline", "إلغاء الموعد")}</option></select></label>
+ {mode === "SET" && <label>{t("Deadline components are UTC", "التاريخ والوقت بتوقيت UTC")}<input type="datetime-local" step="0.001" value={editor} min="2000-01-01T00:00" max="2099-12-31T23:59:59.999" required disabled={locked} onChange={event => setEditor(event.target.value)} /></label>}
+ <label>{t("Reason", "سبب التغيير")}<textarea rows={3} minLength={3} maxLength={1000} required disabled={locked} value={reason} onChange={event => setReason(event.target.value)} /></label><button disabled={locked}>{t("Save deadline change", "حفظ تغيير الموعد")}</button></form>}
+ {snapshot && !active && <p>{t("Reopen the resolved ticket before changing its deadline. Closed tickets remain read-only.", "أعد فتح التذكرة المحلولة قبل تغيير موعدها. التذاكر المغلقة للقراءة فقط.")}</p>}
+ {snapshot?.ticket.deadlineSequence === 1000 && <p>{t("This ticket reached the 1000-change history limit.", "وصلت هذه التذكرة إلى حد 1000 تغيير في سجل المواعيد.")}</p>}
+ <p role="status">{message}</p>{storageError && <p role="alert">{t("Tab storage is unavailable. Keep this page open until an unconfirmed save is resolved.", "تخزين علامة التبويب غير متاح. أبقِ الصفحة مفتوحة حتى تتأكد نتيجة أي حفظ معلق.")}</p>}
+ {pending && <article role="alert"><p>{t("The last result is unconfirmed. Retry the exact saved change, or discard it and refresh before entering a new change.", "نتيجة التغيير السابق غير مؤكدة. أعد الطلب المحفوظ نفسه، أو تجاهله وحدّث الحالة قبل إدخال تغيير جديد.")}</p><button disabled={busy} onClick={() => send(pending)}>{t("Retry same change", "إعادة التغيير نفسه")}</button><button disabled={busy} onClick={() => { remember(null); setRefresh(value => value + 1); }}>{t("Discard request and refresh", "تجاهل الطلب وتحديث الحالة")}</button></article>}
+ <h2>{t("Permanent change history", "سجل التغييرات الدائم")}</h2><div className={styles.tableScroll}><table><thead><tr>{[t("Version", "الإصدار"), t("Deadline UTC", "الموعد UTC"), t("Reason", "السبب"), t("Changed by", "بواسطة"), t("Recorded UTC", "التسجيل UTC")].map(value => <th key={value}>{value}</th>)}</tr></thead><tbody>{snapshot?.changes.map(change => <tr key={change.id}><td>{change.sequence}</td><td>{format(change.dueAt)}</td><td>{change.reason}</td><td>{change.authorName ?? "—"}</td><td>{format(change.createdAt)}</td></tr>)}</tbody></table></div>{snapshot && !snapshot.changes.length && <p>{t("No deadline changes recorded.", "لا توجد تغييرات مواعيد مسجلة.")}</p>}
+ <div className="formrow"><button disabled={locked || page === 0} onClick={() => setPage(page - 1)}>{t("Previous", "السابق")}</button><button disabled={locked || snapshot?.nextPage == null} onClick={() => setPage(snapshot!.nextPage!)}>{t("Next", "التالي")}</button></div></section>;
+}

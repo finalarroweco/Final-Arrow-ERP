@@ -1,0 +1,11 @@
+.workspace > p { line-height: 1.8; color: #555; overflow-wrap: anywhere; }
+.workspace > form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.workspace button, .workspace a { max-width: 100%; white-space: normal; }
+.workspace [role="alert"] { padding: 16px; background: #fff4f1; border-radius: 10px; }
+.tableScroll { overflow-x: auto; max-height: 650px; }
+.tableScroll table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tableScroll th, .tableScroll td { min-width: 100px; max-width: 320px; padding: 12px; border-bottom: 1px solid #ddd; text-align: start; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tableScroll thead th { background: #f7f7f7; position: sticky; top: 0; }
+.controls { line-height: 2; }
+@media (max-width: 600px) { .workspace button { width: 100%; } }
+@media print { .workspace form, .workspace button, .controls { display: none; } .tableScroll { max-height: none; overflow: visible; } .tableScroll table { font-size: 9px; } .tableScroll th, .tableScroll td { min-width: 0; padding: 4px; } .tableScroll thead th { position: static; } }

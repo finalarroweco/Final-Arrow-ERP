@@ -1,0 +1,14 @@
+.workspace > p { line-height: 1.8; color: #555; }
+.workspace > form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.workspace article { margin-block: 20px; }
+.workspace article h2 { margin-block-start: 0; }
+.workspace article p { margin-block: 10px; font-size: 14px; line-height: 1.8; color: #555; }
+.workspace [role="status"]:empty { display: none; }
+.workspace [role="alert"] { padding: 16px; background: #fff4f1; border-radius: 10px; overflow-wrap: anywhere; line-height: 1.8; }
+.workspace button, .workspace a { max-width: 100%; white-space: normal; }
+.tableScroll { overflow-x: auto; max-height: 650px; }
+.tableScroll table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tableScroll th, .tableScroll td { min-width: 120px; max-width: 360px; padding: 12px; border-bottom: 1px solid #ddd; text-align: start; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tableScroll th { background: #f7f7f7; position: sticky; top: 0; }
+@media (max-width: 600px) { .workspace button { width: 100%; } }
+@media print { .workspace form, .workspace button, .controls { display: none; } .tableScroll { max-height: none; overflow: visible; } .tableScroll table { font-size: 10px; } .tableScroll th, .tableScroll td { min-width: 0; padding: 5px; } }

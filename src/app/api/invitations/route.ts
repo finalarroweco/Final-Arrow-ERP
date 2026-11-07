@@ -1,0 +1,54 @@
+import { createHash, randomBytes } from "node:crypto";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { currentUser } from "@/lib/auth";
+import { canAccess } from "@/lib/access";
+import {scopeSchema,lockTenant,validateScope,assignableRole,requireOwner,roleFailure} from "@/lib/role-management";
+import { db } from "@/lib/db";
+
+const schema = z.object({
+  tenantId: z.string().uuid(),
+  email: z.string().trim().email().max(255).transform((v) => v.toLowerCase()),
+  role: z.enum(["Manager", "Viewer"]).optional(),
+  roleId: z.string().uuid().optional(),
+  scope: scopeSchema,
+}).strict().refine(v=>!!v.role!==!!v.roleId);
+
+
+export async function POST(request: Request) {
+  const actor = await currentUser();
+  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const parsed = schema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid invitation" }, { status: 400 });
+  const { tenantId, email, role: roleName,roleId, scope } = parsed.data;
+  if (!(await canAccess({ userId: actor.id, tenantId, permission: "user:invite" })))
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const token = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + 7 * 86400_000);
+  try {const invitation = await db.$transaction(async (tx) => {
+    await lockTenant(tx,tenantId);
+    if(roleId)await requireOwner(tx,tenantId,actor.id);
+    const found=roleId?{id:roleId}:await tx.role.findUnique({where:{tenantId_name:{tenantId,name:roleName!}},select:{id:true}});
+    if(!found)return null;
+    const role=await assignableRole(tx,tenantId,found.id);
+    await validateScope(tx,tenantId,scope);
+    const invitation = await tx.invitation.create({
+      data: {
+        tenantId, email, roleId: role.id, type: scope.type,
+        companyId: scope.type === "TENANT" ? null : scope.companyId,
+        branchId: scope.type === "BRANCH" ? scope.branchId : null,
+        tokenHash, expiresAt, createdBy: actor.id,
+      },
+    });
+    await tx.auditLog.create({
+      data: { tenantId, actorId: actor.id, action: "invitation.created", entity: "Invitation", entityId: invitation.id,
+        metadata: { email, role: role.name,roleId:role.id, scope: scope.type } },
+    });
+    return invitation;
+  });
+  if(!invitation)return NextResponse.json({error:"Role unavailable"},{status:400});
+  return NextResponse.json({ path: `/invite/${token}`, expiresAt: invitation.expiresAt }, { status: 201 });
+  }catch(error){return roleFailure(error);}
+}
+
