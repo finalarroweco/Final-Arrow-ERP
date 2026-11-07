@@ -35,6 +35,7 @@ export default async function ProjectsPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("PROJECTS", "المشاريع")}</p><h1>{t("Projects & tasks.", "المشاريع والمهام.")}</h1><p className="sub">{t("Plan work across your companies and branches.", "خطّط للعمل عبر الشركات والفروع.")}</p></section>
+    <section className="panel"><a href="/projects/workload">{t("Cross-project employee workload and recorded time", "عبء عمل الموظفين والساعات المسجّلة عبر المشاريع")}</a></section>
     <ProjectsWorkspace options={options} locale={locale} />
   </main>;
 }

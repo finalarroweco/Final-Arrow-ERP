@@ -1,13 +1,13 @@
-# First release readiness — 31 October 2026
+# First release readiness — 7 November 2026
 
 Status: release candidate; not approved for general customer rollout.
 
 ## Evidence
-- Audited feature head: 07e18d5b12c9510a5b32463a2949714696405478.
-- Core checks #190 passed 62 migrations, 21 unit checks, two database checks, build and 22 isolated API workflows on 19 October.
-- GitHub Vercel commit status remains success when checked 31 October. This is deployment evidence, not a current runtime-health or business acceptance certificate.
-- No application changes since that head were found in PR #1.
-- Signed-in production visual acceptance has not been completed for the latest deadline screens.
+- Baseline feature head: e45edf9f6d2a2900c6ca6836edfb7e054c284390; PR #1 remains draft and main is unchanged.
+- Core checks #206 passed all 68 migrations, 28 unit checks, two database checks, production build and 25 isolated API workflows.
+- The baseline Vercel deployment succeeded. Deployment evidence does not establish current runtime health or business acceptance.
+- Signed-in production visual acceptance is still pending: on 7 November the cloud browser redirects `/dashboard` to `/login`. No authenticated form or report was visually accepted.
+- The 7 November workload addition is a separate code change; its verification must be recorded in the latest release-status entry after CI.
 
 ## Launch gates
 All gates below remain open until evidence is recorded.
@@ -21,11 +21,11 @@ All gates below remain open until evidence is recorded.
 7. Rollout: provision a limited pilot, record defects and acceptance evidence, then decide general availability. PR #1 stays draft and main is unchanged by this readiness document.
 
 ## Proposed first-release scope
-Provisioned-account, multi-company/branch internal operations using existing CRM, quotations/orders, internal invoices/collections, purchases/receipts, source accounting/reports, project tasks/time and internal helpdesk.
+Provisioned-account, multi-company/branch internal operations using existing CRM, quotations/orders, internal invoices/collections, explicit due-date terms/aging, purchases/receipts, source accounting/reports, manual stock reservations, project tasks/time/manual budgets/existing-invoice assignments and internal helpdesk.
 Payroll remains manual. POS is optional and requires separate cash-handling acceptance. Email recovery is unavailable until verified; offline recovery requires previously saved codes.
 
 ## Deferred enhancements
-Due-date payment terms and overdue aging; unallocated advances; inventory reservations/valuation; project budgets/billing/resource planning; attachments/customer portal/configurable SLA and notifications; configurable approvals; split bank matching/frozen reconciliation; inclusive taxes; subscriptions/documents/AI/automation; hardware and external provider integrations.
+Unallocated advances; sales-order stock allocations/valuation; payment-term catalogs/amendments; time/milestone billing generation, capacity calendars/work estimates; attachments/customer portal/configurable SLA and notifications; configurable approvals; split bank matching/frozen reconciliation; inclusive taxes; subscriptions/documents/AI/automation; hardware and external provider integrations.
 
 These are not declared implemented or required for every limited pilot. A workflow requiring one must remain outside the pilot until delivered and accepted.
 
