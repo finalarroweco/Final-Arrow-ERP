@@ -137,6 +137,7 @@ model Tenant {
 }
 
 model Company {
+  paymentTermTemplates PaymentTermTemplate[]
   savedReports SavedReport[]
   importBatches CatalogImportBatch[]
   id             String          @id @default(uuid()) @db.Uuid
@@ -179,6 +180,25 @@ model Company {
   @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@index([tenantId])
+}
+
+model PaymentTermTemplate {
+  id String @id @db.Uuid
+  tenantId String @db.Uuid
+  companyId String @db.Uuid
+  name String @db.VarChar(80)
+  label String @db.VarChar(120)
+  days Int
+  createdBy String @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  creationTransaction String @default(dbgenerated("(txid_current())::text"))
+  archivedAt DateTime? @db.Timestamptz(3)
+  archivedBy String? @db.Uuid
+  archiveRequestId String? @unique @db.Uuid
+  archiveReason String? @db.VarChar(200)
+  archiveTransaction String?
+  company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+  @@index([tenantId,companyId,archivedAt,createdAt,id])
 }
 
 model Branch {
