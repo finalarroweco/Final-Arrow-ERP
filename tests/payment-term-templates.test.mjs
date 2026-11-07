@@ -42,7 +42,7 @@ test("company payment templates are immutable, audited, scoped and safe to copy 
     await assert.rejects(db.paymentTermTemplate.create({ data: { id: randomUUID(), tenantId, companyId, name: "No transaction audit", label: "No audit label", days: 7, createdBy: userId } }));
     await assert.rejects(db.paymentTermTemplate.update({ where: { id: template.id }, data: { archivedBy: userId, archiveRequestId: randomUUID(), archiveReason: "Missing audit" } }));
     // Copying is explicit input preparation. Existing source fields keep independent immutable snapshots.
-    const { customer } = await create("/api/customers", { companyId, branchId: branch.id, code: "C", displayName: "Terms customer" });
+    const { customer } = await create("/api/customers", { companyId, branchId: branch.id, code: "CUST", displayName: "Terms customer" });
     const { quote } = await create("/api/quotes", { companyId, branchId: branch.id, customerId: customer.id, number: "TERM-Q", lines: [{ description: "Service", quantity: 1, unitPrice: "5" }] });
     for (const action of ["send", "accept"]) assert.equal((await call(`/api/quotes/${quote.id}/status`, "PATCH", { tenantId, action }, cookie)).status, 200);
     const { order } = await create(`/api/quotes/${quote.id}/order`, { number: "TERM-O" });
