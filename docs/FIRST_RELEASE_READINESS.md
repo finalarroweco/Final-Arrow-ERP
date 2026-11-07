@@ -7,7 +7,7 @@ Status: release candidate; not approved for general customer rollout.
 - Core checks #206 passed all 68 migrations, 28 unit checks, two database checks, production build and 25 isolated API workflows.
 - The baseline Vercel deployment succeeded. Deployment evidence does not establish current runtime health or business acceptance.
 - Signed-in production visual acceptance is still pending: on 7 November the cloud browser redirects `/dashboard` to `/login`. No authenticated form or report was visually accepted.
-- The 7 November workload addition is a separate code change; its verification must be recorded in the latest release-status entry after CI.
+- Workload verification: Core checks #207 passed 68 migrations, 30 unit checks, two database checks, build and 26 isolated API workflows. Later navigation/typography changes require their own build/deployment result.
 
 ## Launch gates
 All gates below remain open until evidence is recorded.

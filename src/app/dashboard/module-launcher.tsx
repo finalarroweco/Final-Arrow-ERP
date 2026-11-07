@@ -4,6 +4,7 @@ const groups = [
   { en: "Organization", ar: "المؤسسة", links: [
     ["/workspace", "Companies, branches & team", "الشركات والفروع والفريق"],
     ["/release-status", "Delivery status", "حالة التطوير والمتبقي"], ["/approvals", "Approvals", "الموافقات"], ["/audit", "Activity", "سجل النشاط"],
+    ["/reports", "Report center", "مركز التقارير"],
     ["/saved-reports", "My saved reports", "تقاريري المحفوظة"],
     ["/data-import", "Import customers, suppliers & items", "استيراد العملاء والموردين والأصناف"],
     ["/settings/security", "Account security", "أمان الحساب"],
@@ -20,15 +21,17 @@ const groups = [
     ["/accounting/bank", "Bank reconciliation", "التسويات البنكية"],
     ["/accounting/collections", "Customer collections", "تحصيلات العملاء"],
     ["/accounting/customer-balances", "Customer balances", "أرصدة العملاء"], ["/accounting/customer-aging", "Customer aging", "أعمار أرصدة العملاء"],
+    ["/accounting/customer-overdue", "Customer due-date aging", "استحقاقات العملاء"],
     ["/accounting/customer-statement", "Customer statements", "كشوف العملاء"],
     ["/purchasing/settlements", "Supplier settlements", "تسويات الموردين"],
+    ["/purchasing/supplier-overdue", "Supplier due-date aging", "استحقاقات الموردين"],
     ["/purchasing/supplier-statement", "Supplier statements", "كشوف الموردين"],
     ["/purchasing/supplier-balances", "Supplier balances", "أرصدة الموردين"], ["/purchasing/supplier-aging", "Supplier aging", "أعمار أرصدة الموردين"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"],
   ] },
   { en: "People & operations", ar: "الموظفون والعمليات", links: [
     ["/hr/employees", "Employees", "الموظفون"], ["/hr/attendance", "Attendance", "الحضور"],
     ["/hr/leave", "Leave", "الإجازات"], ["/hr/payroll", "Payroll", "الرواتب"],
-    ["/projects", "Projects", "المشاريع"], ["/helpdesk", "Helpdesk", "الدعم الفني"], ["/helpdesk/deadlines", "Ticket deadlines", "مواعيد التذاكر"], ["/helpdesk/messages", "Internal follow-up", "المتابعة الداخلية"],
+    ["/projects", "Projects", "المشاريع"], ["/projects/workload", "Employee workload", "عبء عمل الموظفين"], ["/helpdesk", "Helpdesk", "الدعم الفني"], ["/helpdesk/deadlines", "Ticket deadlines", "مواعيد التذاكر"], ["/helpdesk/messages", "Internal follow-up", "المتابعة الداخلية"],
   ] },
   { en: "Accounting & POS", ar: "المحاسبة ونقاط البيع", links: [
     ["/accounting/vat-settings", "Oman VAT settings", "إعدادات ضريبة عُمان"],

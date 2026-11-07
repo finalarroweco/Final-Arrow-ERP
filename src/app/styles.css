@@ -50,3 +50,4 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .document-posting p{line-height:1.6!important}.document-posting form{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
 .document-posting form label{display:grid;gap:6px;min-width:170px}.document-posting select{padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;max-width:100%}
 .customer-list article:has(.document-posting){align-items:flex-start;flex-wrap:wrap}
+html[dir="rtl"], html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea, html[dir="rtl"] button { font-family: var(--font-tajawal), Tahoma, Arial, sans-serif; }
