@@ -25,7 +25,7 @@ Provisioned-account, multi-company/branch internal operations using existing CRM
 Payroll remains manual. POS is optional and requires separate cash-handling acceptance. Email recovery is unavailable until verified; offline recovery requires previously saved codes.
 
 ## Deferred enhancements
-Unallocated advances; sales-order stock allocations/valuation; payment-term catalogs/amendments; time/milestone billing generation, capacity calendars/work estimates; attachments/customer portal/configurable SLA and notifications; configurable approvals; split bank matching/frozen reconciliation; inclusive taxes; subscriptions/documents/AI/automation; hardware and external provider integrations.
+Unallocated advances; sales-order stock allocations/valuation; audited payment-term amendments; time/milestone billing generation, capacity calendars/work estimates; attachments/customer portal/configurable SLA and notifications; configurable approvals; split bank matching/frozen reconciliation; inclusive taxes; subscriptions/documents/AI/automation; hardware and external provider integrations.
 
 These are not declared implemented or required for every limited pilot. A workflow requiring one must remain outside the pilot until delivered and accepted.
 

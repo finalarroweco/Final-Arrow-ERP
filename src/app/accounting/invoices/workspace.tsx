@@ -97,7 +97,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
             {order.number} · {order.customerName} · {order.subtotal} {order.currency}</option>)}</select>
         {scope.vatActive&&<div key={orderId}><p>{t("Prices exclude VAT. Classify each line before creating the invoice.","الأسعار لا تشمل الضريبة. حدّد المعالجة الضريبية لكل بند قبل إنشاء الفاتورة.")}</p>{orders.find(o=>o.id===orderId)?.lines.map(l=><label key={l.position}>{l.description} · {l.amount}<select name={`vat-${l.position}`} required disabled={busy} defaultValue=""><option value="">{t("VAT treatment","المعالجة الضريبية")}</option><option value="STANDARD">{t("Standard 5%","أساسي ٥٪")}</option><option value="ZERO">{t("Zero-rated 0%","صفري ٠٪")}</option><option value="EXEMPT">{t("Exempt","معفى")}</option></select></label>)}</div>}
         <input name="number" required pattern="[A-Z0-9-]{2,30}" placeholder={t("Invoice number, e.g. INV-001", "رقم الفاتورة، مثال INV-001")} />
-        <PaymentTermsFields key={`${selected}:${orderId}`} locale={locale} disabled={busy}/><button disabled={busy || !eligibleOrders.length}>{t("Create draft", "إنشاء مسودة")}</button>
+        <PaymentTermsFields key={`${selected}:${orderId}`} locale={locale} scope={{tenantId:scope.tenantId,companyId:scope.companyId}} disabled={busy}/><button disabled={busy || !eligibleOrders.length}>{t("Create draft", "إنشاء مسودة")}</button>
       </form>}
     {error && <p role="alert">{error}</p>}
     <FinancialReport key={`${scope.companyId}:${reportVersion}`} kind="invoices" scope={scope} locale={locale}/>

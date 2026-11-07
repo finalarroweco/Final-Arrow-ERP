@@ -7,6 +7,7 @@ export default async function ReleaseStatusPage(){
  if(!await currentUser())redirect("/login");const locale=await getLocale(),t=(en:string,ar:string)=>translate(locale,en,ar);
  const groups=[
  {title:t("Implemented workflows","مسارات مطوّرة"),description:t("These modules have scoped application workflows and automated checks. Business acceptance with actual operating rules remains required.","تحتوي هذه الأقسام على مسارات عمل وصلاحيات وفحوص آلية. ما زال اعتمادها مع قواعد العمل الفعلية مطلوبًا."),items:[
+ ["/settings/payment-terms",t("Company payment-term templates with permanent definitions, reasoned archive and explicit copying to new documents","قوالب شروط دفع الشركة بتعريفات ثابتة وأرشفة بسبب ونسخ صريح إلى المستندات الجديدة")],
  ["/saved-reports",t("Private reusable presets for customer/supplier balances, posting-date aging and due-date aging","إعدادات خاصة قابلة لإعادة الاستخدام لأرصدة وأعمار العملاء والموردين من تاريخ القيد والاستحقاق")],
  ["/data-import",t("CSV import for customers, suppliers and catalog items with preview and atomic audited batches","استيراد العملاء والموردين والأصناف من CSV بمعاينة ودفعات مدققة تُحفظ كاملة")],
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
@@ -22,7 +23,7 @@ export default async function ReleaseStatusPage(){
  ["/helpdesk/deadlines",t("Manual ticket deadlines, permanent change history and current overdue register","مواعيد التذاكر اليدوية وسجل تغييراتها الدائم وسجل التأخير الحالي")],
  ["/helpdesk",t("Ticket workflow and permanent internal follow-up","مسار التذاكر وسجل المتابعة الداخلية الدائم")]]},
  {title:t("Remaining product development","تطوير منتج متبقٍ"),description:t("These items require additional implementation and verification; existing module screens do not mean these capabilities are complete.","تحتاج هذه البنود إلى تنفيذ وفحص إضافيين؛ وجود شاشة القسم لا يعني اكتمال هذه الإمكانات."),items:[
- ["",t("Sales: payment-term templates, audited renegotiation/legacy due dates and unallocated advances","المبيعات: قوالب شروط الدفع وتعديل الاتفاقات ومواعيد المستندات القديمة بسجل تدقيق والدفعات غير المخصصة")],
+ ["",t("Sales: audited renegotiation/legacy due dates and unallocated advances","المبيعات: تعديل الاتفاقات ومواعيد المستندات القديمة بسجل تدقيق والدفعات غير المخصصة")],
  ["",t("Inventory: sales-order allocations/fulfilment, valuation and supplier advances","المخزون: تخصيص أوامر البيع وتنفيذها والتقييم ودفعات الموردين المقدمة")],
  ["",t("Projects: invoice generation from time/milestones, capacity calendars/estimates and automatic cost allocations","المشاريع: توليد الفواتير من الساعات والمراحل وتقاويم الطاقة وتقديرات العمل وتوزيع التكاليف تلقائيًا")],
  ["",t("Helpdesk: attachments, notifications, customer portal and SLA rules","الدعم: المرفقات والإشعارات وبوابة العميل وقواعد مستوى الخدمة")],

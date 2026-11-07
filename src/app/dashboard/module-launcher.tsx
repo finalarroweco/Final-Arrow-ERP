@@ -7,6 +7,7 @@ const groups = [
     ["/reports", "Report center", "مركز التقارير"],
     ["/saved-reports", "My saved reports", "تقاريري المحفوظة"],
     ["/data-import", "Import customers, suppliers & items", "استيراد العملاء والموردين والأصناف"],
+    ["/settings/payment-terms", "Company payment terms", "شروط دفع الشركة"],
     ["/settings/security", "Account security", "أمان الحساب"],
     ["/settings/roles", "Roles & permissions", "الأدوار والصلاحيات"],
   ] },
