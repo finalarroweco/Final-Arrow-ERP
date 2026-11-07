@@ -34,6 +34,6 @@ export function PaymentTermTemplatePicker({ locale, tenantId, companyId, disable
   return <div><label>{t("Company template (optional)", "قالب الشركة (اختياري)")}<select value={selectedId} disabled={disabled || busy} onChange={event => { const row = rows.find(row => row.id === event.target.value); onChoose(row ?? null); }}><option value="">{t("Choose a template", "اختر قالبًا")}</option>{rows.map(row => <option key={row.id} value={row.id}>{row.name} · {row.days} {t("days", "يومًا")}</option>)}</select></label>
     {nextPage !== null && <button type="button" disabled={disabled || busy} onClick={() => void more()}>{t("Load more templates", "تحميل قوالب إضافية")}</button>}
     {busy && <p role="status">{t("Loading company terms…", "جارٍ تحميل شروط الشركة…")}</p>}{error && <p role="status">{error}</p>}
-    <p><a href="/settings/payment-terms">{t("View / manage company templates", "عرض / إدارة قوالب الشركة")}</a></p>
+    <p><a href={"/settings/payment-terms?"+new URLSearchParams({scope:tenantId+":"+companyId})} target="_blank" rel="noopener noreferrer">{t("View / manage company templates (new tab)", "عرض / إدارة قوالب الشركة (تبويب جديد)")}</a></p>
   </div>;
 }

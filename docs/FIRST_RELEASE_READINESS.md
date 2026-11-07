@@ -3,11 +3,11 @@
 Status: release candidate; not approved for general customer rollout.
 
 ## Evidence
-- Baseline feature head: e45edf9f6d2a2900c6ca6836edfb7e054c284390; PR #1 remains draft and main is unchanged.
-- Core checks #206 passed all 68 migrations, 28 unit checks, two database checks, production build and 25 isolated API workflows.
-- The baseline Vercel deployment succeeded. Deployment evidence does not establish current runtime health or business acceptance.
+- Verified functional head: caca75dcefb42a1f4ff860c09a75a9128d3696a0; PR #1 remains draft and main is unchanged.
+- Core checks #211 passed all 69 migrations, 32 unit checks, two database checks, production build and 27 isolated API workflows.
+- Deployment status is checked independently of CI. A successful deployment does not establish current runtime health or business acceptance.
 - Signed-in production visual acceptance is still pending: on 7 November the cloud browser redirects `/dashboard` to `/login`. No authenticated form or report was visually accepted.
-- Workload verification: Core checks #207 passed 68 migrations, 30 unit checks, two database checks, build and 26 isolated API workflows. Later navigation/typography changes require their own build/deployment result.
+- Workload, report navigation and local Arabic typography passed #208; company payment-term catalogs passed #211. Subsequent navigation-only changes retain their separate build/deployment result.
 
 ## Launch gates
 All gates below remain open until evidence is recorded.
