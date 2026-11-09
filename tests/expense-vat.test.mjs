@@ -7,7 +7,7 @@ const origin="http://127.0.0.1:3231";
 async function call(path,method="GET",body,cookie){const r=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});const text=await r.text();let data;try{data=JSON.parse(text);}catch{throw new Error(`${method} ${path}: ${r.status} ${text.slice(0,200)}`);}return{status:r.status,data,cookie:r.headers.get("set-cookie")?.split(";")[0]};}
 test("expense VAT preserves deductible cost, gross credits, scoped reports and correction history",{timeout:90000},async()=>{
  // Isolated PostgreSQL CI fixtures only; never create production financial data.
- const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-p","3231"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+ const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-H", "127.0.0.1", "-p","3231"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
   async function owner(){const id=randomUUID().slice(0,8),r=await call("/api/auth/register","POST",{name:"Expense VAT QA",email:`expense-vat-${id}@example.invalid`,password:"Expense-VAT-password-2026",organization:"Expense VAT QA",slug:`expense-vat-${id}`});assert.equal(r.status,201);return r;}

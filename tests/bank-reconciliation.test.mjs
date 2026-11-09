@@ -6,7 +6,7 @@ import {PrismaClient} from '@prisma/client';
 const origin='http://127.0.0.1:3227';
 async function call(path,method='GET',body,cookie){const r=await fetch(origin+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 test('bank statements and matches are exact, immutable, scoped, reversible and balance-aware',{timeout:90000},async()=>{
- const db=new PrismaClient(),server=spawn('./node_modules/.bin/next',['start','-p','3227'],{env:{...process.env,ALLOW_REGISTRATION:'true'},stdio:['ignore','ignore','inherit']});
+ const db=new PrismaClient(),server=spawn('./node_modules/.bin/next',['start',"-H", "127.0.0.1", '-p','3227'],{env:{...process.env,ALLOW_REGISTRATION:'true'},stdio:['ignore','ignore','inherit']});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
   async function owner(){const s=randomUUID().slice(0,8),r=await call('/api/auth/register','POST',{name:'Bank QA',email:`bank-${s}@example.invalid`,password:'Bank-reconciliation-2026',organization:'Bank QA',slug:`bank-${s}`});assert.equal(r.status,201);return r;}

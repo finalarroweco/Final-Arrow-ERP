@@ -5,30 +5,42 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Area | Current implementation | Remaining work |
 | --- | --- | --- |
 | Organization & access | Tenants, companies, branches, departments, custom roles, scoped invitations, team suspension, audit history, login throttles, password changes and offline backup-code recovery | Email recovery/verification and delivery, network-level abuse controls |
-| CRM & sales | Customers with multiple scoped contacts, leads, quotes, orders, printable internal invoices with optional Oman VAT snapshots, source-linked collections/refunds and customer statements/balances and posting-date source aging | Imports, wider tax coverage, unallocated advances, audited due-date amendments, statutory documents |
-| Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, stock return documents/register and source-linked receipt accruals/return credits, UTC receipt register and CSV, catalog, branch stock ledger and audited manual reservations with available balances | Sales-order allocation/fulfilment, valuation rules, unallocated supplier advances |
+| CRM & sales | Customers with multiple scoped contacts, leads, quotes, orders, printable internal invoices with optional Oman VAT snapshots, source-linked collections/refunds and customer statements/balances and posting-date and due-date source aging, CSV customer imports | Wider tax coverage, unallocated advances, audited due-date amendments, statutory documents |
+| Purchasing & inventory | Suppliers, purchase orders, full and partial goods receipts, stock return documents/register and source-linked receipt accruals/return credits, UTC receipt register and CSV, catalog with CSV item/supplier imports, branch stock ledger and audited manual reservations with available balances | Sales-order allocation/fulfilment, valuation rules, unallocated supplier advances |
 | Projects | Projects, tasks with acyclic prerequisites, employee assignments, status transitions and manual project time entries with independent review, audited corrections and scoped time reports, independent manual budgets/cost events, exact current-cost reconciliation, linked invoice/collection tracking and a scoped cross-project workload/time overview | Invoice generation from time/milestones, capacity calendars/estimates and automatic cost allocation |
-| Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow with immutable internal follow-up | External conversations, attachments, notifications, customer portal, SLA rules |
+| Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow with immutable internal follow-up, explicit UTC deadlines and current overdue register | External conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
-| Accounting | Internal invoice/expense registers, chart of accounts, balanced manual and source-linked journals, customer/supplier settlements and statements/balances, reversals, period locks, financial reports and imported bank statement matching/corrections | Statutory tax documents/filing, inclusive prices, imports/reverse charge, automated/final closing, unallocated settlements, audited due-date amendments, frozen bank reconciliation certificates, split matches and bank feeds |
-| Management | Scoped dashboard and action inbox for leave, expense and purchase drafts | Configurable approval policies, saved reports |
+| Accounting | Internal invoice/expense registers, optional Oman VAT snapshots for invoices, purchase receipts/returns, expenses and POS, chart of accounts, balanced manual and source-linked journals, customer/supplier settlements and statements/balances, reversals, period locks, financial reports and imported bank statement matching/corrections | Statutory tax documents/filing, inclusive prices, imports/reverse charge, automated/final closing, unallocated settlements, audited due-date amendments, frozen bank reconciliation certificates, split matches and bank feeds |
+| Management | Scoped dashboard, report directory, private saved filters for customer/supplier balances and posting-date/due-date aging, company payment-term templates and action inbox for leave, expense and purchase drafts | Configurable approval policies, broader saved-report coverage |
 | POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV, saved Oman VAT, full/partial refund accounting, branch cash shifts/closure and a kitchen queue | inclusive tax pricing, kitchen printers, device payment, stock recipes |
 | Other planned modules | Preview cards only | Subscriptions, documents, AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
 
-## Before a real deployment
+## Before live operational acceptance
 
-1. Provision PostgreSQL, secrets, backups, monitoring and a deployment target.
-2. Configure email verification/recovery and invitation delivery; offline recovery codes and per-email throttles are available. Configure network-level abuse protection.
-3. Define financial, HR and document rules with real operating scenarios and test data.
-4. Run security, accessibility, performance and end-to-end reviews, including tenant isolation.
-5. Enable production registration only after account and abuse controls are ready.
+The existing hosted review environment is not evidence of business or regulatory acceptance. Complete the [release acceptance checklist](RELEASE_ACCEPTANCE.md) against the exact candidate commit before using the ERP for real operations:
 
-The CI workflow checks migrations, unit tests, database constraints, build and API flows against PostgreSQL. Passing CI means this code slice is internally verified; it does not mean the entire ERP is complete or production ready.
+1. Verify deployment/database configuration, migration state, backup restoration, monitoring and rollback. Do not reprovision existing infrastructure merely to satisfy a checklist.
+2. Configure and test email verification/recovery and invitation delivery, or explicitly approve a restricted pilot with offline recovery and manual invitation handling. Keep registration closed and verify network-level abuse protection.
+3. Obtain approved financial, tax, HR, stock and document rules. Unsupported requirements remain release blockers for any workflow that needs them.
+4. Run scoped security, accessibility, performance and end-to-end reviews in both languages, including tenant isolation, permission revocation and interrupted/repeated requests.
+5. Reconcile expected ledger, tax, stock and cash results using isolated acceptance fixtures. Keep production inspection read-only; do not seed demonstration financial records.
+
+The configured Core checks workflow audits dependencies, runs ESLint and TypeScript checks, applies migrations, runs unit and database tests, builds the app and exercises API flows against disposable PostgreSQL. It does not run a browser acceptance suite. Passing CI verifies the tested code slice, not the entire ERP, current live service health or production readiness. Dated CI results below are historical evidence; verify the exact candidate commit separately.
 
 ## Implementation history
 
 The notes below describe incremental releases; older exclusions describe their original slice. The current matrix above and latest dated release entries are authoritative.
+
+### Release hardening candidate — 2026-11-08
+
+API mutations now validate the browser Origin and Fetch Metadata before reaching route handlers. JSON bodies are required, with narrow exceptions for existing bodyless logout and invitation revocation. Non-browser JSON clients remain supported. Regression tests cover forged origins, sibling sites, opaque origins, unsupported content types and the existing bodyless flows.
+
+The lockfile upgrades Next.js to 15.5.29 and Zod to 4.6.7, with patched PostCSS/source-map dependencies and scoped Prisma/ESLint transitive overrides. The dependency audit reports zero advisories as of this review. Validation regression tests confirm that oversized VAT arrays stop before inspecting elements, while existing defaults, normalization and strict-field checks are preserved. Review the overrides when upgrading their parent packages.
+
+The candidate passed a local production build, TypeScript checking, all 44 unit tests, all 69 migrations on disposable PostgreSQL 17, both database checks and all 28 isolated API workflows. Fourteen HTTP-rendered smoke checks also passed for AR/EN login, authenticated dashboard/reports/release status/payment terms, company selection and logout revocation; these do not substitute for browser interaction tests. ESLint now has a working configuration and is enforced in CI, together with type checking and high-severity dependency auditing; 23 pre-existing React Hook warnings remain. API test servers bind to loopback and run with bounded concurrency.
+
+These changes are a review candidate, not a production rollout or completion of the remaining modules. Real Chromium acceptance could not run because the execution environment prevented its required Unix sockets, including after reviewed execution. Browser layout, interaction, accessibility and mobile acceptance remain unverified. No production records or database schema were changed by this verification.
 
 Monthly payroll reports now summarize exact decimal amounts by status and currency across all matching pages, with scoped CSV export (maximum 5000 records). Void records have separate totals. Reports require a month and payroll read permission; no bank transfer is performed.
 

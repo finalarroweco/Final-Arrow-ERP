@@ -10,7 +10,7 @@ async function call(path, method = "GET", body, cookie) {
   return { status: response.status, data: await response.json(), cookie: response.headers.get("set-cookie")?.split(";")[0] };
 }
 test("company payment templates are immutable, audited, scoped and safe to copy into source documents", { timeout: 120000 }, async () => {
-  const db = new PrismaClient(), server = spawn("./node_modules/.bin/next", ["start", "-p", "3245"], { env: { ...process.env, ALLOW_REGISTRATION: "true" }, stdio: ["ignore", "ignore", "inherit"] });
+  const db = new PrismaClient(), server = spawn("./node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", "3245"], { env: { ...process.env, ALLOW_REGISTRATION: "true" }, stdio: ["ignore", "ignore", "inherit"] });
   try {
     let ready = false; for (let i = 0; i < 60; i++) { try { if ((await fetch(origin)).ok) { ready = true; break; } } catch {} await new Promise(resolve => setTimeout(resolve, 500)); } assert.ok(ready);
     async function owner() { const suffix = randomUUID().slice(0, 8), result = await call("/api/auth/register", "POST", { name: "Terms owner", email: `terms-${suffix}@example.invalid`, password: "Terms-owner-password-2026", organization: "Terms QA", slug: `terms-${suffix}` }); assert.equal(result.status, 201); return result; }

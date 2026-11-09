@@ -7,7 +7,7 @@ const origin="http://127.0.0.1:3241";
 async function call(path,method="GET",body,cookie){const r=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cookie:r.headers.get("set-cookie")?.split(";")[0]};}
 test("manual stock reservations protect physical stock, audit history, source scopes and exact retries",{timeout:90000},async()=>{
  // Disposable CI database only. Never insert production QA stock or reservations.
- const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-p","3241"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+ const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-H", "127.0.0.1", "-p","3241"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
   async function owner(){const s=randomUUID().slice(0,8),r=await call("/api/auth/register","POST",{name:"Reservation QA",email:`reserve-${s}@example.invalid`,password:"Reservation-password-2026",organization:"Reservation QA",slug:`reserve-${s}`});assert.equal(r.status,201);return r;}

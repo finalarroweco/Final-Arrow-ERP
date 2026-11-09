@@ -11,7 +11,7 @@ async function call(path,method="GET",body,cookie){
 test("partial receipts are bounded, atomic, scoped and replay-safe",{timeout:90000},async()=>{
  // Isolated CI PostgreSQL only. Never insert these fixtures in the live ERP.
  const db=new PrismaClient();
- const server=spawn("./node_modules/.bin/next",["start","-p","3219"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+ const server=spawn("./node_modules/.bin/next",["start","-H", "127.0.0.1", "-p","3219"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
   async function owner(){const suffix=randomUUID().slice(0,8);const r=await call("/api/auth/register","POST",{name:"Receipt QA",email:`partial-${suffix}@example.invalid`,password:"Partial-test-password-2026",organization:"Partial QA",slug:`partial-${suffix}`});assert.equal(r.status,201);return r;}

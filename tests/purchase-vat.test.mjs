@@ -7,7 +7,7 @@ const origin="http://127.0.0.1:3230";
 async function call(path,method="GET",body,cookie){const r=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return{status:r.status,data:await r.json(),cookie:r.headers.get("set-cookie")?.split(";")[0]};}
 test("purchase VAT separates deductible cost, gross payments and exact partial return tax",{timeout:90000},async()=>{
  // Isolated CI PostgreSQL only; never create financial fixtures in the live ERP.
- const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-p","3230"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+ const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-H", "127.0.0.1", "-p","3230"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
   async function owner(){const s=randomUUID().slice(0,8),r=await call("/api/auth/register","POST",{name:"Purchase VAT QA",email:`purchase-vat-${s}@example.invalid`,password:"Purchase-VAT-password-2026",organization:"Purchase VAT QA",slug:`purchase-vat-${s}`});assert.equal(r.status,201);return r;}
