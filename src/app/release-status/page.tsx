@@ -8,7 +8,7 @@ export default async function ReleaseStatusPage(){
  const groups=[
  {title:t("Implemented workflows","مسارات مطوّرة"),description:t("These modules have scoped application workflows and automated checks. Business acceptance with actual operating rules remains required.","تحتوي هذه الأقسام على مسارات عمل وصلاحيات وفحوص آلية. ما زال اعتمادها مع قواعد العمل الفعلية مطلوبًا."),items:[
  ["/settings/payment-terms",t("Company payment-term templates with permanent definitions, reasoned archive and explicit copying to new documents","قوالب شروط دفع الشركة بتعريفات ثابتة وأرشفة بسبب ونسخ صريح إلى المستندات الجديدة")],
- ["/saved-reports",t("Private reusable presets for customer/supplier balances, posting-date aging and due-date aging","إعدادات خاصة قابلة لإعادة الاستخدام لأرصدة وأعمار العملاء والموردين من تاريخ القيد والاستحقاق")],
+ ["/saved-reports",t("Private reusable presets for customer/supplier balances and aging, plus invoice, expense, quote, sales-order and purchase-order registers","إعدادات خاصة قابلة لإعادة الاستخدام لأرصدة وأعمار العملاء والموردين وسجلات الفواتير والمصاريف وعروض الأسعار وطلبات البيع وأوامر الشراء")],
  ["/data-import",t("CSV import for customers, suppliers and catalog items with preview and atomic audited batches","استيراد العملاء والموردين والأصناف من CSV بمعاينة ودفعات مدققة تُحفظ كاملة")],
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
  ["/purchasing/orders",t("Purchases, partial receipts, returns and source settlements","المشتريات والاستلام الجزئي والمرتجعات والتسويات المرتبطة")],

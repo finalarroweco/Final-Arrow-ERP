@@ -11,7 +11,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Helpdesk | Scoped tickets, optional customer and employee links, priority and status workflow with immutable internal follow-up, explicit UTC deadlines and current overdue register | External conversations, attachments, notifications, customer portal, SLA rules |
 | HR | Employee directory, manager-entered leave requests, searchable daily attendance with date, branch and status filters, scoped CSV reporting and manual monthly payroll drafts with approval, payment recording and printable internal statements | Leave balance rules, payroll rules and bank integration, overnight shifts and separate fingerprint integration |
 | Accounting | Internal invoice/expense registers, optional Oman VAT snapshots for invoices, purchase receipts/returns, expenses and POS, chart of accounts, balanced manual and source-linked journals, customer/supplier settlements and statements/balances, reversals, period locks, financial reports and imported bank statement matching/corrections | Statutory tax documents/filing, inclusive prices, imports/reverse charge, automated/final closing, unallocated settlements, audited due-date amendments, frozen bank reconciliation certificates, split matches and bank feeds |
-| Management | Scoped dashboard, report directory, private saved filters for customer/supplier balances and posting-date/due-date aging, company payment-term templates and action inbox for leave, expense and purchase drafts | Configurable approval policies, broader saved-report coverage |
+| Management | Scoped dashboard, report directory, private saved filters for customer/supplier balances and posting-date/due-date aging, invoice/expense/quote/sales-order/purchase-order register presets, company payment-term templates and action inbox for leave, expense and purchase drafts | Configurable approval policies, presets for other report types |
 | POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV, saved Oman VAT, full/partial refund accounting, branch cash shifts/closure and a kitchen queue | inclusive tax pricing, kitchen printers, device payment, stock recipes |
 | Other planned modules | Preview cards only | Subscriptions, documents, AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
@@ -31,6 +31,16 @@ The configured Core checks workflow audits dependencies, runs ESLint and TypeScr
 ## Implementation history
 
 The notes below describe incremental releases; older exclusions describe their original slice. The current matrix above and latest dated release entries are authoritative.
+
+### Saved document-register reports — review candidate
+
+Private saved reports now also cover invoice, expense, quote, sales-order and purchase-order registers. Presets retain the company, optional branch, valid document status and search text. Dates can be a fixed inclusive range of at most 366 days, the current UTC month through the opening day, or the previous full UTC calendar month. Existing customer/supplier as-of presets and their exact request retries remain supported.
+
+Opening a preset resolves its dates again and checks current ownership and source-report permissions. The dedicated register view keeps the selected scope explicit and offers the source report's existing CSV export and exact currency-separated totals. Filters, not results, are stored. This does not add collections, payable recognition or financial posting to document registers. Preset changes keep immutable scope, audited versions, archive/restore, optimistic concurrency and exact retries after uncertain responses.
+
+This candidate adds one database migration for date-range/status fields and constraints. Apply and verify it in the intended isolated acceptance environment before reviewing the new feature there. It has not been applied to the live ERP by this work; publishing a review branch does not constitute an approved rollout. Real browser and business acceptance remain required.
+
+Local verification passed all 70 migrations, 85 unit/component tests, two database tests, 30 API workflows, production build and TypeScript checks. Lint has zero errors and 23 existing warnings; dependency audit has zero advisories. A populated legacy preset retained every existing field through the migration, and API regressions replayed old-format create/update digests without new writes. Component tests simulate interruption, repeated reads, navigation and stale responses; they do not replace browser acceptance.
 
 ### Bilingual recovery screens — 2026-11-09
 

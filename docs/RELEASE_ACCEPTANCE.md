@@ -46,7 +46,7 @@ Use approved expected results and isolated fixtures, not demonstration records i
 - [ ] HR: validate attendance/leave and manual payroll approval/payment records against approved rules. Do not infer leave accrual, automatic wages, overnight shifts or bank transfer.
 - [ ] Projects/helpdesk: verify task prerequisites, scoped assignments, time review/corrections, manual budget/cost reconciliation, linked invoice totals, current workload and ticket deadline history. Time does not automatically bill or cost; manual deadlines are not an SLA engine.
 - [ ] CSV imports: preview invalid/duplicate records, commit a clean customer/supplier/item batch, retry an uncertain result and confirm one atomic audited batch. Imports do not overwrite records or set opening balances/stock.
-- [ ] Saved reports and terms: verify private filter ownership, current permission checks, UTC date modes, archived presets and explicit copying of payment-term templates. Saved filters are not frozen results; templates do not amend existing documents.
+- [ ] Saved reports and terms: verify private filter ownership, current permission checks, UTC as-of and month-range date modes, valid register statuses, archived presets and explicit copying of payment-term templates. Exercise old pending requests after the register-preset migration, fixed range limits, company/branch changes and stale report responses. Saved filters are not frozen results; templates do not amend existing documents.
 
 ## 4. Browser and operational acceptance
 

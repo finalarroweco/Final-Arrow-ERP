@@ -1592,6 +1592,9 @@ model SavedReport {
  name String @db.VarChar(120)
  dateMode String @db.VarChar(24)
  asOf DateTime? @db.Date
+ from DateTime? @db.Date
+ to DateTime? @db.Date
+ status String? @db.VarChar(24)
  q String @db.VarChar(120)
  version Int @default(1)
  creationDigest String @db.VarChar(64)
