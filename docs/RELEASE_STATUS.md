@@ -32,6 +32,12 @@ The configured Core checks workflow audits dependencies, runs ESLint and TypeScr
 
 The notes below describe incremental releases; older exclusions describe their original slice. The current matrix above and latest dated release entries are authoritative.
 
+### Bilingual recovery screens — 2026-11-09
+
+Application errors, root-layout failures and missing pages now have Arabic/English recovery screens with explicit text direction, accessible navigation and independent fallback styling. Error screens offer a deliberate retry and warn that an interrupted transaction must be checked before it is submitted again. They never display the original exception, stack or diagnostic digest. Dashboard/login links make full requests and retain the normal authorization boundary; no business records or pending requests are changed automatically.
+
+Seven component/source regressions cover locale selection, safe text, navigation, retry callbacks and root fallback output. A production HTTP workflow checks both localized 404 responses and the unauthenticated dashboard redirect. Browser layout, screen-reader behavior and interactive error-boundary recovery still require operational acceptance.
+
 ### Release hardening candidate — 2026-11-08
 
 API mutations now validate the browser Origin and Fetch Metadata before reaching route handlers. JSON bodies are required, with narrow exceptions for existing bodyless logout and invitation revocation. Non-browser JSON clients remain supported. Regression tests cover forged origins, sibling sites, opaque origins, unsupported content types and the existing bodyless flows.
