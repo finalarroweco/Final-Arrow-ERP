@@ -1,18 +1,19 @@
+import type {Prisma} from "@prisma/client";
 import { db } from "./db";
 import { scopeMatches } from "./scope";
 
 export async function canAccess(input: {
   userId: string; tenantId: string; permission: string;
   companyId?: string; branchId?: string;
-}): Promise<boolean> {
+}, client:Prisma.TransactionClient=db): Promise<boolean> {
   if (input.branchId && !input.companyId) return false;
-  const membership = await db.membership.findUnique({
+  const membership = await client.membership.findUnique({
     where: { tenantId_userId: { tenantId: input.tenantId, userId: input.userId } },
     select: { id: true, status: true },
   });
   if (!membership || membership.status !== "ACTIVE") return false;
 
-  const grants = await db.roleGrant.findMany({
+  const grants = await client.roleGrant.findMany({
     where: {
       tenantId: input.tenantId,
       membershipId: membership.id,

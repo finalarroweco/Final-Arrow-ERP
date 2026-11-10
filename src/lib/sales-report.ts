@@ -1,5 +1,5 @@
+import {moneyMillis,moneyText} from "./exact-money";
 import {NextResponse} from "next/server";
-import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {currentUser} from "./auth";
 import {readableCompanyBranches} from "./access";
@@ -18,9 +18,9 @@ export async function salesReport(request:Request,kind:"quotes"|"orders"){
  const rows=kind==="quotes"?(await db.quote.findMany({where:{...scope,...(status?{status:status as "DRAFT"|"SENT"|"ACCEPTED"|"REJECTED"}:{}),...(q?{OR:[{number:{contains:q,mode:"insensitive"}},{customer:{displayName:{contains:q,mode:"insensitive"}}}]}:{})},select:{number:true,createdAt:true,status:true,currency:true,subtotal:true,branchId:true,customer:{select:{displayName:true}}},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001})).map(row=>({...row,customerName:row.customer.displayName})):
  await db.salesOrder.findMany({where:{...scope,...(status?{status:status as "NEW"|"IN_PROGRESS"|"COMPLETED"|"CANCELLED"}:{}),...(q?{OR:[{number:{contains:q,mode:"insensitive"}},{customerName:{contains:q,mode:"insensitive"}}]}:{})},select:{number:true,createdAt:true,status:true,currency:true,subtotal:true,branchId:true,customerName:true},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001});
  if(rows.length>5000)return NextResponse.json({error:"Report exceeds 5000 records. Narrow the filters."},{status:413});
- const totals=new Map<string,{status:string;currency:string;count:number;amount:Prisma.Decimal}>();
- for(const row of rows){const key=JSON.stringify([row.status,row.currency]);const group=totals.get(key)??{status:row.status,currency:row.currency,count:0,amount:new Prisma.Decimal(0)};group.count++;group.amount=group.amount.plus(row.subtotal);totals.set(key,group);}
- if(format==="json")return NextResponse.json({from,to,branchId:branchId??null,status:status??null,q:q??"",dateBasis:"createdAtUTC",customerNameBasis:kind==="quotes"?"current":"snapshot",count:rows.length,summary:[...totals.values()].map(group=>({...group,category:"",amount:group.amount.toFixed(3)})),categories:[],suppliers:[]},{headers:{"Cache-Control":"private, no-store"}});
+ const totals=new Map<string,{status:string;currency:string;count:number;amount:bigint}>();
+ for(const row of rows){const key=JSON.stringify([row.status,row.currency]);const group=totals.get(key)??{status:row.status,currency:row.currency,count:0,amount:BigInt(0)};group.count++;group.amount+=moneyMillis(row.subtotal.toFixed(3));totals.set(key,group);}
+ if(format==="json")return NextResponse.json({from,to,branchId:branchId??null,status:status??null,q:q??"",dateBasis:"createdAtUTC",customerNameBasis:kind==="quotes"?"current":"snapshot",count:rows.length,summary:[...totals.values()].map(group=>({...group,category:"",amount:moneyText(group.amount)})),categories:[],suppliers:[]},{headers:{"Cache-Control":"private, no-store"}});
  const names=new Map((await db.branch.findMany({where:{tenantId,companyId,id:{in:[...new Set(rows.flatMap(row=>row.branchId?[row.branchId]:[]))]}},select:{id:true,name:true}})).map(branch=>[branch.id,branch.name]));
  const content=[["Number","Created date UTC",kind==="quotes"?"Current customer name":"Saved customer name","Branch","Status","Amount","Currency"],...rows.map(row=>[row.number,row.createdAt.toISOString().slice(0,10),row.customerName,row.branchId?names.get(row.branchId)??"":"Company wide",row.status,row.subtotal.toFixed(3),row.currency])].map(line=>line.map(cell).join(",")).join("\r\n")+"\r\n";
  return new Response(`\uFEFF${content}`,{headers:{"Content-Type":"text/csv; charset=utf-8","Content-Disposition":`attachment; filename="${kind}-${from}-to-${to}.csv"`,"Cache-Control":"private, no-store"}});

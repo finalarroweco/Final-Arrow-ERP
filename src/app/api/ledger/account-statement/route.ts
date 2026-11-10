@@ -1,3 +1,4 @@
+import {moneyMillis,moneyText} from "@/lib/exact-money";
 import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
@@ -20,11 +21,11 @@ export async function GET(request:Request){
   const openingRows=await tx.journalLine.findMany({where:{tenantId,companyId,accountId,entry:{...journalWhere({tenantId,companyId,branchId},branches),entryDate:{lt:new Date(`${from}T00:00:00Z`)}}},select:{debit:true,credit:true,entry:{select:{currency:true}}},take:20001});
   const lines=await tx.journalLine.findMany({where:{tenantId,companyId,accountId,entry:journalWhere(parsed.data,branches)},select:{id:true,debit:true,credit:true,position:true,entry:{select:{id:true,number:true,entryDate:true,description:true,currency:true,branchId:true,reversalOf:true}}},orderBy:[{entry:{entryDate:"asc"}},{entry:{createdAt:"asc"}},{entryId:"asc"},{position:"asc"}],take:5001});
   if(openingRows.length>20000||lines.length>5000)return null;
-  const groups=new Map<string,{currency:string;opening:Prisma.Decimal;debit:Prisma.Decimal;credit:Prisma.Decimal;closing:Prisma.Decimal}>();
-  const group=(currency:string)=>{let g=groups.get(currency);if(!g){g={currency,opening:new Prisma.Decimal(0),debit:new Prisma.Decimal(0),credit:new Prisma.Decimal(0),closing:new Prisma.Decimal(0)};groups.set(currency,g);}return g;};
-  for(const row of openingRows){const g=group(row.entry.currency);g.opening=g.opening.plus(row.debit).minus(row.credit);g.closing=g.opening;}
-  const rows=lines.map(line=>{const g=group(line.entry.currency);g.debit=g.debit.plus(line.debit);g.credit=g.credit.plus(line.credit);g.closing=g.closing.plus(line.debit).minus(line.credit);return {id:line.id,number:line.entry.number,date:line.entry.entryDate.toISOString().slice(0,10),description:line.entry.description,branchId:line.entry.branchId,reversal:!!line.entry.reversalOf,currency:g.currency,debit:line.debit.toFixed(3),credit:line.credit.toFixed(3),balance:g.closing.toFixed(3)};});
-  return {rows,summary:[...groups.values()].map(g=>({currency:g.currency,opening:g.opening.toFixed(3),debit:g.debit.toFixed(3),credit:g.credit.toFixed(3),closing:g.closing.toFixed(3)}))};
+  const groups=new Map<string,{currency:string;opening:bigint;debit:bigint;credit:bigint;closing:bigint}>();
+  const group=(currency:string)=>{let g=groups.get(currency);if(!g){g={currency,opening:BigInt(0),debit:BigInt(0),credit:BigInt(0),closing:BigInt(0)};groups.set(currency,g);}return g;};
+  for(const row of openingRows){const g=group(row.entry.currency);g.opening+=moneyMillis(row.debit.toFixed(3))-moneyMillis(row.credit.toFixed(3));g.closing=g.opening;}
+  const rows=lines.map(line=>{const g=group(line.entry.currency);g.debit+=moneyMillis(line.debit.toFixed(3));g.credit+=moneyMillis(line.credit.toFixed(3));g.closing+=moneyMillis(line.debit.toFixed(3))-moneyMillis(line.credit.toFixed(3));return {id:line.id,number:line.entry.number,date:line.entry.entryDate.toISOString().slice(0,10),description:line.entry.description,branchId:line.entry.branchId,reversal:!!line.entry.reversalOf,currency:g.currency,debit:line.debit.toFixed(3),credit:line.credit.toFixed(3),balance:moneyText(g.closing)};});
+  return {rows,summary:[...groups.values()].map(g=>({currency:g.currency,opening:moneyText(g.opening),debit:moneyText(g.debit),credit:moneyText(g.credit),closing:moneyText(g.closing)}))};
  },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
  if(!result)return NextResponse.json({error:"Statement exceeds 5000 period lines or 20000 earlier lines."},{status:413});
  if(format==="json")return NextResponse.json({account,from,to,branchId:branchId??null,...result},{headers:{"Cache-Control":"private, no-store"}});

@@ -1,3 +1,4 @@
+import {moneyMillis,moneyText} from "@/lib/exact-money";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -53,6 +54,6 @@ export async function GET(request: Request) {
     employees,
     expenses: expenses === null ? null : { currency: company?.baseCurrency ?? "",
       postedCount: expenses._count._all,
-      postedAmount: expenses._sum.amount?.plus(expenseTaxes?._sum.taxAmount??0).minus(expenseTaxes?._sum.recoverableTax??0).toString() ?? "0" },
+      postedAmount: moneyText(moneyMillis(expenses._sum.amount?.toFixed(3)??"0")+moneyMillis(expenseTaxes?._sum.taxAmount?.toFixed(3)??"0")-moneyMillis(expenseTaxes?._sum.recoverableTax?.toFixed(3)??"0")).replace(/\.?0+$/,"") },
   });
 }

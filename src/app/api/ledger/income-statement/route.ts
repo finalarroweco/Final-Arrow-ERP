@@ -1,5 +1,5 @@
+import {moneyMillis,moneyText} from "@/lib/exact-money";
 import {NextResponse} from "next/server";
-import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {currentUser} from "@/lib/auth";
 import {readableCompanyBranches} from "@/lib/access";
@@ -15,11 +15,11 @@ export async function GET(request:Request){
  if(branches===false||(branchId&&branches!==null&&!branches.includes(branchId)))return NextResponse.json({error:"Forbidden"},{status:403});
  const lines=await db.journalLine.findMany({where:{tenantId,companyId,entry:journalWhere(parsed.data,branches),account:{type:{in:["REVENUE","EXPENSE"]}}},select:{accountId:true,debit:true,credit:true,account:{select:{code:true,name:true,type:true}},entry:{select:{currency:true}}},take:20001});
  if(lines.length>20000)return NextResponse.json({error:"Report exceeds 20000 income/expense lines. Narrow the filters."},{status:413});
- const groups=new Map<string,{accountId:string;code:string;name:string;type:string;currency:string;debit:Prisma.Decimal;credit:Prisma.Decimal}>();
- for(const line of lines){const key=JSON.stringify([line.accountId,line.entry.currency]);const g=groups.get(key)??{accountId:line.accountId,...line.account,currency:line.entry.currency,debit:new Prisma.Decimal(0),credit:new Prisma.Decimal(0)};g.debit=g.debit.plus(line.debit);g.credit=g.credit.plus(line.credit);groups.set(key,g);}
- const totals=new Map<string,{currency:string;revenue:Prisma.Decimal;expenses:Prisma.Decimal}>();
- const rows=[...groups.values()].sort((a,b)=>a.type.localeCompare(b.type)||a.code.localeCompare(b.code)||a.currency.localeCompare(b.currency)).map(g=>{const amount=g.type==="REVENUE"?g.credit.minus(g.debit):g.debit.minus(g.credit);const total=totals.get(g.currency)??{currency:g.currency,revenue:new Prisma.Decimal(0),expenses:new Prisma.Decimal(0)};if(g.type==="REVENUE")total.revenue=total.revenue.plus(amount);else total.expenses=total.expenses.plus(amount);totals.set(g.currency,total);return {...g,debit:g.debit.toFixed(3),credit:g.credit.toFixed(3),amount:amount.toFixed(3)};});
- const summary=[...totals.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(g=>({currency:g.currency,revenue:g.revenue.toFixed(3),expenses:g.expenses.toFixed(3),netIncome:g.revenue.minus(g.expenses).toFixed(3)}));
+ const groups=new Map<string,{accountId:string;code:string;name:string;type:string;currency:string;debit:bigint;credit:bigint}>();
+ for(const line of lines){const key=JSON.stringify([line.accountId,line.entry.currency]);const g=groups.get(key)??{accountId:line.accountId,...line.account,currency:line.entry.currency,debit:BigInt(0),credit:BigInt(0)};g.debit+=moneyMillis(line.debit.toFixed(3));g.credit+=moneyMillis(line.credit.toFixed(3));groups.set(key,g);}
+ const totals=new Map<string,{currency:string;revenue:bigint;expenses:bigint}>();
+ const rows=[...groups.values()].sort((a,b)=>a.type.localeCompare(b.type)||a.code.localeCompare(b.code)||a.currency.localeCompare(b.currency)).map(g=>{const amount=g.type==="REVENUE"?g.credit-g.debit:g.debit-g.credit;const total=totals.get(g.currency)??{currency:g.currency,revenue:BigInt(0),expenses:BigInt(0)};if(g.type==="REVENUE")total.revenue+=amount;else total.expenses+=amount;totals.set(g.currency,total);return {...g,debit:moneyText(g.debit),credit:moneyText(g.credit),amount:moneyText(amount)};});
+ const summary=[...totals.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(g=>({currency:g.currency,revenue:moneyText(g.revenue),expenses:moneyText(g.expenses),netIncome:moneyText(g.revenue-g.expenses)}));
  const scope=branches===null&&!branchId?"COMPANY":"BRANCHES";
  if(format==="json")return NextResponse.json({from,to,branchId:branchId??null,scope,lineCount:lines.length,rows,summary},{headers:{"Cache-Control":"private, no-store"}});
  const cell=(v:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(v)?`'${v}`:v).replaceAll('"','""')}"`;

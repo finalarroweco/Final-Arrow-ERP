@@ -279,6 +279,8 @@ model Session {
 }
 
 model Membership {
+ certificatesCreated BankReconciliationCertificate[] @relation("CertificateCreator")
+ certificateEventsCreated BankReconciliationCertificateEvent[] @relation("CertificateEventCreator")
   savedReports SavedReport[]
   id         String           @id @default(uuid()) @db.Uuid
   tenantId   String           @db.Uuid
@@ -566,6 +568,7 @@ model PurchaseOrderLine {
 }
 
 model GoodsReceipt {
+  paymentTermAmendments PaymentTermAmendment[]
   paymentTerms String? @db.VarChar(120)
   paymentDueDate DateTime? @db.Date
  vatSnapshots PurchaseVat[]
@@ -729,6 +732,7 @@ model SalesOrderLine {
 }
 
 model Invoice {
+  paymentTermAmendments PaymentTermAmendment[]
  projectLinks ProjectInvoiceLink[]
   paymentTerms String? @db.VarChar(120)
   paymentDueDate DateTime? @db.Date
@@ -1268,6 +1272,7 @@ model CustomerSettlement {
 }
 
 model BankStatement {
+ certificates BankReconciliationCertificate[]
  id String @id @db.Uuid
  tenantId String @db.Uuid
  companyId String @db.Uuid
@@ -1686,4 +1691,68 @@ model ProjectInvoiceLink {
  invoice Invoice @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@index([tenantId,projectId,createdAt,id])
  @@index([invoiceId,unlinkedAt])
+}
+
+model PaymentTermAmendment {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ invoiceId String? @db.Uuid
+ receiptId String? @db.Uuid
+ sequence Int
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ reason String @db.VarChar(1000)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ invoice Invoice? @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
+ receipt GoodsReceipt? @relation(fields:[tenantId,companyId,receiptId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([invoiceId,sequence])
+ @@unique([receiptId,sequence])
+ @@index([tenantId,invoiceId,createdAt,sequence])
+ @@index([tenantId,receiptId,createdAt,sequence])
+}
+
+model BankReconciliationCertificate {
+ statement BankStatement @relation(fields:[tenantId,companyId,accountId,statementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
+ creator Membership @relation("CertificateCreator",fields:[tenantId,createdBy],references:[tenantId,userId],onDelete:Restrict)
+ events BankReconciliationCertificateEvent[] @relation("CertificateEvents")
+ replacementEvents BankReconciliationCertificateEvent[] @relation("CertificateReplacement")
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ statementId String @db.Uuid
+ snapshot Json
+ summary Json
+ digest String @db.VarChar(64)
+ requestDigest String @db.VarChar(64)
+ note String @db.VarChar(300)
+ observedAt DateTime @db.Timestamptz(3)
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ createdBy String @db.Uuid
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,accountId,id])
+ @@index([tenantId,statementId,createdAt,id],map:"bank_certificate_statement_created")
+}
+model BankReconciliationCertificateEvent {
+ certificate BankReconciliationCertificate @relation("CertificateEvents",fields:[tenantId,companyId,accountId,certificateId],references:[tenantId,companyId,accountId,id],onDelete:Restrict,map:"bank_certificate_event_source_fk")
+ replacement BankReconciliationCertificate? @relation("CertificateReplacement",fields:[tenantId,companyId,accountId,replacementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict,map:"bank_certificate_event_replacement_fk")
+ creator Membership @relation("CertificateEventCreator",fields:[tenantId,createdBy],references:[tenantId,userId],onDelete:Restrict)
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ certificateId String @db.Uuid
+ sequence Int
+ action String @db.VarChar(10)
+ replacementId String? @db.Uuid
+ reason String @db.VarChar(300)
+ requestDigest String @db.VarChar(64)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ @@unique([certificateId,sequence])
 }
