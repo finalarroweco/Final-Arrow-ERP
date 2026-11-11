@@ -1,3 +1,4 @@
+import { configuredApprovalRequired } from "@/lib/approval-workflows";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -27,6 +28,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     branchId: leave.branchId ?? undefined, permission: "leave:decide" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
+    await tx.$queryRaw`SELECT id FROM "LeaveRequest" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+    const lockedSource = await tx.leaveRequest.findUnique({ where: { id }, select: { companyId: true, branchId: true } });
+    if (!lockedSource || !(await canAccess({ userId: actor.id, tenantId, companyId: lockedSource.companyId, branchId: lockedSource.branchId ?? undefined, permission: "leave:decide" }, tx))) return { forbidden: true as const };
+    const pending = await tx.$queryRaw<{ pending: boolean }[]>`SELECT EXISTS(SELECT 1 FROM "ApprovalRequest" WHERE "tenantId"=${tenantId}::uuid AND resource='LEAVE' AND "sourceId"=${id}::uuid AND status='PENDING') AS pending`;
+    if (pending[0].pending || (action === "approve") && await configuredApprovalRequired(tx, tenantId, "LEAVE", id)) return { workflowRequired: true as const };
     const changed = await tx.leaveRequest.updateMany({ where: { id, tenantId,
       status: action === "cancel" ? { in: ["PENDING", "APPROVED"] } : "PENDING" },
       data: { status: action === "approve" ? "APPROVED" : action === "reject" ? "REJECTED" : "CANCELLED",
@@ -38,6 +45,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.leaveRequest.findUnique({ where: { id }, select: { id: true, status: true,
       decisionNote: true, decidedAt: true } });
   });
+  if (result && "forbidden" in result) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (result && "workflowRequired" in result) return NextResponse.json({ error: "Use the configured approval workflow, or cancel its pending request first", workflowRequired: true, sourceId: id, resource: "LEAVE" }, { status: 409 });
   if (!result) return NextResponse.json({ error: "Leave request status changed" }, { status: 409 });
   return NextResponse.json({ request: result });
 }

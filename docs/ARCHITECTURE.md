@@ -12,7 +12,7 @@
 - Audit logs
 - Notifications
 - Attachments
-- Approval workflows
+- Implemented review slice: [configured multi-stage approvals](CONFIGURABLE_APPROVALS.md) for purchase issue, expense post and leave approval, with explicit policies, scoped quorums, immutable history and atomic finalization; other adapters remain planned.
 - Automation rules
 - Localization
 - Currencies

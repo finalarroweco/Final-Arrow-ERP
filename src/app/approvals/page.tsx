@@ -27,6 +27,7 @@ export default async function ApprovalsPage() {
   }))).filter((option) => option !== null);
   return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("APPROVALS", "الموافقات")}</p><h1>{t("Action inbox.", "صندوق الإجراءات.")}</h1><p className="sub">{t("Review leave, expense drafts, purchase orders and payroll from one place.", "راجع الإجازات ومسودات المصاريف وأوامر الشراء والرواتب من مكان واحد.")}</p></section>
+    <p><a href="/approvals/workflows">{t("Configure policies and review multi-step approvals", "إعداد السياسات ومراجعة الموافقات متعددة المراحل")}</a></p>
     <ApprovalsWorkspace options={options} locale={locale} />
   </main>;
 }

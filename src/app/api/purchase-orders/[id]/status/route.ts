@@ -1,3 +1,4 @@
+import { configuredApprovalRequired } from "@/lib/approval-workflows";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -25,6 +26,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const expected = "DRAFT";
   const field = action === "issue" ? "issuedAt" : "cancelledAt";
   const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
+    await tx.$queryRaw`SELECT id FROM "PurchaseOrder" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+    const lockedSource = await tx.purchaseOrder.findUnique({ where: { id }, select: { companyId: true, branchId: true } });
+    if (!lockedSource || !(await canAccess({ userId: actor.id, tenantId, companyId: lockedSource.companyId, branchId: lockedSource.branchId ?? undefined, permission: "purchase-order:manage" }, tx))) return { forbidden: true as const };
+    const pending = await tx.$queryRaw<{ pending: boolean }[]>`SELECT EXISTS(SELECT 1 FROM "ApprovalRequest" WHERE "tenantId"=${tenantId}::uuid AND resource='PURCHASE' AND "sourceId"=${id}::uuid AND status='PENDING') AS pending`;
+    if (pending[0].pending || (action === "issue") && await configuredApprovalRequired(tx, tenantId, "PURCHASE", id)) return { workflowRequired: true as const };
     const changed = await tx.purchaseOrder.updateMany({ where: { id, tenantId, status: expected },
       data: { status, [field]: new Date() } });
     if (changed.count !== 1) return null;
@@ -33,6 +40,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.purchaseOrder.findUnique({ where: { id }, select: { id: true, status: true,
       issuedAt: true, receivedAt: true, cancelledAt: true } });
   });
+  if (result && "forbidden" in result) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (result && "workflowRequired" in result) return NextResponse.json({ error: "Use the configured approval workflow, or cancel its pending request first", workflowRequired: true, sourceId: id, resource: "PURCHASE" }, { status: 409 });
   if (!result) return NextResponse.json({ error: "Purchase order status has changed or transition is invalid" }, { status: 409 });
   return NextResponse.json({ order: result });
 }

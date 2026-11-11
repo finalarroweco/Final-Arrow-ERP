@@ -1,3 +1,4 @@
+import { configuredApprovalRequired } from "@/lib/approval-workflows";
 import { documentJournal, lockDocument } from "@/lib/document-journal";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -27,7 +28,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     branchId: expense.branchId ?? undefined, permission: action === "post" ? "expense:post" : "expense:void" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
+    await tx.$queryRaw`SELECT id FROM "Expense" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
     await lockDocument(tx, "expense", tenantId, id);
+    const lockedSource = await tx.expense.findUnique({ where: { id }, select: { companyId: true, branchId: true } });
+    if (!lockedSource || !(await canAccess({ userId: actor.id, tenantId, companyId: lockedSource.companyId, branchId: lockedSource.branchId ?? undefined, permission: action === "post" ? "expense:post" : "expense:void" }, tx))) return { forbidden: true as const };
+    const pending = await tx.$queryRaw<{ pending: boolean }[]>`SELECT EXISTS(SELECT 1 FROM "ApprovalRequest" WHERE "tenantId"=${tenantId}::uuid AND resource='EXPENSE' AND "sourceId"=${id}::uuid AND status='PENDING') AS pending`;
+    if (pending[0].pending || (action === "post") && await configuredApprovalRequired(tx, tenantId, "EXPENSE", id)) return { workflowRequired: true as const };
     if (action === "void") {
       const journal = await documentJournal(tx, "expense", tenantId, expense.companyId, id);
       if (journal && !journal.reversal) return { ledgerBlocked: true as const };
@@ -41,6 +48,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.expense.findUnique({ where: { id }, select: { id: true, status: true, postedAt: true, voidedAt: true, voidReason: true } });
   });
   if (result && "ledgerBlocked" in result) return NextResponse.json({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
+  if (result && "forbidden" in result) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (result && "workflowRequired" in result) return NextResponse.json({ error: "Use the configured approval workflow, or cancel its pending request first", workflowRequired: true, sourceId: id, resource: "EXPENSE" }, { status: 409 });
   if (!result) return NextResponse.json({ error: "Expense status changed" }, { status: 409 });
   return NextResponse.json({ expense: result });
 }

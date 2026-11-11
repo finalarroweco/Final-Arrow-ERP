@@ -1,4 +1,5 @@
 "use client";
+import {sourceLink} from "@/app/approvals/workflows/read-input";
 
 import {paymentTermsInput} from "@/lib/payment-terms";
 import {PaymentTermsFields} from "../../payment-terms-fields";
@@ -178,7 +179,8 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       const receiptBranches = scope.branches.filter((branch) => branch.canStockAdjust);
       const canReceive = canManage && (order.branchId
         ? receiptBranches.some((branch) => branch.id === order.branchId) : receiptBranches.length > 0);
-      return <article key={order.id}><div><h3>{order.number} · {order.supplierName}</h3><a href={`/purchasing/orders/${order.id}`}>{t("View / print purchase order","عرض / طباعة أمر الشراء")}</a>
+      return <article key={order.id}><div><h3>{order.number} · {order.supplierName}</h3>
+        <p><a href={sourceLink({tenantId:scope.tenantId,companyId:scope.companyId,branchId:order.branchId},"PURCHASE",order.id)}>{t("Approval workflow / current state", "مسار الموافقة / الحالة الحالية")}</a></p><a href={`/purchasing/orders/${order.id}`}>{t("View / print purchase order","عرض / طباعة أمر الشراء")}</a>
         <p>{order.status==="ISSUED"&&order.lines.some(l=>l.receivedQuantity>0)?t("Partially received","مستلم جزئيًا"):t(order.status, ({ DRAFT: "مسودة", ISSUED: "مصدر", RECEIVED: "مستلم", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
         <ul>{order.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount} · {t("Received / remaining","المستلم / المتبقي")}: {line.receivedQuantity} / {line.quantity-line.receivedQuantity}</li>)}</ul>
         {order.receipts.map(receipt=><p key={receipt.id}><a href={`/purchasing/receipts/${receipt.id}`}>{t("View / print goods receipt","عرض / طباعة مستند الاستلام")}</a> · {receipt.createdAt.slice(0,16).replace("T"," ")} UTC · {scope.branches.find(branch=>branch.id===receipt.branchId)?.name??t("branch","فرع")}</p>)}

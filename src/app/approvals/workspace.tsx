@@ -1,4 +1,5 @@
 "use client";
+import {sourceLink} from "./workflows/read-input";
 
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -56,6 +57,7 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
     {items.map((item) => <article key={`${item.type}:${item.id}`} className="card">
       <small>{t(item.type, ({ LEAVE: "إجازة", EXPENSE: "مصروف", PURCHASE: "شراء", PAYROLL: "راتب" })[item.type])} · {item.branchId ? scope.branches.find((branch) => branch.id === item.branchId)?.name : t("Company wide", "على مستوى الشركة")}</small>
       <h3>{item.title}</h3><p>{item.detail}</p>
+      {item.type !== "PAYROLL" && <p><a href={sourceLink({tenantId:scope.tenantId,companyId:scope.companyId,branchId:item.branchId},item.type,item.id)}>{t("Approval workflow / submit / current state", "مسار الموافقة / تقديم / الحالة الحالية")}</a></p>}
       {item.type === "LEAVE" && <button disabled={busy} onClick={() => void act(item, "approve")}>{t("Approve leave", "الموافقة على الإجازة")}</button>}
       {item.type === "EXPENSE" && <button disabled={busy} onClick={() => void act(item, "post")}>{t("Post expense", "ترحيل المصروف")}</button>}
       {item.type === "PAYROLL" && <button disabled={busy} onClick={() => void act(item, "approve")}>{t("Approve payroll", "اعتماد الراتب")}</button>}

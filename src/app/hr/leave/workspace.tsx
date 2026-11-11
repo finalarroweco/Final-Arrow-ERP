@@ -1,4 +1,5 @@
 "use client";
+import {sourceLink} from "@/app/approvals/workflows/read-input";
 
 import { translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
@@ -87,6 +88,7 @@ export function LeaveWorkspace({ options, locale }: { options: Option[]; locale:
       const rights = leave.branchId ? scope.branches.find((branch) => branch.id === leave.branchId) : scope.companyRights;
       return <article key={leave.id} className="card">
         <strong>{leave.employee.fullName}</strong> · {leave.employee.code}
+        <p><a href={sourceLink({tenantId:scope.tenantId,companyId:scope.companyId,branchId:leave.branchId},"LEAVE",leave.id)}>{t("Approval workflow / current state", "مسار الموافقة / الحالة الحالية")}</a></p>
         <p>{t(leave.type, ({ ANNUAL: "سنوية", SICK: "مرضية", UNPAID: "غير مدفوعة", OTHER: "أخرى" })[leave.type])} · {leave.startDate.slice(0, 10)} {t("to", "إلى")} {leave.endDate.slice(0, 10)} · {t(leave.status, ({ PENDING: "معلّقة", APPROVED: "مقبولة", REJECTED: "مرفوضة", CANCELLED: "ملغاة" })[leave.status])} · {leave.branchId ? scope.branches.find((branch) => branch.id === leave.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>
         {leave.note && <p>{leave.note}</p>}{leave.decisionNote && <p>{t("Decision note:", "ملاحظة القرار:")} {leave.decisionNote}</p>}
         {rights?.canDecide && leave.status === "PENDING" && <button disabled={busy}
