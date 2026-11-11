@@ -143,6 +143,7 @@ model Tenant {
 }
 
 model Company {
+ automationJobs AutomationJob[]
   privateAlertRules PrivateAlertRule[]
   privateAlertRequests PrivateAlertRequest[]
   paymentTermTemplates PaymentTermTemplate[]
@@ -188,7 +189,6 @@ model Company {
   @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@index([tenantId])
- automationJobs AutomationJob[]
 }
 
 model PaymentTermTemplate {
@@ -211,6 +211,7 @@ model PaymentTermTemplate {
 }
 
 model Branch {
+ automationJobs AutomationJob[]
   privateAlertRules PrivateAlertRule[]
   savedReports SavedReport[]
   importBatches CatalogImportBatch[]
@@ -250,7 +251,6 @@ model Branch {
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId])
   posShifts PosShift[]
- automationJobs AutomationJob[]
 }
 
 model Department {
@@ -290,6 +290,7 @@ model Session {
 }
 
 model Membership {
+ automationJobs AutomationJob[]
   privateAlertRules PrivateAlertRule[]
   privateAlertRequests PrivateAlertRequest[]
  bankImportCancellations BankStatementImportCancellation[]
@@ -309,7 +310,6 @@ model Membership {
   @@unique([tenantId, userId])
   @@unique([tenantId, id])
   @@index([userId])
- automationJobs AutomationJob[]
 }
 
 model Role {
@@ -775,6 +775,7 @@ model Invoice {
   branchId     String?       @db.Uuid
   customerId   String        @db.Uuid
   orderId      String?       @unique @db.Uuid
+  projectMilestoneSourceId String? @unique @db.Uuid
   projectTimeSourceId String? @unique @db.Uuid
   serviceSourceId String? @unique @db.Uuid
   number       String
@@ -792,6 +793,7 @@ model Invoice {
   branch       Branch?       @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   customer     Customer      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
   order        SalesOrder?   @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  projectMilestoneSource ProjectMilestoneInvoiceSource? @relation(fields: [tenantId, companyId, projectMilestoneSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
   projectTimeSource ProjectTimeInvoiceSource? @relation(fields: [tenantId, companyId, projectTimeSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
   serviceSource ServiceInvoiceSource? @relation(fields: [tenantId, companyId, serviceSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        InvoiceLine[]
@@ -801,6 +803,7 @@ model Invoice {
 
   @@unique([companyId, number])
   @@unique([tenantId, companyId, orderId])
+  @@unique([tenantId, companyId, projectMilestoneSourceId])
   @@unique([tenantId, companyId, projectTimeSourceId])
   @@unique([tenantId, companyId, serviceSourceId])
   @@unique([tenantId, companyId, id])
@@ -2452,6 +2455,99 @@ model ProjectTimeInvoiceClaim {
  @@index([sourceId])
 }
 model ProjectTimeInvoiceRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+}
+
+model ProjectMilestone {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ customerId String @db.Uuid
+ description String
+ currency String @db.VarChar(3)
+ agreedPrice Decimal @db.Decimal(18,3)
+ treatment String
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ status String @default("DRAFT")
+ sequence Int @default(0)
+ createdBy String @db.Uuid
+ requestId String @unique @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+ @@unique([tenantId,companyId,projectId,id])
+ @@index([tenantId,companyId,projectId,createdAt,id])
+}
+model ProjectMilestoneAction {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ milestoneId String @db.Uuid
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,milestoneId,createdAt,id])
+}
+model ProjectMilestoneInvoiceSource {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ milestoneId String @db.Uuid
+ customerId String @db.Uuid
+ customerName String
+ currency String @db.VarChar(3)
+ description String
+ agreedPrice Decimal @db.Decimal(18,3)
+ treatment String
+ lines Json
+ subtotal Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ vatProfileRevision Int?
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ replacesSourceId String? @unique @db.Uuid
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ invoice Invoice?
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,projectId,createdAt,id])
+}
+model ProjectMilestoneInvoiceClaim {
+ milestoneId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ projectId String @db.Uuid
+ sourceId String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@index([sourceId])
+}
+model ProjectMilestoneInvoiceRequest {
  id String @id @db.Uuid
  tenantId String @db.Uuid
  companyId String @db.Uuid

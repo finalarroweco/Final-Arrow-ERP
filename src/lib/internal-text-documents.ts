@@ -1,3 +1,4 @@
+import {approvalSessionCurrent} from './approval-session';
 import {Prisma,type InternalTextDocumentRequest} from '@prisma/client';
 import {z} from 'zod';
 import {db} from './db';
@@ -35,13 +36,19 @@ export async function listInternalDocuments(actorId:string,f:z.infer<typeof docu
  if(f.format==='csv'&&rows.length>5000)throw new DocumentError('Export exceeds 5000 documents. Narrow the filters.',413);
  return {documents:rows.slice(0,f.format==='csv'?5000:50),page:f.page,nextPage:f.format==='json'&&rows.length>50?f.page+1:null};
  },transactionOptions);}
-export async function readInternalDocument(actorId:string,id:string,scope:{tenantId:string;companyId:string},page=0,eventId?:string){return db.$transaction(async tx=>{
+export async function readInternalDocument(actorId:string,id:string,scope:{tenantId:string;companyId:string},page=0,eventId?:string,sessionHash?:string){return db.$transaction(async tx=>{
  const ownedScope={tenantId:scope.tenantId,companyId:scope.companyId};
  await tenantLock(tx,scope.tenantId);
  await tx.$queryRaw`SELECT id FROM "InternalTextDocument" WHERE id=${id}::uuid AND "tenantId"=${scope.tenantId}::uuid AND "companyId"=${scope.companyId}::uuid FOR SHARE`;
  const document=await tx.internalTextDocument.findFirst({where:{id,...ownedScope}});
  if(!document||!await documentRights(tx,actorId,document))throw new DocumentError('Document not found',404);
- if(eventId){const event=await tx.internalTextDocumentEvent.findFirst({where:{id:eventId,documentId:id,...ownedScope}});if(!event)throw new DocumentError('Revision not found',404);return {document,events:[event],page:0,nextPage:null,canManage:await documentRights(tx,actorId,document,true)};}
+ const revisionStatus=async(events:{id:string}[])=>{
+ const rows=events.length?await tx.$queryRaw<{sourceId:string;status:string}[]>(Prisma.sql`SELECT DISTINCT ON ("sourceId") "sourceId",status FROM "ApprovalRequest" WHERE "tenantId"=${scope.tenantId}::uuid AND resource='DOCUMENT' AND "sourceId" IN (${Prisma.join(events.map(e=>Prisma.sql`${e.id}::uuid`))}) ORDER BY "sourceId","createdAt" DESC,id DESC`):[];
+ if(!await approvalSessionCurrent(tx,actorId,sessionHash))throw new DocumentError('Session expired or signed out. Reload this workspace.',401);
+ return Object.fromEntries(rows.map(row=>[row.sourceId,row.status]));
+ };
+ const canReview=await canAccess({userId:actorId,tenantId:document.tenantId,companyId:document.companyId,branchId:document.branchId??undefined,permission:'document:approve'},tx);
+ if(eventId){const event=await tx.internalTextDocumentEvent.findFirst({where:{id:eventId,documentId:id,...ownedScope}});if(!event)throw new DocumentError('Revision not found',404);return {document,revisionStatus:await revisionStatus([event]),canReview,events:[event],page:0,nextPage:null,canManage:await documentRights(tx,actorId,document,true)};}
  const events=await tx.internalTextDocumentEvent.findMany({where:{documentId:id,...ownedScope},orderBy:{version:'desc'},skip:page*50,take:51});
- return {document,events:events.slice(0,50),page,nextPage:events.length>50?page+1:null,canManage:await documentRights(tx,actorId,document,true)};
+ return {document,revisionStatus:await revisionStatus(events.slice(0,50)),canReview,events:events.slice(0,50),page,nextPage:events.length>50?page+1:null,canManage:await documentRights(tx,actorId,document,true)};
  },transactionOptions);}

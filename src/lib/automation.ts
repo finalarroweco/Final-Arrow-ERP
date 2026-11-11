@@ -1,3 +1,4 @@
+import {lockedSessionActive} from './session-lock';
 import {randomUUID,timingSafeEqual} from 'node:crypto';
 import {Prisma} from '@prisma/client';
 import {z} from 'zod';
@@ -22,8 +23,7 @@ async function tenantLock(tx:Prisma.TransactionClient,tenantId:string){await tx.
 async function activeMember(tx:Prisma.TransactionClient,actorId:string,tenantId:string){if((await tx.membership.findUnique({where:{tenantId_userId:{tenantId,userId:actorId}},select:{status:true}}))?.status!=='ACTIVE')throw new AutomationError('Current membership required',403);}
 async function currentSession(tx:Prisma.TransactionClient,actorId:string,sessionId?:string){
  if(!sessionId)return; // Trusted internal/service callers; HTTP routes always pass the current session ID.
- const rows=await tx.$queryRaw<{id:string}[]>`SELECT id FROM "Session" WHERE id=${sessionId}::uuid AND "userId"=${actorId}::uuid AND "expiresAt">(clock_timestamp() AT TIME ZONE 'UTC') FOR SHARE`;
- if(!rows.length)throw new AutomationError('Session expired. Sign in again.',401);
+ if(!await lockedSessionActive(tx,actorId,{id:sessionId}))throw new AutomationError('Session expired. Sign in again.',401);
 }
 export async function automationSourcePreview(actorId:string,p:z.infer<typeof automationPreview>,sessionId?:string){return db.$transaction(async tx=>{
  if(actorId!==p.expectedActorId)throw new AutomationError('Signed-in user changed',403);await tenantLock(tx,p.tenantId);await activeMember(tx,actorId,p.tenantId);await currentSession(tx,actorId,sessionId);

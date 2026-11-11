@@ -1,7 +1,7 @@
 import { z } from 'zod';
 const uuid=z.string().uuid().transform(v=>v.toLowerCase());
 const text=(max:number)=>z.string().trim().min(1).max(max).refine(s=>!/[\u0000-\u001f\u007f]/.test(s),'Control characters are not allowed');
-export const approvalResource=z.enum(['PURCHASE','EXPENSE','LEAVE']);
+export const approvalResource=z.enum(['PURCHASE','EXPENSE','LEAVE','DOCUMENT']);
 export type ApprovalResource=z.infer<typeof approvalResource>;
 export const approvalScope=z.object({tenantId:uuid,companyId:uuid,branchId:uuid.nullable()}).strict();
 export const approvalStage=z.object({name:text(120),quorum:z.number().int().min(1).max(50),userIds:z.array(uuid).max(100),roleIds:z.array(uuid).max(50)}).strict().superRefine((s,c)=>{
@@ -11,7 +11,7 @@ export const approvalStage=z.object({name:text(120),quorum:z.number().int().min(
 });
 const amount=z.string().regex(/^(0|[1-9]\d{0,14})\.\d{3}$/);
 export const approvalConfiguration=z.object({title:text(160),enabled:z.boolean(),resource:approvalResource,currency:z.string().regex(/^[A-Z]{3}$/).nullable(),minimumAmount:amount.nullable(),maximumAmount:amount.nullable(),excludeRequester:z.boolean(),stages:z.array(approvalStage).min(1).max(12)}).strict().superRefine((p,c)=>{
- if(p.resource==='LEAVE'&&(p.currency!==null||p.minimumAmount!==null||p.maximumAmount!==null))c.addIssue({code:'custom',message:'Leave has no monetary threshold'});
+ if(['LEAVE','DOCUMENT'].includes(p.resource)&&(p.currency!==null||p.minimumAmount!==null||p.maximumAmount!==null))c.addIssue({code:'custom',message:'This resource has no monetary threshold'});
  if((p.minimumAmount!==null||p.maximumAmount!==null)&&p.currency===null)c.addIssue({code:'custom',message:'Thresholds require an explicit currency'});
  if(p.minimumAmount!==null&&p.maximumAmount!==null&&BigInt(p.minimumAmount.replace('.',''))>BigInt(p.maximumAmount.replace('.','')))c.addIssue({code:'custom',message:'Minimum exceeds maximum'});
 });

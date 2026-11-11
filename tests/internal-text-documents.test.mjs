@@ -24,7 +24,7 @@ test('internal text documents are scoped, immutable, versioned and exactly recov
   const owner=await register('Text document owner'),{tenantId,cookie,actorId}=owner;
   const builtInRoles=await db.role.findMany({where:{tenantId,name:{in:['Owner','Manager','Viewer']}},include:{permissions:true}});
   assert.equal(builtInRoles.length,3);
-  for(const role of builtInRoles){const documentPermissions=role.permissions.map(p=>p.permissionKey).filter(p=>p.startsWith('document:')).sort();assert.deepEqual(documentPermissions,role.name==='Owner'?['document:manage','document:read']:[],role.name+' document permissions remain opt-in');}
+  for(const role of builtInRoles){const documentPermissions=role.permissions.map(p=>p.permissionKey).filter(p=>p.startsWith('document:')).sort();assert.deepEqual(documentPermissions,role.name==='Owner'?['document:approve','document:manage','document:read']:[],role.name+' document permissions remain opt-in');}
   const create=async(path,body)=>{const r=await call(path,'POST',{tenantId,...body},cookie);assert.equal(r.status,201,JSON.stringify(r));return r.data;};
   const {company}=await create('/api/companies',{name:'Document company',code:'DOC',baseCurrency:'OMR'}),companyId=company.id;
   const {company:otherCompany}=await create('/api/companies',{name:'Other document company',code:'DOC2',baseCurrency:'OMR'});

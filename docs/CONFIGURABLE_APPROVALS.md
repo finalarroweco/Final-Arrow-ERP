@@ -2,7 +2,7 @@
 
 ## Supported operations / العمليات المدعومة
 
-Open **Approvals → Configure policies and review multi-step approvals**. The new workspace supports issuing purchase orders, posting expenses, and approving leave requests. Payroll retains its existing workflow. It does not send supplier communications, execute payments, create ledger entries, or change stock. The final successful vote performs the existing source status transition in the same database transaction.
+Open **Approvals → Configure policies and review multi-step approvals**. The workspace supports issuing purchase orders, posting expenses, approving leave requests, and optional exact-revision document review. See [document review](DOCUMENT_REVISION_APPROVALS.md) for its distinct non-publishing, editable-source semantics. Payroll retains its existing workflow. It does not send supplier communications, execute payments, create ledger entries, or change stock. The final successful vote performs the existing source status transition in the same database transaction.
 
 افتح **الموافقات ← إعداد السياسات ومراجعة الموافقات متعددة المراحل**. يدعم المسار إصدار أوامر الشراء وترحيل المصاريف واعتماد الإجازات. تبقى الرواتب بمسارها الحالي. لا يرسل المسار رسائل للموردين ولا ينفذ دفعات أو قيود دفتر أستاذ أو تغييرات مخزون. ينفذ التصويت النهائي الناجح انتقال حالة المصدر ضمن المعاملة نفسها.
 

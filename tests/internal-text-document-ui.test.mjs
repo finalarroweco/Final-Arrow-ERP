@@ -20,7 +20,7 @@ const payload = { tenantId, companyId, documentId, branchId, expectedActorId: ac
 const row = { id: id(8), requestId: payload.requestId, tenantId, companyId, documentId, branchId, version: 1, action: 'create', title: payload.title, body: payload.body, reason: payload.reason, archived: false, createdBy: actorId, createdAt: '2026-11-11T12:00:00.000Z' };
 const current = { id: documentId, tenantId, companyId, branchId, version: 1, title: row.title, body: row.body, archived: false, createdBy: actorId, createdAt: row.createdAt, updatedAt: row.createdAt };
 const scope = { tenantId, companyId, branchId, label: 'Company / Branch', canManage: true };
-const detail = { actorId, document: current, events: [row], page: 0, nextPage: null, canManage: true };
+const detail = { revisionStatus: {}, canReview: false, actorId, document: current, events: [row], page: 0, nextPage: null, canManage: true };
 const envelope = request => JSON.stringify({ version: 1, actorId, request });
 function browser() {
  const storage = new Map(), held = new Set();
@@ -243,4 +243,8 @@ test('retained submit, retry and abandon handlers capture the epoch when each ne
   workspace.render();reads[1]({ok:true,status:200,json:async()=>({actorId,documents:[current],page:0,nextPage:null})});await settleRead();assert.equal(workspace.slots[3][0].id,documentId);
   denyMutation({ok:false,status:401,json:async()=>{throw Error('not JSON');}});await attempt;assert.equal(controller.authorizationFailures,1);assert.deepEqual(workspace.slots[3],[],'new attempt captured epoch2 even through retained render callback');assert.equal(controller.storage.get(controller.key),frozen);workspace.unmount();controller.unmount();
  }
+});
+test('exact document review status and link stay bound to selected revision; old approvals never label current text',()=>{
+ for(const locale of ['en','ar']){const previous={...row,id:id(88),version:1},live={...current,version:2};const h=workspaceHarness({locale,state:{7:{...detail,document:live,events:[previous],revisionStatus:{[previous.id]:'APPROVED'},canReview:true},8:previous}});const html=renderToStaticMarkup(h.render());assert.ok(html.includes(locale==='ar'?'إصدار سابق، ولا يعتمد النص الحالي':'Superseded revision, not approval of current text'));assert.ok(html.includes('resource=DOCUMENT'));assert.ok(html.includes(`sourceId=${previous.id}`));assert.ok(!html.includes(`sourceId=${live.id}`));h.unmount();}
+ const extra={...detail,revisionStatus:{[id(90)]:'APPROVED'}};assert.equal(readInput.verifiedDocumentDetail(extra,scope,documentId,0,actorId),null);
 });

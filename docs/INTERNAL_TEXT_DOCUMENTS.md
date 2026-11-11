@@ -1,6 +1,6 @@
 # Internal text documents: bounded review candidate
 
-The `/documents` workspace records internal operating notes and reference text. It is not a completed document-management or workflow system. It has no attachments, source-record links, HTML/Markdown, approvals, signatures, external sharing, retention rules, scheduled deletion or autosave. Operators explicitly choose company/branch, title, body and change reason. Company-wide text is readable by authorized company-wide readers, not private to its author.
+The `/documents` workspace records internal operating notes and reference text. It is not a completed document-management or workflow system. It has no attachments, source-record links, HTML/Markdown, signatures, external sharing, retention rules, scheduled deletion or autosave. Operators explicitly choose company/branch, title, body and change reason. Company-wide text is readable by authorized company-wide readers, not private to its author.
 
 ## Operation and permissions
 
@@ -27,4 +27,6 @@ Unsent drafts remain in memory. Submitted uncertain requests are stored in local
 
 Automated checks cover cross-tenant/company/branch privacy, revoked access, original response replay, conflicting payloads, lifecycle/version races, permanent abandonment, SQL projection/history/request/audit tamper, literal script text, Arabic/English/emoji, byte limits, CSV formulas, history pagination and provider-default privilege revocation. The populated 76→77 migration must preserve existing financial/stock/bank/role/request records and publish atomically. See final implementation report for exact executed results.
 
-Remaining manual acceptance: browser appearance/accessibility and Arabic/English RTL layout; interrupted submission, refresh, actor switching and two-tab recovery in actual supported browsers; physical printing. Runtime browser access was unavailable during development. Broader document governance, approvals/signatures and enterprise DMS remain unimplemented. No production migration, deployment or external sharing is included.
+Remaining manual acceptance: browser appearance/accessibility and Arabic/English RTL layout; interrupted submission, refresh, actor switching and two-tab recovery in actual supported browsers; physical printing. Runtime browser access was unavailable during development. Optional exact-revision review is documented in DOCUMENT_REVISION_APPROVALS.md. Broader document governance, signatures and enterprise DMS remain unimplemented. No production migration, deployment or external sharing is included.
+
+Optional internal review now uses immutable revision identities; see [exact-revision approval](DOCUMENT_REVISION_APPROVALS.md). Approval never restricts current draft editing, publishes text, or transfers to a newer revision.

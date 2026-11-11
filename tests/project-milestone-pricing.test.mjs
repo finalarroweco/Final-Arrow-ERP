@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+const pricing=await import('data:text/javascript;base64,'+Buffer.from(ts.transpile(fs.readFileSync('src/lib/recurring-pricing.ts','utf8'),{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022})).toString('base64'));
+globalThis.__milestonePricing=pricing;
+const source=fs.readFileSync('src/lib/project-milestone-pricing.ts','utf8').replace("import {billingPriceSnapshot} from './recurring-pricing';",'const {billingPriceSnapshot}=globalThis.__milestonePricing;');
+const {milestoneInvoicePrices}=await import('data:text/javascript;base64,'+Buffer.from(ts.transpile(source,{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022})).toString('base64'));
+const line={description:'Agreed milestone',agreedPrice:'90071992547409.913',treatment:'STANDARD'};
+test('one milestone exact price is never derived or rounded through IEEE754',()=>{const p=milestoneInvoicePrices(line,false,'OMR');assert.equal(p.subtotal,line.agreedPrice);assert.equal(p.lines[0].quantity,1);assert.equal(p.quantityMeaning,'ONE_MILESTONE');assert.equal(p.lines[0].description,line.description);});
+test('tax calculation is current-profile driven and preserves selected treatment',()=>{assert.equal(milestoneInvoicePrices({...line,agreedPrice:'0.010'},true,'OMR').taxAmount,'0.001');for(const treatment of ['ZERO','EXEMPT'])assert.equal(milestoneInvoicePrices({...line,treatment},true,'OMR').taxAmount,'0.000');assert.throws(()=>milestoneInvoicePrices(line,true,'USD'));assert.equal(milestoneInvoicePrices({...line,agreedPrice:'0.000'},true,'OMR').gross,'0.000');});
+test('no implicit prices or overflow',()=>{for(const agreedPrice of ['1.00','-1.000','1000000000000000.000','NaN','1e3'])assert.throws(()=>milestoneInvoicePrices({...line,agreedPrice},false,'OMR'));assert.throws(()=>milestoneInvoicePrices({...line,agreedPrice:'999999999999999.999'},true,'OMR'));});

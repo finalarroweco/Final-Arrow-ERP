@@ -1,3 +1,4 @@
+import {approvalSessionCurrent} from './approval-session';
 import {Prisma} from '@prisma/client';
 import {db} from './db';
 import {scopeMatches} from './scope';
@@ -7,8 +8,11 @@ type Scope={tenantId:string;companyId:string;branchId:string|null};
 type Command=ApprovalPolicyCommand|ApprovalSubmit|ApprovalVote;
 type Row=Record<string,unknown>;
 const options={timeout:20000,maxWait:10000,isolationLevel:Prisma.TransactionIsolationLevel.ReadCommitted};
-const keys:Record<ApprovalResource,[string,string]>={PURCHASE:['purchase-order:read','purchase-order:manage'],EXPENSE:['expense:read','expense:post'],LEAVE:['leave:read','leave:decide']};
+const keys:Record<ApprovalResource,[string,string]>={PURCHASE:['purchase-order:read','purchase-order:manage'],EXPENSE:['expense:read','expense:post'],LEAVE:['leave:read','leave:decide'],DOCUMENT:['document:read','document:approve']};
 function canonical(v:unknown):string{if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';if(v&&typeof v==='object')return '{'+Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>JSON.stringify(k)+':'+canonical(x)).join(',')+'}';return JSON.stringify(v);}
+async function sessionCurrent(tx:Prisma.TransactionClient,actorId:string,sessionHash?:string){
+ if(!await approvalSessionCurrent(tx,actorId,sessionHash))throw new ApprovalError('Session expired or signed out. Reload this workspace.',401);
+}
 async function tenantLock(tx:Prisma.TransactionClient,tenantId:string,policy=false){if(policy)await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR UPDATE`;else await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;}
 async function access(tx:Prisma.TransactionClient,actorId:string,scope:Scope){
  const member=await tx.membership.findUnique({where:{tenantId_userId:{tenantId:scope.tenantId,userId:actorId}},select:{id:true,status:true}});
@@ -24,6 +28,11 @@ async function source(tx:Prisma.TransactionClient,scope:Scope,resource:ApprovalR
  const rows=await tx.$queryRaw<{snapshot:Row|null;fingerprint:string|null}[]>`SELECT s AS snapshot,md5(s::text) AS fingerprint FROM (SELECT erp_approval_snapshot(${scope.tenantId}::uuid,${resource},${sourceId}::uuid) AS s) q`;
  const row=rows[0];if(!row?.snapshot||row.snapshot.companyId!==scope.companyId||row.snapshot.branchId!==scope.branchId)throw new ApprovalError('Source not found in this exact scope',404);return row;
 }
+async function documentRevisionCurrent(tx:Prisma.TransactionClient,resource:ApprovalResource,snapshot:Row){
+ if(resource!=='DOCUMENT')return null;
+ const document=await tx.internalTextDocument.findFirst({where:{id:String(snapshot.documentId),tenantId:String(snapshot.tenantId),companyId:String(snapshot.companyId)},select:{version:true}});
+ return document?.version===snapshot.version;
+}
 async function authorizeCommand(tx:Prisma.TransactionClient,actorId:string,input:Command,abandon=false){
  const a=await access(tx,actorId,input);
  if('configuration'in input){if(!a.owner)throw new ApprovalError('Organization owner access required',403);return;}
@@ -33,7 +42,7 @@ async function authorizeCommand(tx:Prisma.TransactionClient,actorId:string,input
  if(!a.resources.includes(resource))throw new ApprovalError('Current source read and action access required',403);
  if(!abandon)await source(tx,input,resource,sourceId);
 }
-export async function mutateApproval(actorId:string,input:Command,abandon=false){return db.$transaction(async tx=>{
+export async function mutateApproval(actorId:string,input:Command,abandon=false,sessionHash?:string){return db.$transaction(async tx=>{
  if(input.expectedActorId!==actorId)throw new ApprovalError('Saved request belongs to a different signed-in user',403);
  await tenantLock(tx,input.tenantId,'configuration'in input);
  await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${'approval-command:'+input.requestId},0))`;
@@ -42,26 +51,27 @@ export async function mutateApproval(actorId:string,input:Command,abandon=false)
  if(saved[0]){
   const row=saved[0];if(abandon&&row.outcome==='COMMITTED')await authorizeCommand(tx,actorId,input,false);if(row.actorId!==actorId||canonical(row.command)!==canonical(input))throw new ApprovalError('Request identity belongs to different details');
   if(!abandon&&row.outcome==='ABANDONED')throw new ApprovalError('Request was permanently abandoned; prepare a new request');
-  return row.result;
+  await sessionCurrent(tx,actorId,sessionHash);return row.result;
  }
  const rows=await tx.$queryRaw<Row[]>`INSERT INTO "ApprovalCommand"(id,"tenantId","companyId","branchId","actorId",command,outcome) VALUES(${input.requestId}::uuid,${input.tenantId}::uuid,${input.companyId}::uuid,${input.branchId}::uuid,${actorId}::uuid,${JSON.stringify(input)}::jsonb,${abandon?'ABANDONED':'COMMITTED'}) RETURNING result`;
- return rows[0].result;
+ await sessionCurrent(tx,actorId,sessionHash);return rows[0].result;
  },options);}
-export async function previewApproval(actorId:string,scope:Scope,resource:ApprovalResource,sourceId:string){return db.$transaction(async tx=>{
+export async function previewApproval(actorId:string,scope:Scope,resource:ApprovalResource,sourceId:string,sessionHash?:string){return db.$transaction(async tx=>{
  await tenantLock(tx,scope.tenantId);const a=await access(tx,actorId,scope);if(!a.resources.includes(resource))throw new ApprovalError('Current source read and action access required',403);
  const rows=await tx.$queryRaw<{snapshot:Row;fingerprint:string;policy:Row|null;approval:Row|null}[]>`SELECT s AS snapshot,md5(s::text) AS fingerprint,
  (SELECT to_jsonb(p) FROM "ApprovalPolicy" p WHERE p."tenantId"=${scope.tenantId}::uuid AND p."companyId"=${scope.companyId}::uuid AND (p."branchId" IS NULL OR p."branchId"=${scope.branchId}::uuid) AND erp_approval_matches(p.configuration,s,${resource}) ORDER BY p.id LIMIT 1) AS policy,
  (SELECT to_jsonb(r) FROM "ApprovalRequest" r WHERE r."tenantId"=${scope.tenantId}::uuid AND r.resource=${resource} AND r."sourceId"=${sourceId}::uuid ORDER BY r."createdAt" DESC,r.id DESC LIMIT 1) AS approval
  FROM (SELECT erp_approval_snapshot(${scope.tenantId}::uuid,${resource},${sourceId}::uuid) AS s) q WHERE (s->>'companyId')::uuid=${scope.companyId}::uuid AND (s->>'branchId')::uuid IS NOT DISTINCT FROM ${scope.branchId}::uuid`;
  const view=rows[0];if(!view)throw new ApprovalError('Source not found in this exact scope',404);
- return {actorId,...scope,resource,sourceId,source:view.snapshot,sourceFingerprint:view.fingerprint,policy:view.policy,approval:view.approval,observedAt:new Date().toISOString()};
+ const ready=await tx.$queryRaw<{ready:boolean}[]>`SELECT erp_approval_source_ready(${scope.tenantId}::uuid,${resource},${JSON.stringify(view.snapshot)}::jsonb) AS ready`;
+ await sessionCurrent(tx,actorId,sessionHash);return {actorId,...scope,resource,sourceId,sourceCurrent:await documentRevisionCurrent(tx,resource,view.snapshot),sourceReady:ready[0].ready,source:view.snapshot,sourceFingerprint:view.fingerprint,policy:view.policy,approval:view.approval,observedAt:new Date().toISOString()};
  },options);}
-export async function listApprovalRequests(actorId:string,scope:Scope,page:number){return db.$transaction(async tx=>{
+export async function listApprovalRequests(actorId:string,scope:Scope,page:number,sessionHash?:string){return db.$transaction(async tx=>{
  await tenantLock(tx,scope.tenantId);const a=await access(tx,actorId,scope);
  const rows=a.resources.length?await tx.$queryRaw<Row[]>(Prisma.sql`SELECT r.* FROM "ApprovalRequest" r WHERE "tenantId"=${scope.tenantId}::uuid AND "companyId"=${scope.companyId}::uuid AND "branchId" IS NOT DISTINCT FROM ${scope.branchId}::uuid AND resource IN(${Prisma.join(a.resources)}) AND (erp_approval_snapshot(r."tenantId",r.resource,r."sourceId")->>'companyId')::uuid=r."companyId" AND (erp_approval_snapshot(r."tenantId",r.resource,r."sourceId")->>'branchId')::uuid IS NOT DISTINCT FROM r."branchId" ORDER BY "createdAt" DESC,id DESC OFFSET ${page*50} LIMIT 51`):[];
- return {actorId,...scope,items:rows.slice(0,50),page,nextPage:rows.length>50?page+1:null,canManagePolicies:a.owner};
+ await sessionCurrent(tx,actorId,sessionHash);return {actorId,...scope,items:rows.slice(0,50),page,nextPage:rows.length>50?page+1:null,canManagePolicies:a.owner};
  },options);}
-export async function readApprovalRequest(actorId:string,scope:Scope,id:string,page:number){return db.$transaction(async tx=>{
+export async function readApprovalRequest(actorId:string,scope:Scope,id:string,page:number,sessionHash?:string){return db.$transaction(async tx=>{
  await tenantLock(tx,scope.tenantId);const a=await access(tx,actorId,scope);
  const rows=await tx.$queryRaw<Row[]>`SELECT * FROM "ApprovalRequest" WHERE id=${id}::uuid AND "tenantId"=${scope.tenantId}::uuid AND "companyId"=${scope.companyId}::uuid AND "branchId" IS NOT DISTINCT FROM ${scope.branchId}::uuid FOR SHARE`;
  const row=rows[0];if(!row||!a.resources.includes(row.resource as ApprovalResource))throw new ApprovalError('Authorized approval not found',404);
@@ -73,16 +83,16 @@ export async function readApprovalRequest(actorId:string,scope:Scope,id:string,p
  const currentPolicy=policies[0],currentConfiguration=currentPolicy?approvalConfiguration.parse(currentPolicy.configuration):null;
  const ready=await tx.$queryRaw<{ready:boolean}[]>`SELECT erp_approval_source_ready(${scope.tenantId}::uuid,${String(row.resource)},erp_approval_snapshot(${scope.tenantId}::uuid,${String(row.resource)},${String(row.sourceId)}::uuid)) AS ready`;
  const prior=await tx.$queryRaw<{ready:boolean}[]>`SELECT NOT EXISTS(SELECT 1 FROM "ApprovalDecision" d JOIN "ApprovalRequest" q ON q.id=d."approvalId" WHERE q.id=${id}::uuid AND d.action='APPROVE' AND (NOT erp_approval_access(d."actorId",q."tenantId",q."companyId",q."branchId",q.resource) OR NOT erp_approval_eligible(d."actorId",q."tenantId",q."companyId",q."branchId",q."policySnapshot"->'stages'->d.stage))) AS ready`;
- const blockedReason=row.status!=='PENDING'?'TERMINAL':!currentPolicy||currentPolicy.version!==row.policyVersion||!currentConfiguration?.enabled?'POLICY_CHANGED':live.fingerprint!==row.sourceFingerprint||!ready[0].ready?'SOURCE_CHANGED':config.excludeRequester&&(actorId===row.requesterId||actorId===live.snapshot?.createdBy)?'SELF_APPROVAL':!prior[0].ready?'PRIOR_APPROVER_CHANGED':!eligibility[0].eligible?'NOT_ELIGIBLE':null;
- return {actorId,...scope,approval:row,decisions:decisions.slice(0,50),page,nextPage:decisions.length>50?page+1:null,eligible:blockedReason===null,blockedReason,canCancel:row.status==='PENDING'&&(a.owner||row.requesterId===actorId)};
+ const blockedReason=row.status!=='PENDING'?'TERMINAL':!currentPolicy||currentPolicy.version!==row.policyVersion||!currentConfiguration?.enabled?'POLICY_CHANGED':live.fingerprint!==row.sourceFingerprint||!ready[0].ready?'SOURCE_CHANGED':config.excludeRequester&&(actorId===row.requesterId||actorId===live.snapshot?.createdBy||actorId===live.snapshot?.revisionAuthorId)?'SELF_APPROVAL':!prior[0].ready?'PRIOR_APPROVER_CHANGED':!eligibility[0].eligible?'NOT_ELIGIBLE':null;
+ await sessionCurrent(tx,actorId,sessionHash);return {actorId,...scope,sourceCurrent:await documentRevisionCurrent(tx,row.resource as ApprovalResource,live.snapshot!),approval:row,decisions:decisions.slice(0,50),page,nextPage:decisions.length>50?page+1:null,eligible:blockedReason===null,blockedReason,canCancel:row.status==='PENDING'&&(a.owner||row.requesterId===actorId)};
  },options);}
-export async function listApprovalPolicies(actorId:string,scope:Scope,page:number,policyId?:string){return db.$transaction(async tx=>{
+export async function listApprovalPolicies(actorId:string,scope:Scope,page:number,policyId?:string,sessionHash?:string){return db.$transaction(async tx=>{
  await tenantLock(tx,scope.tenantId);const a=await access(tx,actorId,scope);if(!a.owner)throw new ApprovalError('Organization owner access required',403);
  const policies=await tx.$queryRaw<Row[]>(Prisma.sql`SELECT * FROM "ApprovalPolicy" WHERE "tenantId"=${scope.tenantId}::uuid AND "companyId"=${scope.companyId}::uuid AND "branchId" IS NOT DISTINCT FROM ${scope.branchId}::uuid ${policyId?Prisma.sql`AND id=${policyId}::uuid`:Prisma.empty} ORDER BY "updatedAt" DESC,id OFFSET ${policyId?0:page*50} LIMIT 51`);
  const revisions=policyId&&policies.length?await tx.$queryRaw<Row[]>`SELECT * FROM "ApprovalPolicyRevision" WHERE "policyId"=${policyId}::uuid ORDER BY version DESC OFFSET ${page*50} LIMIT 51`:[];
  const members=await tx.membership.findMany({where:{tenantId:scope.tenantId,status:'ACTIVE'},select:{user:{select:{id:true,name:true}}},orderBy:{userId:'asc'}});
  const roles=await tx.role.findMany({where:{tenantId:scope.tenantId},select:{id:true,name:true},orderBy:{name:'asc'}});
- return {actorId,...scope,policies:policies.slice(0,50),revisions:revisions.slice(0,50),page,nextPage:(policyId?revisions:policies).length>50?page+1:null,members:members.map(m=>m.user),roles};
+ await sessionCurrent(tx,actorId,sessionHash);return {actorId,...scope,policies:policies.slice(0,50),revisions:revisions.slice(0,50),page,nextPage:(policyId?revisions:policies).length>50?page+1:null,members:members.map(m=>m.user),roles};
  },options);}
 /** Called inside every legacy source transition after source/tenant locks. */
 export async function configuredApprovalRequired(tx:Prisma.TransactionClient,tenantId:string,resource:ApprovalResource,id:string){

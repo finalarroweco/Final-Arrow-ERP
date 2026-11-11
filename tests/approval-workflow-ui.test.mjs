@@ -138,3 +138,7 @@ test('changing source identity fences the outstanding preview and clears earlier
  const inputField=descendants(h.render()).find(e=>e.type==='input');inputField.props.onChange({target:{value:id(99)}});
  preview.resolve({ok:true,status:200,json:async()=>({actorId,tenantId,companyId,branchId,resource:'PURCHASE',sourceId:source.id,source,sourceFingerprint:'a'.repeat(32),policy:row.policy,approval:null})});await flush();assert.equal(h.slots[5],null);assert.equal(h.slots[6],null);h.unmount();
 });
+test('document policy editor renders explicit non-financial AR/EN choices without currency fields',()=>{
+ const {PolicyEditor}=load(directory+'policy-editor.tsx',{'@/lib/approval-workflow-input':input,'@/lib/locale':{translate:(locale,en,ar)=>locale==='ar'?ar:en}});
+ for(const locale of ['en','ar']){const html=renderToStaticMarkup(React.createElement(PolicyEditor,{policy:{...row.policy,configuration:{...configuration,resource:'DOCUMENT'}},choices:{members:[],roles:[]},locale,blocked:false,onSave(){}}));assert.match(html,/DOCUMENT/);assert.ok(html.includes(locale==='ar'?'اعتماد إصدار مستند':'Approve document revision'));assert.ok(!html.includes(locale==='ar'?'الحد الأدنى شاملًا':'Minimum amount, inclusive'));}
+});

@@ -1,6 +1,7 @@
-import { apiJson } from "@/lib/api-response";
+import {invoiceSessionAllowed} from "@/lib/invoice-session";
 import {invoiceDocumentSourceAllowed,invoiceSourceSelect} from "@/lib/invoice-source";
 import { documentJournal, lockDocument } from "@/lib/document-journal";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -28,7 +29,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return apiJson({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
+    // Generated invoice status triggers lock the source project. Acquire that
+    // lock before the invoice, matching generation/correction lock order, then
+    // revalidate the exact session and all current grants after either wait.
+    const projectId=invoice.projectMilestoneSource?.projectId??invoice.projectTimeSource?.projectId;
+    if(projectId)await tx.$queryRaw`SELECT id FROM "Project" WHERE "tenantId"=${tenantId}::uuid AND id=${projectId}::uuid FOR UPDATE`;
     await lockDocument(tx, "invoice", tenantId, id);
+    if(!(await invoiceSessionAllowed(tx,actor.id)))return {unauthenticated:true as const};
     const current=await tx.invoice.findUnique({where:{id},select:{tenantId:true,companyId:true,branchId:true,...invoiceSourceSelect}});
     if(!current||!(await invoiceDocumentSourceAllowed(actor.id,current,tx))||!(await canAccess({userId:actor.id,tenantId,companyId:current.companyId,branchId:current.branchId??undefined,permission:action==="issue"?"invoice:issue":"invoice:void"},tx)))return {forbidden:true as const};
     if (action === "void") {
@@ -47,6 +54,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.invoice.findUnique({ where: { id }, select: { id: true, status: true,
       issuedAt: true, voidedAt: true, voidReason: true } });
   });
+  if(result && "unauthenticated" in result)return apiJson({error:"Unauthenticated"},{status:401});
   if(result && "forbidden" in result)return apiJson({error:"Forbidden"},{status:403});
   if (result && "ledgerBlocked" in result) return apiJson({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
   if (!result) return apiJson({ error: "Invoice status has changed or transition is invalid" }, { status: 409 });

@@ -1,5 +1,5 @@
-import {createHash,randomUUID} from 'node:crypto';
-import {cookies} from 'next/headers';
+import {randomUUID} from 'node:crypto';
+import {invoiceSessionAllowed} from './invoice-session';
 import {Prisma} from '@prisma/client';
 import {db} from './db';
 import {BillingError} from './recurring-billing';
@@ -11,17 +11,14 @@ const options={timeout:30000,maxWait:10000,isolationLevel:Prisma.TransactionIsol
 const json=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const date=(value:Date)=>value.toISOString().slice(0,10);
 export async function requireTimeInvoiceSession(tx:Prisma.TransactionClient,actorId:string){
- const token=(await cookies()).get('fa_erp_session')?.value;
- if(!token||!/^[0-9a-f]{64}$/.test(token))throw new BillingError('Session expired',401);
- const tokenHash=createHash('sha256').update(token).digest('hex');
- const rows=await tx.$queryRaw<{id:string}[]>`SELECT id FROM "Session" WHERE "tokenHash"=${tokenHash} AND "userId"=${actorId}::uuid AND "expiresAt">(clock_timestamp() AT TIME ZONE 'UTC') FOR SHARE`;
- if(rows.length!==1)throw new BillingError('Session expired or revoked',401);
+ if(!await invoiceSessionAllowed(tx,actorId))throw new BillingError('Session expired or revoked',401);
 }
 async function lock(tx:Prisma.TransactionClient,p:TimeInvoiceSelection&{requestId?:string}){
  await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${p.tenantId}::uuid FOR SHARE`;
  await tx.$queryRaw`SELECT id FROM "Company" WHERE "tenantId"=${p.tenantId}::uuid AND id=${p.companyId}::uuid FOR UPDATE`;
  await tx.$queryRaw`SELECT id FROM "Customer" WHERE id=${p.customerId}::uuid FOR SHARE`;
  await tx.$queryRaw`SELECT id FROM "Project" WHERE id=${p.projectId}::uuid FOR UPDATE`;
+ if(p.replacesSourceId)await tx.$queryRaw`SELECT i.id FROM "Invoice" i JOIN "ProjectTimeInvoiceSource" s ON s.id=i."projectTimeSourceId" WHERE s.id=${p.replacesSourceId}::uuid AND s."tenantId"=${p.tenantId}::uuid AND s."companyId"=${p.companyId}::uuid AND s."projectId"=${p.projectId}::uuid AND s."customerId"=${p.customerId}::uuid AND s."branchId" IS NOT DISTINCT FROM ${p.branchId}::uuid FOR UPDATE OF i`;
  if(p.requestId)await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${'project-time-invoice:'+p.requestId},0))`;
 }
 async function context(tx:Prisma.TransactionClient,actorId:string,p:TimeInvoiceSelection,write=false){

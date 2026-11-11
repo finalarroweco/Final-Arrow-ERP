@@ -96,6 +96,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
       <button disabled={busy}>{t("Create project", "إنشاء مشروع")}</button>
     </form>}
     {message && <p role="status">{message}</p>}
+    <a href="/accounting/project-milestone-invoices">{t("Manage milestone billing", "إدارة فوترة المراحل")}</a>
     <a href="/accounting/project-time-invoices">{t("Invoice approved project time", "فوترة وقت المشروع المعتمد")}</a>
     <h2>{t("Projects", "المشاريع")}</h2>
     {projects.length === 0 && <p>{t("No projects on this page.", "لا توجد مشاريع في هذه الصفحة.")}</p>}
