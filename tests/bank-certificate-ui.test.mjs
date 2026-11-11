@@ -169,3 +169,11 @@ for(const kind of ["create","event"])test(`${kind} v1 retries use original scope
  authenticatedActor=actor;let done=false;await h.render().run("/write",h.render().pending,()=>{done=true;},()=>assert.fail());
  assert.equal(done,true);assert.deepEqual(headers,[actor,actor]);assert.equal(bodies[0],bodies[1]);assert.equal(h.storage.size,0);
 });
+
+ test("v1 and v2 saved JSON export and print preserve versioned sources",()=>{
+ const d=load("download.ts");
+ for(const version of [1,2]){const value={certificate:{id,tenantId:tenant,companyId:id,accountId:id,statementId:id,digest:"a".repeat(64),createdAt:"2026-01-31",observedAt:"2026-01-31",createdBy:actor,note:null,snapshot:{...snapshot,version}},events:[],version:0,supersededBy:null,canManage:true};assert.equal(d.validCertificateDownload(value,id,tenant),true);}
+ const v=load("snapshot.tsx",{"@/lib/locale":{translate:(_locale,en)=>en}});
+ const html=renderToStaticMarkup(React.createElement(v.SnapshotView,{snapshot:{...snapshot,version:2,book:[{id:"line",amount:"10.000",allocated:"6.000",currentRemaining:"4.000",cutoffRemaining:"7.000",allocations:[{id:"allocation",amount:"3.000",cancelledAt:null}]}]},locale:"en",printAll:true}));
+ assert.match(html,/Available now/);assert.match(html,/Remaining through cutoff/);assert.match(html,/Allocation history/);assert.match(html,/allocation/);
+ });

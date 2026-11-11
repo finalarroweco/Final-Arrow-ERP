@@ -27,7 +27,7 @@ test('strict create and reasoned event inputs reject forged data and invalid tra
  const event={tenantId:id,requestId:id,expectedVersion:0,action:'SUPERSEDE',replacementId:id,reason:'Corrected observation'};assert.equal(input.certificateEventInput.safeParse(event).success,true);assert.equal(input.certificateEventInput.safeParse({...event,replacementId:null}).success,false);assert.equal(input.certificateEventInput.safeParse({...event,action:'RESTORE'}).success,false);assert.equal(input.certificateEventInput.safeParse({...event,reason:'\0bad'}).success,false);assert.equal(input.certificateEventInput.safeParse({...event,expectedVersion:1000}).success,false);
 });
 test('import totals preserve balanced maximum-sized CSV cancellation',()=>{
- const bank=load('bank-reconciliation',{'./exact-money':money,'./access':{},'./date':{dueDate:require('zod').z.string()}}),rows=[...Array(250).fill({bookingDate:'2026-01-01',reference:'Incoming',amount:'999999999999999.999'}),...Array(250).fill({bookingDate:'2026-01-01',reference:'Outgoing',amount:'-999999999999999.999'})];
+ const bank=load('bank-reconciliation',{'./bank-certificate-snapshot':load('bank-certificate-snapshot',{'./exact-money':money}),'./exact-money':money,'./access':{},'./date':{dueDate:require('zod').z.string()}}),rows=[...Array(250).fill({bookingDate:'2026-01-01',reference:'Incoming',amount:'999999999999999.999'}),...Array(250).fill({bookingDate:'2026-01-01',reference:'Outgoing',amount:'-999999999999999.999'})];
  assert.equal(bank.normalizedStatement({tenantId:id,companyId:id,accountId:id,requestId:id,reference:'Import exact',from:'2026-01-01',to:'2026-01-01',opening:'0',closing:'0',lines:rows}).closing,'0.000');
 });
 
@@ -50,4 +50,31 @@ test('creation and designation route boundaries reject missing, malformed and sw
   authenticated=owner;assert.deepEqual(await (await post(owner)).json(),{id,replayed:true});assert.equal(calls,2);
   authenticated=null;assert.equal((await post(owner)).status,401);assert.equal(calls,2);
  }
+});
+
+test('v2 signed residuals distinguish earlier cutoff from already consumed current capacity',()=>{
+ const data={...base(),version:2};
+ data.book=[{id:'incoming',amount:'10.001',currency:'OMR',allocated:'10.001',currentRemaining:'0.000',cutoffRemaining:'6.001',allocations:[{id:'early',amount:'4.000'},{id:'later',amount:'6.001'}]},{id:'outgoing',amount:'-2.001',currency:'OMR',allocated:'1.000',currentRemaining:'1.001',cutoffRemaining:'1.001',allocations:[{id:'out',amount:'1.000'}]}];
+ data.statement.closing='3.000';
+ let result=certificateSnapshot(data);
+ assert.equal(result.summary.bookClosing,'8.000');assert.equal(result.summary.outstandingTotal,'5.000');assert.equal(result.summary.adjustedBank,'8.000');assert.equal(result.summary.difference,'0.000');assert.equal(result.summary.outstandingLines,2);
+ data.bank=[{id:'in',amount:'1.001',statementCurrency:'OMR',statementVoidedAt:null,allocated:'1.000',currentRemaining:'0.001',cutoffRemaining:'0.001',allocations:[]},{id:'out',amount:'-1.001',statementCurrency:'OMR',statementVoidedAt:null,allocated:'1.000',currentRemaining:'0.001',cutoffRemaining:'0.001',allocations:[]}];
+ result=certificateSnapshot(data);assert.equal(result.summary.pendingBank,2);assert.equal(result.summary.reconciled,false);
+});
+test('v2 history and residual bounds fail without truncation; v1 values and digests remain unchanged',()=>{
+ const v1=base(),before=JSON.stringify(v1),expected=certificateHash(certificateSnapshot(v1));
+ const data={...base(),version:2};data.book=[{amount:'999999999999999.999',currency:'OMR',allocated:'0.001',currentRemaining:'999999999999999.998',cutoffRemaining:'999999999999999.998',allocations:[{id:'one',amount:'0.001'}]}];
+ assert.equal(certificateSnapshot(data).summary.outstandingTotal,'999999999999999.998');
+ data.book[0].allocations=Array.from({length:20001},(_,i)=>({id:String(i),amount:'0.001'}));assert.throws(()=>certificateSnapshot(data),/20000 allocation/);
+ data.book=Array(5001).fill({...data.book[0],allocations:[]});assert.throws(()=>certificateSnapshot(data),/5000/);
+ assert.equal(JSON.stringify(v1),before);assert.equal(certificateHash(certificateSnapshot(v1)),expected);
+});
+
+test('pre-upgrade committed capture retries bypass v2 recapture; stale unsaved previews are rejected',async()=>{
+ const inputs={...base(),version:2},current=certificateSnapshot(inputs),original={tenantId:id,requestId:id,expectedDigest:certificateHash(certificateSnapshot(base())),note:'Saved before upgrade'};
+ const originalRequestHash=certificateHash({actorId:id,id,...original});let prior={id,tenantId:id,statementId:id,createdBy:id,requestDigest:originalRequestHash,snapshot:certificateSnapshot(base())},captures=0;
+ const tx={$queryRaw:async strings=>{if(strings[0].includes('erp_bank_reconciliation_inputs')){captures++;return [{inputs,observedAt:new Date()}];}return [];},membership:{findUnique:async()=>({id,status:'ACTIVE'})},roleGrant:{findMany:async()=>[{scopes:[{type:'TENANT'}],role:{permissions:[{permissionKey:'ledger:read'},{permissionKey:'bank-reconciliation:create'}]}}]},bankStatement:{findFirst:async()=>({companyId:id,accountId:id})},bankReconciliationCertificate:{findUnique:async()=>prior}};
+ const service=load('bank-certificates',{'./db':{db:{$transaction:fn=>fn(tx)}},'./scope':{scopeMatches:()=>true},'./bank-reconciliation':{lockBankAccount:async()=>{}},'./bank-certificate-snapshot':{certificateSnapshot,certificateHash,CertificateError:load('bank-certificate-snapshot',{'./exact-money':money}).CertificateError}});
+ assert.deepEqual(await service.createCertificate(id,id,original),{id,replayed:true});assert.equal(captures,0);assert.equal(prior.snapshot.version,1);
+ prior=null;assert.notEqual(certificateHash(current),original.expectedDigest);await assert.rejects(service.createCertificate(id,id,original),e=>e.code==='STALE_SOURCE');assert.equal(captures,1);
 });

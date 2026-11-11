@@ -30,7 +30,7 @@ async function capture(tx:Prisma.TransactionClient,tenantId:string,id:string) {
 }
 const options={timeout:30000,maxWait:10000};
 export async function previewCertificate(actorId:string,tenantId:string,id:string) {
- return db.$transaction(async tx=>{await tenantLock(tx,tenantId);await statementAccess(tx,actorId,tenantId,id);return capture(tx,tenantId,id);},options);
+ return db.$transaction(async tx=>{await tenantLock(tx,tenantId);const s=await statementAccess(tx,actorId,tenantId,id);await lockBankAccount(tx,tenantId,s.companyId,s.accountId);return capture(tx,tenantId,id);},options);
 }
 async function audit(tx:Prisma.TransactionClient,tenantId:string,actorId:string,id:string,entity:string,action:string,extra:Record<string,string|number>) {
  const [clock]=await tx.$queryRaw<{transaction:string}[]>`SELECT txid_current()::text AS transaction`;
@@ -79,6 +79,7 @@ export async function recordCertificateEvent(actorId:string,id:string,input:Cert
 }
 export function certificateFailure(error:unknown) {
  const headers={"Cache-Control":"private, no-store"};
+ if(error instanceof Error&&/Snapshot (?:source limit exceeded|allocation history limit exceeded|outstanding limit exceeded|exceeds 16 MiB)/.test(error.message))return NextResponse.json({error:"Snapshot exceeds its source, allocation history, outstanding or size limit",code:"SOURCE_LIMIT"},{status:413,headers});
  if(error instanceof CertificateError)return NextResponse.json({error:error.message,...(error.code?{code:error.code}:{})},{status:error.status,headers});
  if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2002")return NextResponse.json({error:"The request ID conflicts with a saved request. Keep the original request and verify its account and result.",code:"REQUEST_CONFLICT"},{status:409,headers});
  const constraint=error instanceof Prisma.PrismaClientUnknownRequestError&&error.message.includes("23514")||error instanceof Prisma.PrismaClientKnownRequestError&&(["P2003","P2004"].includes(error.code)||error.code==="P2010"&&["23503","23514"].includes(String(error.meta?.code)));

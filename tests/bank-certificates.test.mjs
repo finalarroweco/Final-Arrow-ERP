@@ -4,7 +4,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {PrismaClient} from '@prisma/client';
 const origin='http://127.0.0.1:3259',actors=new Map();
-async function call(path,method='GET',body,cookie,expectedActor=actors.get(cookie)){const r=await fetch(origin+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...(method==='POST'&&/\/certificates(?:\/[^/]+\/events)?$/.test(path)&&expectedActor?{'X-Expected-Actor-Id':expectedActor}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cache:r.headers.get('cache-control'),disposition:r.headers.get('content-disposition'),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
+async function call(path,method='GET',body,cookie,expectedActor=actors.get(cookie)){const r=await fetch(origin+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...(method==='POST'&&/\/(?:matches|void|certificates(?:\/[^/]+\/events)?)$/.test(path)&&expectedActor?{'X-Expected-Actor-Id':expectedActor}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cache:r.headers.get('cache-control'),disposition:r.headers.get('content-disposition'),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 test('bank snapshots freeze complete exact observations, preserve corrections, enforce current scopes and audited reversible designations',{timeout:120000},async()=>{
  const db=new PrismaClient(),server=spawn('./node_modules/.bin/next',['start','-H','127.0.0.1','-p','3259'],{env:{...process.env,ALLOW_REGISTRATION:'true'},stdio:['ignore','ignore','inherit']});
  try{
@@ -29,7 +29,7 @@ test('bank snapshots freeze complete exact observations, preserve corrections, e
   const pastState=await live(past.id),currentState=await live(current.id);
   await match(past.id,pastState.statement.lines.find(l=>l.amount==='100.000').id,opening.bankLine.id);
   const base=`/api/bank/statements/${current.id}/certificates`,query=`?tenantId=${tenantId}`,preview=()=>call(base+'/preview'+query,'GET',null,cookie);
-  const firstPreview=await preview();assert.equal(firstPreview.status,200,JSON.stringify(firstPreview.data));assert.equal(firstPreview.data.snapshot.bank.length,4);assert.equal(firstPreview.data.snapshot.book.length,6);assert.equal(firstPreview.data.snapshot.summary.pendingBank,3);assert.match(firstPreview.cache,/no-store/);
+  const firstPreview=await preview();assert.equal(firstPreview.status,200,JSON.stringify(firstPreview.data));assert.equal(firstPreview.data.snapshot.version,2);assert.equal(firstPreview.data.snapshot.bank.length,4);assert.equal(firstPreview.data.snapshot.book.length,6);assert.equal(firstPreview.data.snapshot.summary.pendingBank,3);assert.match(firstPreview.cache,/no-store/);
   const currentMatch=await match(current.id,currentState.statement.lines[0].id,incoming.bankLine.id);
   assert.equal((await call(base,'POST',{tenantId,requestId:randomUUID(),expectedDigest:firstPreview.data.digest,note:'stale'},cookie)).status,409);
   const p=(await preview()).data;assert.equal(p.snapshot.summary.difference,'0.000');assert.equal(p.snapshot.summary.pendingBank,2);assert.equal(p.snapshot.summary.reconciled,false);
@@ -106,7 +106,7 @@ test('bank snapshots freeze complete exact observations, preserve corrections, e
   const cancel=await call(`/api/bank/statements/${current.id}/matches`,'POST',{tenantId,action:'cancel',matchId:currentMatch.id,reason:'Correct bank source'},cookie);assert.equal(cancel.status,201);
   assert.equal((await call(`/api/bank/statements/${current.id}/void`,'POST',{tenantId,action:'void',reason:'Replace imported source'},cookie)).status,201);
   const replacementStatement=await statement('CURRENT-REPLACED',day,day,'100','110',[[day,'Corrected receipt','10']]);
-  const voidPreview=(await preview()).data;assert.ok(voidPreview.snapshot.statement.voidedAt);assert.equal(voidPreview.snapshot.summary.reconciled,false);assert.equal(voidPreview.snapshot.bank.filter(b=>b.statementId===current.id).length,1);assert.equal(voidPreview.snapshot.bank.filter(b=>!b.statementVoidedAt&&!b.match).length,1);
+  const voidPreview=(await preview()).data;assert.ok(voidPreview.snapshot.statement.voidedAt);assert.equal(voidPreview.snapshot.summary.reconciled,false);assert.equal(voidPreview.snapshot.bank.filter(b=>b.statementId===current.id).length,1);assert.equal(voidPreview.snapshot.bank.filter(b=>!b.statementVoidedAt&&b.currentRemaining!=='0.000').length,1);
   assert.equal((await call(base,'POST',{...payload,requestId:randomUUID(),expectedDigest:voidPreview.digest,note:'Retained voided-source observation'},cookie)).status,201);
   assert.deepEqual((await get()).data.certificate,frozen);
   assert.equal((await call(base+query+'&tenantId='+tenantId,'GET',null,cookie)).status,400);
@@ -116,7 +116,29 @@ test('bank snapshots freeze complete exact observations, preserve corrections, e
   const replacementState=await live(replacementStatement.id);
   const [during]=await Promise.all([preview(),match(replacementStatement.id,replacementState.statement.lines[0].id,incoming.bankLine.id)]);
   assert.equal(during.status,200);const observedBank=during.data.snapshot.bank.find(b=>b.statementId===replacementStatement.id),observedBook=during.data.snapshot.book.find(b=>b.id===incoming.bankLine.id);
-  assert.equal(observedBank.match?.id??null,observedBook.match?.id??null,'one capture must not combine pre-match bank data with post-match book data');assert.equal(observedBook.matchedThroughCutoff,!!observedBank.match);
+  assert.deepEqual(observedBank.allocations.filter(a=>!a.cancelledAt).map(a=>a.id),observedBook.allocations.filter(a=>!a.cancelledAt).map(a=>a.id),'one capture must not combine pre-allocation bank data with post-allocation book data');assert.equal(observedBook.cutoffRemaining,observedBank.currentRemaining);
+
+  // Multiple current and later-bank allocations must preserve the earlier cutoff residual.
+  const liveAfter=await live(replacementStatement.id),full=liveAfter.statement.lines[0].matches.find(m=>!m.cancelledAt);
+  assert.equal((await call(`/api/bank/statements/${replacementStatement.id}/matches`,'POST',{tenantId,action:'cancel',matchId:full.id,reason:'Verify split source capture'},cookie)).status,201);
+  const allocate=async(statementId,bankLineId,amount)=>{const r=await call(`/api/bank/statements/${statementId}/matches`,'POST',{tenantId,action:'allocate',requestId:randomUUID(),bankLineId,journalLineId:incoming.bankLine.id,amount},cookie);assert.equal(r.status,201,JSON.stringify(r.data));return r.data.match;};
+  await allocate(replacementStatement.id,liveAfter.statement.lines[0].id,'3.001');
+  const later=await statement('LATER-SPLIT','2026-03-03','2026-03-03','110','116.999',[['2026-03-03','Later partial movement','6.999']]);
+  const laterLine=(await live(later.id)).statement.lines[0];const laterMatch=await allocate(later.id,laterLine.id,'6.999');
+  const split=(await preview()).data,bookSplit=split.snapshot.book.find(b=>b.id===incoming.bankLine.id),bankSplit=split.snapshot.bank.find(b=>b.statementId===replacementStatement.id);
+  assert.equal(bookSplit.allocated,'10.000');assert.equal(bookSplit.currentRemaining,'0.000');assert.equal(bookSplit.cutoffRemaining,'6.999');assert.equal(bankSplit.allocated,'3.001');assert.equal(bankSplit.currentRemaining,'6.999');
+  assert.equal(bookSplit.allocations.filter(a=>!a.cancelledAt).length,2);assert.ok(bookSplit.allocations.some(a=>a.cancelledAt));assert.ok(bookSplit.allocations.some(a=>a.statementId===later.id));
+  assert.equal((await preview()).data.digest,split.digest,'same observed sources have deterministic JSON and digest');
+  const splitId=randomUUID();assert.equal((await call(base,'POST',{tenantId,requestId:splitId,expectedDigest:split.digest,note:'Split allocation observation'},cookie)).status,201,'SQL summary validator agrees with TypeScript residual calculation');
+  const splitSaved=await db.bankReconciliationCertificate.findUniqueOrThrow({where:{id:splitId}});
+  for(const isolationLevel of ['RepeatableRead','Serializable'])await assert.rejects(db.$transaction(tx=>tx.bankReconciliationCertificate.create({data:{...splitSaved,id:randomUUID(),observedAt:new Date()}}),{isolationLevel}),/read committed isolation/);
+  const forgedSummary={...splitSaved.summary,pendingBank:splitSaved.summary.pendingBank+1},forgedSnapshot={...splitSaved.snapshot,summary:forgedSummary};
+  const forgedDigest=createHash('sha256').update(JSON.stringify(canonical(forgedSnapshot))).digest('hex');
+  await assert.rejects(db.bankReconciliationCertificate.create({data:{...splitSaved,id:randomUUID(),snapshot:forgedSnapshot,summary:forgedSummary,digest:forgedDigest,observedAt:new Date()}}),/summary does not reconcile/);
+  const forgedResidual={...splitSaved.snapshot,book:splitSaved.snapshot.book.map(b=>b.id===incoming.bankLine.id?{...b,cutoffRemaining:'0.000'}:b)};
+  await assert.rejects(db.bankReconciliationCertificate.create({data:{...splitSaved,id:randomUUID(),snapshot:forgedResidual,digest:createHash('sha256').update(JSON.stringify(canonical(forgedResidual))).digest('hex'),observedAt:new Date()}}),/sources changed or scope mismatch/);
+  assert.equal((await call(`/api/bank/statements/${later.id}/matches`,'POST',{tenantId,action:'cancel',matchId:laterMatch.id,reason:'Release later consumed capacity'},cookie)).status,201);
+  const released=(await preview()).data.snapshot.book.find(b=>b.id===incoming.bankLine.id);assert.equal(released.currentRemaining,'6.999');assert.equal(released.cutoffRemaining,'6.999');assert.equal(released.allocations.length,bookSplit.allocations.length);assert.equal(released.allocations.find(a=>a.id===laterMatch.id).cancelReason,'Release later consumed capacity');
 
  }finally{server.kill('SIGTERM');await db.$disconnect();}
 });

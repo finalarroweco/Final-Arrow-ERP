@@ -281,6 +281,7 @@ model Session {
 }
 
 model Membership {
+ bankRequestResolutions BankRequestResolution[]
  certificatesCreated BankReconciliationCertificate[] @relation("CertificateCreator")
  certificateEventsCreated BankReconciliationCertificateEvent[] @relation("CertificateEventCreator")
   savedReports SavedReport[]
@@ -1284,6 +1285,7 @@ model CustomerSettlement {
 }
 
 model BankStatement {
+ requestResolutions BankRequestResolution[]
  certificates BankReconciliationCertificate[]
  id String @id @db.Uuid
  tenantId String @db.Uuid
@@ -1331,6 +1333,8 @@ model BankMatch {
  accountId String @db.Uuid
  bankLineId String @db.Uuid
  journalLineId String @db.Uuid
+ amount Decimal @db.Decimal(18,3)
+ kind String @default("match") @db.VarChar(8)
  createdBy String @db.Uuid
  createdAt DateTime @default(now())
  cancelledAt DateTime?
@@ -1339,6 +1343,8 @@ model BankMatch {
  bankLine BankStatementLine @relation(fields:[tenantId,companyId,accountId,bankLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
  journalLine JournalLine @relation(fields:[tenantId,companyId,accountId,journalLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
  @@index([tenantId,companyId,accountId,createdAt])
+ @@index([bankLineId,createdAt,id], map:"bank_match_bank_history")
+ @@index([journalLineId,createdAt,id], map:"bank_match_journal_history")
 }
 
 model RecoveryCode {
@@ -1836,4 +1842,20 @@ model OrderStockReservation {
  @@unique([tenantId,balanceId,reservationId])
  @@index([tenantId,orderId,branchId,reservationId])
  @@index([itemId])
+}
+
+model BankRequestResolution {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ statementId String @db.Uuid
+ actorId String @db.Uuid
+ outcome String @default("ABANDONED") @db.VarChar(9)
+ requestDigest String @db.VarChar(64)
+ request Json
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ statement BankStatement @relation(fields:[tenantId,companyId,accountId,statementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ @@index([tenantId,statementId,createdAt])
 }

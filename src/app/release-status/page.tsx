@@ -13,7 +13,7 @@ export default async function ReleaseStatusPage(){
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
  ["/purchasing/orders",t("Purchases, partial receipts, returns and source settlements","المشتريات والاستلام الجزئي والمرتجعات والتسويات المرتبطة")],
  ["/accounting/vat-settings",t("Optional Oman VAT snapshots for invoices, purchase receipts/returns, expenses and POS; internal accounting only","لقطات ضريبة القيمة المضافة العُمانية الاختيارية للفواتير واستلام المشتريات ومرتجعاتها والمصروفات ونقاط البيع؛ للمحاسبة الداخلية فقط")],
- ["/accounting/bank",t("Immutable internal bank-reconciliation snapshots, source details and audited supersede/restore history","لقطات داخلية ثابتة للتسوية البنكية وتفاصيل المصادر وسجل مدقق للاستبدال والاستعادة")],
+ ["/accounting/bank",t("Manual partial/split bank allocations, safe request recovery and immutable internal reconciliation snapshots","تخصيصات بنكية يدوية جزئية ومقسمة واستعادة آمنة للطلبات ولقطات داخلية ثابتة للتسوية")],
  ["/accounting/ledger",t("Source journals, corrections, period locks and financial reports","قيود المستندات والعكس وإقفال الفترات والتقارير المالية")],
  ["/inventory/stock",t("Manual stock reservations, available quantities and permanent release history","حجز المخزون اليدوي والكميات المتاحة وسجل فك الحجز الدائم")],
  ["/inventory/transfers",t("Completed same-company branch stock transfers with paired corrections, two-branch authorization and safe pending-request cancellation","تسجيل تحويلات مخزون مكتملة بين فروع الشركة مع تصحيح مزدوج وصلاحيات للفرعين وإلغاء آمن للطلبات المعلّقة")],
@@ -32,7 +32,7 @@ export default async function ReleaseStatusPage(){
  ["",t("Projects: invoice generation from time/milestones, capacity calendars/estimates and automatic cost allocations","المشاريع: توليد الفواتير من الساعات والمراحل وتقاويم الطاقة وتقديرات العمل وتوزيع التكاليف تلقائيًا")],
  ["",t("Helpdesk: attachments, notifications, customer portal and SLA rules","الدعم: المرفقات والإشعارات وبوابة العميل وقواعد مستوى الخدمة")],
  ["",t("Management: configurable approval policies and broader report preset coverage","الإدارة: سياسات اعتماد قابلة للتهيئة وتوسيع أنواع التقارير المحفوظة")],
- ["",t("Finance/POS: inclusive taxes, bank split matching, external bank feeds and multi-drawer supervision","المالية ونقاط البيع: الضريبة الشاملة وتقسيم مطابقة البنك والربط البنكي الخارجي والرقابة على الصناديق المتعددة")],
+ ["",t("Finance/POS: inclusive taxes, external bank feeds and multi-drawer supervision","المالية ونقاط البيع: الضريبة الشاملة والربط البنكي الخارجي والرقابة على الصناديق المتعددة")],
  ["",t("Planned modules: subscriptions, documents, AI and automation","أقسام مخطط لها: الاشتراكات والمستندات والذكاء الاصطناعي والأتمتة")],
  ["",t("Full translation, accessibility, performance and operational acceptance review","مراجعة الترجمة والإتاحة والأداء واعتماد التشغيل بشكل كامل")]]},
  {title:t("Release acceptance evidence still required","أدلة اعتماد الإصدار ما زالت مطلوبة"),description:t("Validate the exact candidate release in an isolated environment. Automated tests do not replace operational acceptance or regulatory review.","يجب فحص الإصدار المرشح نفسه في بيئة معزولة. لا تُغني الفحوص الآلية عن اعتماد التشغيل أو المراجعة النظامية."),items:[
