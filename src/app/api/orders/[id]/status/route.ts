@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -10,11 +10,11 @@ const schema = z.object({ tenantId: uuid,
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid order action" }, { status: 400 });
+    return apiJson({ error: "Invalid order action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const target = action === "start" ? "IN_PROGRESS" : action === "complete" ? "COMPLETED" : "CANCELLED";
   const expected = action === "start" ? ["NEW"] : action === "complete" ? ["IN_PROGRESS"] : ["NEW", "IN_PROGRESS"];
@@ -34,7 +34,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.salesOrder.findUnique({ where: { id }, select: { id: true, status: true,
       startedAt: true, completedAt: true, cancelledAt: true } });
   });
-  if(result&&"statusCode" in result)return NextResponse.json({error:result.error},{status:result.statusCode});
-  if (!result) return NextResponse.json({ error: "Order status has changed or transition is invalid" }, { status: 409 });
-  return NextResponse.json({ order: result });
+  if(result&&"statusCode" in result)return apiJson({error:result.error},{status:result.statusCode});
+  if (!result) return apiJson({ error: "Order status has changed or transition is invalid" }, { status: 409 });
+  return apiJson({ order: result });
 }

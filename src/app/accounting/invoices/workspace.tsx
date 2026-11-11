@@ -4,7 +4,7 @@ import {invoiceSourceView} from "./source-view";
 import {PaymentTermsFields} from "../../payment-terms-fields";
 import { DocumentPosting } from "../document-posting";
 import {FinancialReport} from "../financial-report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 type Rights = { canPostLedger: boolean; canCreate: boolean; canIssue: boolean; canVoid: boolean };
@@ -41,7 +41,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
     const response = await fetch(`/api/invoices?${query}`);
     const data = await response.json();
     if (request !== requestNumber.current) return;
-    if (!response.ok) { setError(data.error ?? t("Could not load invoices", "تعذر تحميل الفواتير")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setInvoices(data.invoices); setPage(pageNumber); setNextPage(data.nextPage); setError("");
     } catch { if (request === requestNumber.current) setError(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
@@ -68,7 +68,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, number: values.get("number"), ...(values.get("paymentDueDate")||String(values.get("paymentTermsLabel")??"").trim()?{paymentTerms:{label:String(values.get("paymentTermsLabel")??"").trim(),dueDate:values.get("paymentDueDate")}}:{}), ...(scope.vatActive?{vat: orders.find(o=>o.id===orderId)?.lines.map(l=>({position:l.position,treatment:values.get(`vat-${l.position}`)}))}:{}) }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not create invoice", "تعذر إنشاء الفاتورة"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else { setReportVersion(value=>value+1);form.reset(); setOrderId(""); await Promise.all([load(selected), loadOrders(selected)]); }
     } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -80,7 +80,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, action, ...(action === "void" ? { reason } : {}) }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not update invoice", "تعذر تحديث الفاتورة"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else {setReportVersion(value=>value+1);await load(selected, page);}
     } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }

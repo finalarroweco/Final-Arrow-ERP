@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 type Permissions = { canCreate: boolean; canUpdate: boolean; canArchive: boolean };
@@ -26,7 +26,7 @@ export function ItemsWorkspace({ options, locale }: { options: Option[]; locale:
       page: String(pageNumber), archived: String(showArchived) });
     const response = await fetch(`/api/inventory/items?${query}`);
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not load items", "تعذر تحميل الأصناف")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setItems(data.items); setPage(pageNumber); setNextPage(data.nextPage); setError("");
   }, [options, t]);
   useEffect(() => { void load(selected, 0, archived); }, [load, selected, archived]);
@@ -40,7 +40,7 @@ export function ItemsWorkspace({ options, locale }: { options: Option[]; locale:
         branchId: values.get("branchId") || null, sku: String(values.get("sku")).toUpperCase(),
         name: values.get("name"), unit: values.get("unit"), description: values.get("description") || null }) });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not add item", "تعذر إضافة الصنف")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     form.reset(); setArchived(false); await load(selected);
   }
   async function update(event: FormEvent<HTMLFormElement>, item: Item) {
@@ -51,7 +51,7 @@ export function ItemsWorkspace({ options, locale }: { options: Option[]; locale:
       body: JSON.stringify({ tenantId: option.tenantId, action: "update", name: values.get("name"),
         unit: values.get("unit"), description: values.get("description") || null }) });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not update item", "تعذر تحديث الصنف")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setEditing(null); await load(selected, page, archived);
   }
   async function archive(item: Item) {
@@ -59,7 +59,7 @@ export function ItemsWorkspace({ options, locale }: { options: Option[]; locale:
     const response = await fetch(`/api/inventory/items/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tenantId: option.tenantId, action: "archive", archived: !item.archivedAt }) });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not change item status", "تعذر تغيير حالة الصنف")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     await load(selected, page, archived);
   }
   if (!option) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;

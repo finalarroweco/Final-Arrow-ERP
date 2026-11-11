@@ -18,7 +18,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Operational alerts | Private, explicitly configured ticket-deadline, manual-subscription review-date and configured-reorder observations; bounded manual or explicitly scheduled evaluation, deduplicated episodes, acknowledgement, current-source privacy and terminal request recovery | Runner/scheduler activation, external delivery, broader alert sources |
 | Unattended automation | Explicit finite opt-in DRAFT billing and private-alert jobs, durable downstream identities, bounded retries, leases/fences, current authority and atomic source completion; runtime disabled by default | Separately authorized runner/credential/scheduler setup and operational monitoring; broader adapters |
 | AI | Planned; no AI provider configured or activated | Provider-backed assistant and explicit data/provider authorization |
-| Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
+| Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text; stable API error categories now drive safe AR/EN notices while retaining existing recovery | Complete end-to-end translation QA, CSV diagnostics, machine-state edge cases and actual-browser typography/accessibility acceptance |
 
 ## Before live operational acceptance
 
@@ -33,6 +33,12 @@ The existing hosted review environment is not evidence of business or regulatory
 The configured Core checks workflow audits dependencies, runs ESLint and TypeScript checks, applies migrations, runs unit and database tests, builds the app and exercises API flows against disposable PostgreSQL. It does not run a browser acceptance suite. Passing CI verifies the tested code slice, not the entire ERP, current live service health or production readiness. Dated CI results below are historical evidence; verify the exact candidate commit separately.
 
 ## Implementation history
+
+### Final integrated bilingual-error verification — 11 November 2026
+
+The clean combined candidate passed all 86 existing migrations, 626 unit/component tests, 127 database tests and 47 API checks. Automation, project-time, alert, approval, recurring and RFQ suites also passed at both eight- and one-connection pools. Warning-free lint, TypeScript, production build and zero-vulnerability audit passed. Explicit test registration retained all predecessor suites; initial/final source/input manifests and the complete archive digest matched. No schema, migration or provider configuration changed.
+
+Checks cover allowlisted AR/EN categories, status precedence, malformed/non-JSON/network failures, safe server-error copy, unchanged success/status/header behavior, retained domain/actor codes, pending-request uncertainty, exact retry bytes, session/scope changes and automation-specific wording. The stock-hold regression now expects an additive generic CONFLICT code without any terminal outcome; its original stock/history/authorization assertions remain intact. Earlier pre-integration runs are not substituted for this final aggregate. CSV diagnostics, some machine labels, human-entered text and compatibility API error strings remain outside full translation coverage. Actual-browser/accessibility and business acceptance remain separate, and exact-head clean-install CI is required after publication.
 
 ### Final integrated finite-automation verification — 11 November 2026
 
@@ -798,3 +804,7 @@ Approved time can explicitly generate a genuine DRAFT invoice using reviewed exa
 ## Durable automation86
 
 Application implementation adds explicit finite UTC jobs for one configured recurring subscription or one owned private alert rule, saved downstream request identity, bounded claims/retries, fenced leases and atomic source completion. `/automation` provides Arabic/English configuration review, pause/cancel, exact command recovery and metadata-only history. No scheduler/provider activation, secret provisioning, external communication, auto-posting, renewal or production execution is included. See `AUTOMATION.md` for authority, finite budgets and unknown-outcome limitations. Final migration85→86 proof is tracked with the frozen candidate evidence; this section alone is not a whole-release acceptance claim.
+
+## Safe bilingual error presentation
+
+A shared error-code contract and allowlisted Arabic/English notices cover existing API JSON boundaries and legacy workflow failures, including automation. Success payloads, status/headers, current authorization and exact pending-request identities remain unchanged. Unknown outcomes retain recovery uncertainty and do not imply rollback or success. Sensitive unexpected server failures use bounded copy. This is not a complete translation audit: CSV diagnostics, some machine labels, human-entered text and compatibility API strings remain outside the translated presentation. See [the exact contract and exclusions](BILINGUAL_ERROR_CONTRACT.md).

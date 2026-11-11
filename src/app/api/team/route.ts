@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -7,11 +7,11 @@ import { db } from "@/lib/db";
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const tenantId = z.string().uuid().safeParse(new URL(request.url).searchParams.get("tenantId"));
-  if (!tenantId.success) return NextResponse.json({ error: "Invalid tenant" }, { status: 400 });
+  if (!tenantId.success) return apiJson({ error: "Invalid tenant" }, { status: 400 });
   if (!(await canAccess({ userId: actor.id, tenantId: tenantId.data, permission: "user:manage" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const [memberships, invitations] = await Promise.all([
     db.membership.findMany({
       where: { tenantId: tenantId.data },
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     }),
   ]);
-  return NextResponse.json({
+  return apiJson({
     members: memberships.map((membership) => ({
       id: membership.id, userId: membership.userId, name: membership.user.name,
       email: membership.user.email, status: membership.status, revision:grantRevision(membership.roleGrants),

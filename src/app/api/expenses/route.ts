@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess, readableCompanyBranches } from "@/lib/access";
@@ -15,38 +15,38 @@ const schema = z.object({ tenantId: uuid, companyId: uuid, branchId: uuid.nullis
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permission: "expense:read" });
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false) return apiJson({ error: "Forbidden" }, { status: 403 });
   const expenses = await db.expense.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, description: true, category: true, amount: true,
       currency: true, expenseDate: true, status: true, branchId: true, postedAt: true,
       voidedAt: true, voidReason: true,vat:{select:{taxAmount:true,recoverableTax:true}} },
     orderBy: [{ expenseDate: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ expenses: expenses.slice(0, 50).map(({vat,...expense})=>({...expense,grossAmount:expense.amount.plus(vat?.taxAmount??0).toFixed(3),expenseCost:expense.amount.plus(vat?.taxAmount??0).minus(vat?.recoverableTax??0).toFixed(3),taxAmount:vat?.taxAmount.toFixed(3)??"0.000",recoverableTax:vat?.recoverableTax.toFixed(3)??"0.000",vatRecorded:Boolean(vat)})), nextPage: expenses.length > 50 ? page.data + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
+  return apiJson({ expenses: expenses.slice(0, 50).map(({vat,...expense})=>({...expense,grossAmount:expense.amount.plus(vat?.taxAmount??0).toFixed(3),expenseCost:expense.amount.plus(vat?.taxAmount??0).minus(vat?.recoverableTax??0).toFixed(3),taxAmount:vat?.taxAmount.toFixed(3)??"0.000",recoverableTax:vat?.recoverableTax.toFixed(3)??"0.000",vatRecorded:Boolean(vat)})), nextPage: expenses.length > 50 ? page.data + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid expense" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid expense" }, { status: 400 });
   const { tenantId, companyId, branchId, expenseDate, ...data } = parsed.data;
   if (!(await canAccess({ userId: actor.id, tenantId, companyId, branchId: branchId ?? undefined,
-    permission: "expense:create" }))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    permission: "expense:create" }))) return apiJson({ error: "Forbidden" }, { status: 403 });
   const company = await db.company.findUnique({ where: { tenantId_id: { tenantId, id: companyId } },
     select: { baseCurrency: true } });
-  if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+  if (!company) return apiJson({ error: "Company not found" }, { status: 404 });
   if (branchId && !(await db.branch.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: branchId } }, select: { id: true } })))
-    return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+    return apiJson({ error: "Branch not found" }, { status: 404 });
   try {
     const expense = await db.$transaction(async (tx) => {
       const expense = await tx.expense.create({ data: { tenantId, companyId, branchId: branchId ?? null,
@@ -56,10 +56,10 @@ export async function POST(request: Request) {
         entity: "Expense", entityId: expense.id } });
       return expense;
     });
-    return NextResponse.json({ expense }, { status: 201 });
+    return apiJson({ expense }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Expense number already in use" }, { status: 409 });
+      return apiJson({ error: "Expense number already in use" }, { status: 409 });
     throw error;
   }
 }

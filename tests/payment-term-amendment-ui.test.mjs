@@ -1,3 +1,4 @@
+import {apiResponse} from "./helpers/api-response.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {readFileSync} from "node:fs";
@@ -12,7 +13,7 @@ function load(file,overrides={},environment={}){
  const filename=new URL(`../src/${file}`,import.meta.url);
  const {outputText}=ts.transpileModule(readFileSync(filename,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020},fileName:filename.pathname});
  const exports={};
- new Function("require","exports","fetch","localStorage","window","crypto","navigator",outputText)(name=>Object.hasOwn(overrides,name)?overrides[name]:require(name),exports,environment.fetch,environment.localStorage,environment.window,{randomUUID},environment.navigator);
+ new Function("require","exports","fetch","localStorage","window","crypto","navigator",outputText)(name=>Object.hasOwn(overrides,name)?overrides[name]:(name === "@/lib/api-response" ? apiResponse : require(name)),exports,environment.fetch,environment.localStorage,environment.window,{randomUUID},environment.navigator);
  return exports;
 }
 const localeModule=load("lib/locale.ts"),inputModule=load("lib/payment-term-amendment-input.ts");

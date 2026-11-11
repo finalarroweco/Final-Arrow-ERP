@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -20,22 +20,22 @@ const schema = z.union([
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid ticket action" }, { status: 400 });
+    return apiJson({ error: "Invalid ticket action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const ticket = await db.ticket.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+  if (!ticket) return apiJson({ error: "Ticket not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: ticket.companyId,
     branchId: ticket.branchId ?? undefined, permission: "ticket:manage" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (action === "assign" && parsed.data.employeeId) {
     const problem = await validateEmployeeAssignment({ userId: actor.id, tenantId,
       companyId: ticket.companyId, recordBranchId: ticket.branchId, employeeId: parsed.data.employeeId });
-    if (problem) return NextResponse.json({ error: problem.error }, { status: problem.status });
+    if (problem) return apiJson({ error: problem.error }, { status: problem.status });
   }
   const expected = action === "start" ? ["OPEN"] : action === "resolve" ? ["OPEN", "IN_PROGRESS"]
     : action === "reopen" || action === "close" ? ["RESOLVED"] : ["OPEN", "IN_PROGRESS"];
@@ -60,6 +60,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.ticket.findUnique({ where: { id }, select: { id: true, status: true,
       priority: true, assigneeEmployeeId: true, resolutionNote: true } });
   });
-  if (!result) return NextResponse.json({ error: "Ticket status changed or action is invalid" }, { status: 409 });
-  return NextResponse.json({ ticket: result });
+  if (!result) return apiJson({ error: "Ticket status changed or action is invalid" }, { status: 409 });
+  return apiJson({ ticket: result });
 }

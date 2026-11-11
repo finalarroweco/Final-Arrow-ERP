@@ -1,6 +1,6 @@
+import { apiJson } from "@/lib/api-response";
 import {invoiceDocumentSourceAllowed,invoiceSourceSelect} from "@/lib/invoice-source";
 import { documentJournal, lockDocument } from "@/lib/document-journal";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -14,18 +14,18 @@ const schema = z.discriminatedUnion("action", [
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid invoice action" }, { status: 400 });
+    return apiJson({ error: "Invalid invoice action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const invoice = await db.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { tenantId:true,companyId: true, branchId: true,...invoiceSourceSelect } });
-  if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  if (!invoice) return apiJson({ error: "Invoice not found" }, { status: 404 });
   if (!(await invoiceDocumentSourceAllowed(actor.id,invoice)) || !(await canAccess({ userId: actor.id, tenantId, companyId: invoice.companyId,
     branchId: invoice.branchId ?? undefined, permission: action === "issue" ? "invoice:issue" : "invoice:void" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
     await lockDocument(tx, "invoice", tenantId, id);
@@ -47,8 +47,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.invoice.findUnique({ where: { id }, select: { id: true, status: true,
       issuedAt: true, voidedAt: true, voidReason: true } });
   });
-  if(result && "forbidden" in result)return NextResponse.json({error:"Forbidden"},{status:403});
-  if (result && "ledgerBlocked" in result) return NextResponse.json({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
-  if (!result) return NextResponse.json({ error: "Invoice status has changed or transition is invalid" }, { status: 409 });
-  return NextResponse.json({ invoice: result });
+  if(result && "forbidden" in result)return apiJson({error:"Forbidden"},{status:403});
+  if (result && "ledgerBlocked" in result) return apiJson({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
+  if (!result) return apiJson({ error: "Invoice status has changed or transition is invalid" }, { status: 409 });
+  return apiJson({ invoice: result });
 }

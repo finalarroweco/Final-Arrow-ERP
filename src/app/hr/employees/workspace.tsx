@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 
 type Permissions = { canCreate: boolean; canManage: boolean };
@@ -27,7 +27,7 @@ export function EmployeesWorkspace({ options, locale }: { options: Option[]; loc
       page: String(number), inactive: String(showInactive), ...filters });
     const response = await fetch(`/api/employees?${query}`);
     const data = await response.json();
-    if (!response.ok) { setMessage(data.error ?? t("Could not load employees", "تعذر تحميل الموظفين")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setEmployees(data.employees); setPage(number); setNextPage(data.nextPage);
   }, [options, t, filters]);
   useEffect(() => { void load(selected, inactive); }, [load, selected, inactive]);
@@ -36,7 +36,7 @@ export function EmployeesWorkspace({ options, locale }: { options: Option[]; loc
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json();
-      setMessage(response.ok ? success : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? success : presentApiError(t, data, response.status));
       if (response.ok) await load(selected, inactive, method === "POST" ? 0 : page);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }

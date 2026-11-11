@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
 import { currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -8,7 +8,7 @@ import { SubscriptionError } from "@/lib/manual-subscriptions";
 import { subscriptionFailure, subscriptionHeaders as headers, uniqueSubscriptionQuery } from "@/lib/manual-subscription-route";
 export async function GET(request: Request) {
  const actor = await currentUser();
- if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401, headers });
+ if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401, headers });
  try {
   const parsed = subscriptionCustomerFilters.safeParse(uniqueSubscriptionQuery(request));
   if (!parsed.success) throw new SubscriptionError("Invalid customer filters", 400);
@@ -27,6 +27,6 @@ export async function GET(request: Request) {
    const rows = await tx.customer.findMany({ where, select: { id: true, displayName: true, code: true }, orderBy: [{ displayName: "asc" }, { id: "asc" }], skip: p.page * 50, take: 51 });
    return { customers: rows.slice(0, 50).map(row => ({ id: row.id, name: row.displayName, code: row.code })), page: p.page, nextPage: rows.length > 50 ? p.page + 1 : null };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15000 });
-  return NextResponse.json({ actorId: actor.id, ...result }, { headers });
+  return apiJson({ actorId: actor.id, ...result }, { headers });
  } catch (error) { return subscriptionFailure(error); }
 }

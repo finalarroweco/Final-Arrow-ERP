@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess, readableCompanyPermissions } from "@/lib/access";
@@ -19,18 +19,18 @@ const schema = z.object({
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const rights = await readableCompanyPermissions({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permissions: ["purchase-order:read", "inventory-stock:read"] });
   const branches = rights["purchase-order:read"], stock = rights["inventory-stock:read"];
   const receiptVisibility = stock === false ? { id: { in: [] as string[] } } : stock === null ? {} : { branchId: { in: stock } };
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false) return apiJson({ error: "Forbidden" }, { status: 403 });
   const orders = await db.$transaction(tx=>tx.purchaseOrder.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, supplierId: true, supplierName: true, branchId: true,
@@ -41,31 +41,31 @@ export async function GET(request: Request) {
       lines: { select: { id: true, position: true, description: true, quantity: true, receivedQuantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 }),{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
-  return NextResponse.json({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });
+  return apiJson({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });
 }
 
 export async function POST(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid purchase order" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid purchase order" }, { status: 400 });
   const { tenantId, companyId, branchId, supplierId, number, notes, lines } = parsed.data;
   if (!(await canAccess({ userId: actor.id, tenantId, companyId, branchId: branchId ?? undefined,
-    permission: "purchase-order:create" }))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    permission: "purchase-order:create" }))) return apiJson({ error: "Forbidden" }, { status: 403 });
   const company = await db.company.findUnique({ where: { tenantId_id: { tenantId, id: companyId } },
     select: { id: true, baseCurrency: true } });
-  if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+  if (!company) return apiJson({ error: "Company not found" }, { status: 404 });
   if (branchId && !(await db.branch.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: branchId } }, select: { id: true } })))
-    return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+    return apiJson({ error: "Branch not found" }, { status: 404 });
   const supplier = await db.supplier.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: supplierId } },
     select: { displayName: true, branchId: true, archivedAt: true } });
-  if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
+  if (!supplier) return apiJson({ error: "Supplier not found" }, { status: 404 });
   if (supplier.archivedAt || (supplier.branchId && supplier.branchId !== branchId))
-    return NextResponse.json({ error: "Supplier is archived or outside order scope" }, { status: 409 });
+    return apiJson({ error: "Supplier is archived or outside order scope" }, { status: 409 });
   const amounts = lines.map((line) => new Prisma.Decimal(line.unitPrice).mul(line.quantity));
   const subtotal = amounts.reduce((sum, amount) => sum.add(amount), new Prisma.Decimal(0));
   if (subtotal.greaterThan("999999999999999.999"))
-    return NextResponse.json({ error: "Purchase order total too large" }, { status: 400 });
+    return apiJson({ error: "Purchase order total too large" }, { status: 400 });
   try {
     const order = await db.$transaction(async (tx) => {
       const order = await tx.purchaseOrder.create({ data: { tenantId, companyId, branchId: branchId ?? null,
@@ -78,10 +78,10 @@ export async function POST(request: Request) {
         metadata: { supplierId, subtotal: subtotal.toString(), currency: order.currency } } });
       return order;
     });
-    return NextResponse.json({ order }, { status: 201 });
+    return apiJson({ order }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Purchase order number already in use" }, { status: 409 });
+      return apiJson({ error: "Purchase order number already in use" }, { status: 409 });
     throw error;
   }
 }

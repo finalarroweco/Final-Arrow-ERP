@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -13,17 +13,17 @@ const schema = z.object({ tenantId: uuid,
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid company settings" }, { status: 400 });
+    return apiJson({ error: "Invalid company settings" }, { status: 400 });
   const { tenantId, ...data } = parsed.data;
   const company = await db.company.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { id: true, baseCurrency: true } });
-  if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+  if (!company) return apiJson({ error: "Company not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: id, permission: "company:update" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Company" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
     if(data.baseCurrency!=="OMR" && (await tx.companyVatProfile.findUnique({where:{companyId:id}}))?.enabled) return null;
@@ -33,6 +33,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       metadata: { previousCurrency: company.baseCurrency, baseCurrency: updated.baseCurrency } } });
     return updated;
   });
-  if(!result)return NextResponse.json({error:"Disable Oman VAT before changing currency"},{status:409});
-  return NextResponse.json({ company: result });
+  if(!result)return apiJson({error:"Disable Oman VAT before changing currency"},{status:409});
+  return apiJson({ company: result });
 }

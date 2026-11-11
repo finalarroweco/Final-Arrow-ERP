@@ -1,10 +1,11 @@
+import {apiResponse} from "./helpers/api-response.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
 const require=createRequire(import.meta.url);
-const load=(name,overrides={})=>{const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL(`../src/lib/${name}.ts`,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText)(n=>overrides[n]??require(n),exports);return exports;};
+const load=(name,overrides={})=>{const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL(`../src/lib/${name}.ts`,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText)(n=>overrides[n]??(n === "@/lib/api-response" ? apiResponse : require(n)),exports);return exports;};
 const money=load('exact-money'),{certificateSnapshot,certificateHash}=load('bank-certificate-snapshot',{'./exact-money':money}),input=load('bank-certificate-input');
 const id='11111111-1111-4111-8111-111111111111';
 const base=()=>({version:1,tenantId:id,companyId:id,accountId:id,statementId:id,company:{id,name:'Company'},account:{id,code:'BANK',name:'Bank'},statement:{id,reference:'Bank',from:'2026-01-01',to:'2026-01-31',currency:'OMR',opening:'0.000',closing:'0.000',voidedAt:null,voidReason:null,createdAt:'2026-01-01T00:00:00.000Z',createdBy:id},book:[],bank:[]});
@@ -41,7 +42,7 @@ test('creation and designation route boundaries reject missing, malformed and sw
  const route=load('bank-certificate-route',{'./auth':{currentUser:async()=>authenticated?{id:authenticated}:null},'./bank-certificates':services});
  for(const [path,body] of [['bank/statements/[id]/certificates/route.ts',{tenantId:id,requestId:id,expectedDigest:'a'.repeat(64),note:'Original'}],['bank/certificates/[id]/events/route.ts',{tenantId:id,requestId:id,expectedVersion:0,action:'RESTORE',reason:'Original'}]]){
   records.clear();calls=0;
-  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../src/app/api/'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(name=>({'@/lib/bank-certificate-route':route,'@/lib/bank-certificate-input':input,'@/lib/bank-certificates':services}[name]??require(name)),exports);
+  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../src/app/api/'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(name=>({'@/lib/bank-certificate-route':route,'@/lib/bank-certificate-input':input,'@/lib/bank-certificates':services}[name]??(name === "@/lib/api-response" ? apiResponse : require(name))),exports);
   const post=guard=>exports.POST(new Request('http://localhost/write',{method:'POST',headers:{'Content-Type':'application/json',...(guard===undefined?{}:{'X-Expected-Actor-Id':guard})},body:JSON.stringify(body)}),{params:Promise.resolve({id})});
   authenticated=other;
   for(const guard of [undefined,'invalid',owner,owner+','+other]){const r=await post(guard),data=await r.json();assert.equal(r.status,409);assert.ok(['ACTOR_REQUIRED','ACTOR_MISMATCH'].includes(data.code));assert.equal(data.outcome,undefined);assert.equal(records.size,0);assert.equal(calls,0);}

@@ -1,9 +1,10 @@
+import { apiJson } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { apiMutationFailure } from "./lib/request-security";
 
 export function middleware(request: NextRequest) {
   const failure = apiMutationFailure(request);
-  if (failure) return NextResponse.json({ error: failure.error }, {
+  if (failure) return apiJson({ error: failure.error }, {
     status: failure.status, headers: { "Cache-Control": "no-store" },
   });
   return NextResponse.next();

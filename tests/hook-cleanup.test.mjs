@@ -136,3 +136,15 @@ test("recovery status uses the changed locale and aborts replayed, replaced and 
   await h.respond(3, {count: 10});
   assert.equal(h.writes, unmountedWrites);
 });
+
+test('project error notices select AR/EN categories without rendering server details', async () => {
+ const rights={canReadBilling:false,canReadBudget:false,canReadTime:false,canCreate:false,canManage:false,canCreateTask:false,canManageTask:false};
+ const options=[{tenantId:'tenant',companyId:'company',label:'Human company label',companyPermissions:rights,branches:[]}];
+ for(const language of ['ar','en'])for(const status of [400,401,403,404,409,429,500,503]){
+  const h=harness('app/projects/workspace.tsx','ProjectsWorkspace',{options,locale:language});
+  h.calls[0].resolve({ok:false,status,json:async()=>({error:'SECRET internal English server text'})});await tick();
+  const notice=descendants(h.render()).find(e=>e.props?.role==='status');assert.ok(notice);
+  assert.equal(notice.props.children,locale.presentApiError((en,ar)=>locale.translate(language,en,ar),{},status));
+  assert.doesNotMatch(notice.props.children,/SECRET/);h.render();assert.equal(h.calls.length,1);h.cleanup();
+ }
+});

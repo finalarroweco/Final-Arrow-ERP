@@ -1,6 +1,6 @@
 "use client";
 import {useCallback,useEffect,useRef,useState,type FormEvent} from "react";
-import {translate,type Locale} from "@/lib/locale";
+import {presentApiError,translate,type Locale} from "@/lib/locale";
 import {pendingReservation,reservationRequest,type ReservationRequest} from "@/lib/stock-reservation-input";
 type Scope={tenantId:string;companyId:string;branchId:string};
 type Row={id:string;quantity:string;reference:string;createdAt:string;releasedAt:string|null;releaseReason:string|null;balance:{itemId:string;item:{sku:string;name:string;unit:string}}};
@@ -14,7 +14,7 @@ export function StockReservations({actorId,scope,canAdjust,items,locale,onSaved}
  const load=useCallback(async(selectedState:string,index=0)=>{
   const n=++generation.current;
   try{const r=await fetch(`/api/inventory/reservations?${new URLSearchParams({tenantId,companyId,branchId,state:selectedState,page:String(index)})}`),data=await r.json();if(!mounted.current||n!==generation.current)return;
-   if(!r.ok){setRows([]);setMessage(data.error??t("Could not load reservations","تعذر تحميل الحجوزات"));return;}setRows(data.reservations);setPage(index);setNextPage(data.nextPage);
+   if(!r.ok){setRows([]);setMessage(presentApiError(t, data, r.status));return;}setRows(data.reservations);setPage(index);setNextPage(data.nextPage);
   }catch{if(mounted.current&&n===generation.current)setMessage(t("Connection failed","فشل الاتصال"));}
  },[tenantId,companyId,branchId,t]);
  useEffect(()=>{ const generationRef = generation; mounted.current=true;try{const raw=sessionStorage.getItem(key);if(raw){const restored=pendingReservation(JSON.parse(raw),actorId,{tenantId,companyId,branchId});if(restored)setPending(restored);else sessionStorage.removeItem(key);}}catch{setMessage(t("Pending requests can only be retained while this page stays open.","يمكن الاحتفاظ بالطلب المعلق ما دامت الصفحة مفتوحة فقط."));}return()=>{mounted.current=false;++generationRef.current;};},[key,actorId,tenantId,companyId,branchId,t]);
@@ -26,7 +26,7 @@ export function StockReservations({actorId,scope,canAdjust,items,locale,onSaved}
   try{const r=await fetch("/api/inventory/reservations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),data=await r.json();
    if(r.ok||r.status<500){try{sessionStorage.removeItem(key);}catch{}if(mounted.current)setPending(null);}
    if(!mounted.current){if(r.ok)onSaved();return;}
-   if(!r.ok){setMessage(data.error??t("Reservation could not be saved","تعذر حفظ الحجز"));return;}
+   if(!r.ok){setMessage(presentApiError(t, data, r.status));return;}
    setMessage(t("Reservation change saved","تم حفظ تغيير الحجز"));onSaved();await load(state,page);
   }catch{if(mounted.current)setMessage(t("Result unconfirmed. Retry the retained request with the same details.","نتيجة الحفظ غير مؤكدة. أعد محاولة الطلب المحفوظ بنفس التفاصيل."));}
   finally{inFlight.current=false;if(mounted.current)setBusy(false);}

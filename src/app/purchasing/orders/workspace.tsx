@@ -4,7 +4,7 @@ import {sourceLink} from "@/app/approvals/workflows/read-input";
 import {paymentTermsInput} from "@/lib/payment-terms";
 import {PaymentTermsFields} from "../../payment-terms-fields";
 import {FinancialReport} from "@/app/accounting/financial-report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Rights = { canCreate: boolean; canManage: boolean; canStockAdjust: boolean };
@@ -47,7 +47,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
     const response = await fetch(`/api/purchase-orders?${query}`);
     const data = await response.json();
     if(generation!==loadGeneration.current)return;
-    if (!response.ok) { setError(data.error ?? t("Could not load purchase orders", "تعذر تحميل أوامر الشراء")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setOrders(data.orders); setPage(pageNumber); setNextPage(data.nextPage); setError("");
   }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
@@ -79,7 +79,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
         body: JSON.stringify({ tenantId: scope.tenantId, companyId: scope.companyId, branchId: effectiveBranchId || null,
           supplierId, number: form.get("number"), notes: form.get("notes") || null, lines }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not create purchase order", "تعذر إنشاء أمر الشراء"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else { (event.target as HTMLFormElement).reset(); setLines([{ description: "", quantity: 1, unitPrice: "0.000" }]);
         setReportVersion(value=>value+1); await load(selected); }
     } finally { setBusy(false); }
@@ -91,7 +91,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       const response = await fetch(`/api/purchase-orders/${order.id}/status`, { method: "PATCH",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenantId: scope.tenantId, action }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not update purchase order", "تعذر تحديث أمر الشراء"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else {setReportVersion(value=>value+1); await load(selected, page);}
     } finally { setBusy(false); }
   }
@@ -113,7 +113,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
     const response = await fetch(`/api/inventory/stock?${query}`);
     const data = await response.json();
     if(generation!==receiptGeneration.current)return;
-    if (!response.ok) setError(data.error ?? t("Could not load inventory items", "تعذر تحميل أصناف المخزون"));
+    if (!response.ok) setError(presentApiError(t, data, response.status));
     else setReceiptItems(data.items);
   }
   async function receive(event: React.FormEvent<HTMLFormElement>, order: Order) {
@@ -132,7 +132,7 @@ export function PurchaseOrdersWorkspace({ options, locale }: { options: Option[]
       const data=await response.json();
       if(!response.ok){
         if(response.status<500){receiptRequest.current=null;setReceiptPending(false);try{sessionStorage.removeItem(receiptStorageKey(order));}catch{}}
-        setError(data.error??t("Could not receive purchase order","تعذر استلام أمر الشراء"));
+        setError(presentApiError(t, data, response.status));
       } else {
         receiptRequest.current=null;setReceiptPending(false);try{sessionStorage.removeItem(receiptStorageKey(order));}catch{}setReceivingId(null);setReceiptItems([]);setReportVersion(v=>v+1);await load(selected,page);
       }

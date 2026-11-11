@@ -1,10 +1,11 @@
+import {apiResponse} from "./helpers/api-response.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
 const require=createRequire(import.meta.url);
-function compile(path,dependencies={}){const compiled={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>Object.hasOwn(dependencies,name)?dependencies[name]:require(name),compiled,compiled.exports);return compiled.exports;}
+function compile(path,dependencies={}){const compiled={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>Object.hasOwn(dependencies,name)?dependencies[name]:(name === "@/lib/api-response" ? apiResponse : require(name)),compiled,compiled.exports);return compiled.exports;}
 class SubscriptionError extends Error{constructor(message,status=409){super(message);this.status=status;}}
 const input=compile('src/lib/manual-subscription-input.ts'),route=compile('src/lib/manual-subscription-route.ts',{'./manual-subscriptions':{SubscriptionError},'./manual-subscription-input':input});
 const {boundedSubscriptionJson,uniqueSubscriptionQuery,csvSubscriptionCell,subscriptionFailure,subscriptionHeaders}=route;
@@ -28,6 +29,6 @@ test('manual subscription metadata CSV escapes formulas, quotes, line breaks and
  assert.equal(subscriptionHeaders['Cache-Control'],'private, no-store');assert.equal(subscriptionHeaders['X-Content-Type-Options'],'nosniff');
 });
 test('manual subscription errors return bounded generic details with no-store protection',async()=>{
- const response=subscriptionFailure(new SubscriptionError('Explicit conflict',409));assert.equal(response.status,409);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.deepEqual(await response.json(),{error:'Explicit conflict'});
+ const response=subscriptionFailure(new SubscriptionError('Explicit conflict',409));assert.equal(response.status,409);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.deepEqual(await response.json(),{error:'Explicit conflict',code:'CONFLICT'});
  const unexpected=new Error('Unexpected database detail');assert.throws(()=>subscriptionFailure(unexpected),error=>error===unexpected);
 });

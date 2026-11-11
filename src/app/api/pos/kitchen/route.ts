@@ -1,4 +1,4 @@
-import {NextResponse} from "next/server";
+import { apiJson } from "@/lib/api-response";
 import {z} from "zod";
 import {currentUser} from "@/lib/auth";
 import {canAccess} from "@/lib/access";
@@ -6,10 +6,10 @@ import {db} from "@/lib/db";
 import {posScope} from "@/lib/pos";
 import {queryInput} from "@/lib/ledger";
 export async function GET(request:Request){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
  const parsed=posScope.extend({status:z.enum(["WAITING","PREPARING","READY","SERVED"]).optional(),page:z.coerce.number().int().min(0).max(100000).default(0)}).safeParse(queryInput(new URL(request.url).searchParams,["tenantId","companyId","branchId","status","page"]));
- if(!parsed.success)return NextResponse.json({error:"Invalid kitchen filters"},{status:400});const {tenantId,companyId,branchId,status,page}=parsed.data;
- if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"pos:read"})))return NextResponse.json({error:"Forbidden"},{status:403});
+ if(!parsed.success)return apiJson({error:"Invalid kitchen filters"},{status:400});const {tenantId,companyId,branchId,status,page}=parsed.data;
+ if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"pos:read"})))return apiJson({error:"Forbidden"},{status:403});
  const result=await db.$transaction(async tx=>{
  const scope={tenantId,companyId,branchId,status:{not:"CANCELLED" as const}};
  const orders=await tx.posOrder.findMany({where:{tenantId,companyId,branchId,status:{not:"CANCELLED"},kitchenStatus:status??{in:["WAITING","PREPARING","READY"]}},
@@ -19,5 +19,5 @@ export async function GET(request:Request){
  const [clock]=await tx.$queryRaw<{stamp:Date}[]>`SELECT clock_timestamp() AS stamp`;
  return {serverTime:clock.stamp.toISOString(),summary,orders:orders.slice(0,50),nextPage:orders.length>50?page+1:null};
  },{isolationLevel:"RepeatableRead"});
- return NextResponse.json(result,{headers:{"Cache-Control":"private, no-store"}});
+ return apiJson(result,{headers:{"Cache-Control":"private, no-store"}});
 }

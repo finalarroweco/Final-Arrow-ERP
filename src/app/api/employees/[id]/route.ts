@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -19,20 +19,20 @@ const schema = z.union([updateSchema, statusSchema]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid employee update" }, { status: 400 });
+    return apiJson({ error: "Invalid employee update" }, { status: 400 });
   const { tenantId } = parsed.data;
   const employee = await db.employee.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true, status: true } });
-  if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!employee) return apiJson({ error: "Employee not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: employee.companyId,
     branchId: employee.branchId ?? undefined, permission: "employee:manage" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (parsed.data.action === "update" && employee.status === "INACTIVE")
-    return NextResponse.json({ error: "Reactivate employee before editing" }, { status: 409 });
+    return apiJson({ error: "Reactivate employee before editing" }, { status: 409 });
   const update = parsed.data.action === "status" ? { status: parsed.data.status }
     : { fullName: parsed.data.fullName, jobTitle: parsed.data.jobTitle,
       email: parsed.data.email, phone: parsed.data.phone,
@@ -46,6 +46,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entity: "Employee", entityId: id } });
     return tx.employee.findUnique({ where: { id } });
   });
-  if (!result) return NextResponse.json({ error: "Employee status changed" }, { status: 409 });
-  return NextResponse.json({ employee: result });
+  if (!result) return apiJson({ error: "Employee status changed" }, { status: 409 });
+  return apiJson({ employee: result });
 }

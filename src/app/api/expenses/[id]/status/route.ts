@@ -1,6 +1,6 @@
+import { apiJson } from "@/lib/api-response";
 import { configuredApprovalRequired } from "@/lib/approval-workflows";
 import { documentJournal, lockDocument } from "@/lib/document-journal";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -15,18 +15,18 @@ const schema = z.union([
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid expense action" }, { status: 400 });
+    return apiJson({ error: "Invalid expense action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const expense = await db.expense.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!expense) return NextResponse.json({ error: "Expense not found" }, { status: 404 });
+  if (!expense) return apiJson({ error: "Expense not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: expense.companyId,
     branchId: expense.branchId ?? undefined, permission: action === "post" ? "expense:post" : "expense:void" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
     await tx.$queryRaw`SELECT id FROM "Expense" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
@@ -47,9 +47,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entity: "Expense", entityId: id, ...(action === "void" ? { metadata: { reason: parsed.data.reason } } : {}) } });
     return tx.expense.findUnique({ where: { id }, select: { id: true, status: true, postedAt: true, voidedAt: true, voidReason: true } });
   });
-  if (result && "ledgerBlocked" in result) return NextResponse.json({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
-  if (result && "forbidden" in result) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (result && "workflowRequired" in result) return NextResponse.json({ error: "Use the configured approval workflow, or cancel its pending request first", workflowRequired: true, sourceId: id, resource: "EXPENSE" }, { status: 409 });
-  if (!result) return NextResponse.json({ error: "Expense status changed" }, { status: 409 });
-  return NextResponse.json({ expense: result });
+  if (result && "ledgerBlocked" in result) return apiJson({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
+  if (result && "forbidden" in result) return apiJson({ error: "Forbidden" }, { status: 403 });
+  if (result && "workflowRequired" in result) return apiJson({ error: "Use the configured approval workflow, or cancel its pending request first", workflowRequired: true, sourceId: id, resource: "EXPENSE" }, { status: 409 });
+  if (!result) return apiJson({ error: "Expense status changed" }, { status: 409 });
+  return apiJson({ expense: result });
 }

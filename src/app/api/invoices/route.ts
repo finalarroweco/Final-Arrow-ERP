@@ -1,6 +1,6 @@
+import { apiJson } from "@/lib/api-response";
 import {invoiceDocumentWhere} from "@/lib/invoice-source";
 import {invoiceGross} from "@/lib/invoice-vat";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { readableCompanyPermissions } from "@/lib/access";
@@ -10,16 +10,16 @@ const uuid = z.string().uuid();
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const rights = await readableCompanyPermissions({userId:actor.id,tenantId:tenantId.data,companyId:companyId.data,permissions:["invoice:read","customer:read","billing-subscription:read","project:read","project-time:read","project-time-invoice:read"]});
   const branches=rights["invoice:read"], customers=rights["customer:read"];
-  if(branches===false)return NextResponse.json({error:"Forbidden"},{status:403});
+  if(branches===false)return apiJson({error:"Forbidden"},{status:403});
   const invoices = await db.invoice.findMany({ where: { tenantId: tenantId.data,
     companyId: companyId.data, ...invoiceDocumentWhere(rights["billing-subscription:read"],customers,rights["project:read"],rights["project-time:read"],rights["project-time-invoice:read"]), ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, orderId: true, serviceSourceId:true, projectTimeSourceId:true, customerName: true, branchId: true,
@@ -28,5 +28,5 @@ export async function GET(request: Request) {
       lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ invoices: invoices.slice(0, 50).map(i=>({...i,gross:invoiceGross(i).toFixed(3)})), nextPage: invoices.length > 50 ? page.data + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
+  return apiJson({ invoices: invoices.slice(0, 50).map(i=>({...i,gross:invoiceGross(i).toFixed(3)})), nextPage: invoices.length > 50 ? page.data + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
 }

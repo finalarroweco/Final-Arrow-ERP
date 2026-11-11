@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { createSession, hashPassword } from "@/lib/auth";
@@ -13,9 +13,9 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_REGISTRATION !== "true")
-    return NextResponse.json({ error: "Registration is closed" }, { status: 403 });
+    return apiJson({ error: "Registration is closed" }, { status: 403 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid registration details" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid registration details" }, { status: 400 });
   const { name, email, password, organization, slug } = parsed.data;
   const passwordHash = await hashPassword(password);
   try {
@@ -47,10 +47,10 @@ export async function POST(request: Request) {
       return { userId: user.id, tenantId: tenant.id };
     });
     await createSession(result.userId);
-    return NextResponse.json({ tenantId: result.tenantId }, { status: 201 });
+    return apiJson({ tenantId: result.tenantId }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Email or workspace name already in use" }, { status: 409 });
+      return apiJson({ error: "Email or workspace name already in use" }, { status: 409 });
     throw error;
   }
 }

@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import {drawerConflictMessage} from "@/lib/pos-drawer-conflict";
-import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {currentUser} from "@/lib/auth";
@@ -12,15 +12,15 @@ const uuid=z.string().uuid();
 class ShiftConflict extends Error{}
 const cell=(value:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(value)?`'${value}`:value).replaceAll('"','""')}"`;
 export async function GET(request:Request){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
- const p=posScope.extend({page:z.coerce.number().int().min(0).max(100000).default(0),shiftId:uuid.optional(),format:z.enum(["json","csv"]).default("json")}).safeParse(queryInput(new URL(request.url).searchParams,["tenantId","companyId","branchId","page","shiftId","format"]));if(!p.success)return NextResponse.json({error:"Invalid shift filters"},{status:400});const {tenantId,companyId,branchId,page,shiftId,format}=p.data;
- if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"pos:read"})))return NextResponse.json({error:"Forbidden"},{status:403});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
+ const p=posScope.extend({page:z.coerce.number().int().min(0).max(100000).default(0),shiftId:uuid.optional(),format:z.enum(["json","csv"]).default("json")}).safeParse(queryInput(new URL(request.url).searchParams,["tenantId","companyId","branchId","page","shiftId","format"]));if(!p.success)return apiJson({error:"Invalid shift filters"},{status:400});const {tenantId,companyId,branchId,page,shiftId,format}=p.data;
+ if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"pos:read"})))return apiJson({error:"Forbidden"},{status:403});
  return db.$transaction(async tx=>{
  const shifts=await tx.posShift.findMany({where:{tenantId,companyId,branchId,...(shiftId?{id:shiftId}:{})},orderBy:[{openedAt:"desc"},{id:"asc"}],skip:shiftId?0:page*50,take:51});
- if(shiftId&&!shifts.length)return NextResponse.json({error:"Shift not found"},{status:404});
+ if(shiftId&&!shifts.length)return apiJson({error:"Shift not found"},{status:404});
  if(format==="csv"){
-  if(!shiftId)return NextResponse.json({error:"Select a shift for CSV"},{status:400});
-  const s=shifts[0],events=await tx.posShiftEvent.findMany({where:{shiftId},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001,include:{order:{select:{tendered:true,change:true}}}});if(events.length>5000)return NextResponse.json({error:"Shift event limit exceeded"},{status:413});
+  if(!shiftId)return apiJson({error:"Select a shift for CSV"},{status:400});
+  const s=shifts[0],events=await tx.posShiftEvent.findMany({where:{shiftId},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001,include:{order:{select:{tendered:true,change:true}}}});if(events.length>5000)return apiJson({error:"Shift event limit exceeded"},{status:413});
   const expected=s.expectedCash??events.reduce((n,e)=>n.plus(e.cashDelta),s.openingCash);
   const rows=[["Shift","Currency","Opened UTC","Closed UTC","Opening cash","Expected cash","Counted cash","Difference","Closure reason"],[s.number,s.currency,s.openedAt.toISOString(),s.closedAt?.toISOString()??"",s.openingCash.toFixed(3),expected.toFixed(3),s.countedCash?.toFixed(3)??"",s.difference?.toFixed(3)??"",s.closeReason??""],[],["Recorded UTC","Kind","Reference","Reason","Gross amount","Cash delta","Tendered","Change","Order","Refund","Actor"],...events.map(e=>[e.createdAt.toISOString(),e.kind,e.reference,e.reason,e.amount.toFixed(3),e.cashDelta.toFixed(3),e.order?.tendered?.toFixed(3)??"",e.order?.change?.toFixed(3)??"",e.orderId??"",e.refundId??"",e.createdBy??""])];
   return new Response("\uFEFF"+rows.map(r=>r.map(cell).join(",")).join("\r\n")+"\r\n",{headers:{"Content-Type":"text/csv; charset=utf-8","Content-Disposition":'attachment; filename="shift-'+s.number+'.csv"',"Cache-Control":"private, no-store"}});
@@ -28,13 +28,13 @@ export async function GET(request:Request){
  const groups=await tx.posShiftEvent.groupBy({by:["shiftId","kind"],where:{shiftId:{in:shifts.map(s=>s.id)}},_sum:{amount:true,cashDelta:true},_count:{_all:true}});
  const result=shifts.slice(0,50).map(s=>{const g=groups.filter(g=>g.shiftId===s.id),sum=(kind:string,field:"amount"|"cashDelta")=>g.find(g=>g.kind===kind)?._sum[field]??new Prisma.Decimal(0),cashSales=sum("PAYMENT","cashDelta"),cashRefunds=sum("REFUND","cashDelta").negated(),expected=s.expectedCash??g.reduce((n,g)=>n.plus(g._sum.cashDelta??0),s.openingCash);return{...s,openingCash:s.openingCash.toFixed(3),countedCash:s.countedCash?.toFixed(3)??null,difference:s.difference?.toFixed(3)??null,expectedCash:expected.toFixed(3),eventCount:g.reduce((n,g)=>n+g._count._all,0),cashSales:cashSales.toFixed(3),cardSales:sum("PAYMENT","amount").minus(cashSales).toFixed(3),cashRefunds:cashRefunds.toFixed(3),cardRefunds:sum("REFUND","amount").minus(cashRefunds).toFixed(3),cashIn:sum("IN","amount").toFixed(3),cashOut:sum("OUT","amount").toFixed(3)};});
  const active=await tx.posShift.findFirst({where:{tenantId,companyId,branchId,closedAt:null},select:{id:true}});
- return NextResponse.json({shifts:result,activeId:active?.id??null,nextPage:shifts.length>50?page+1:null},{headers:{"Cache-Control":"private, no-store"}});
+ return apiJson({shifts:result,activeId:active?.id??null,nextPage:shifts.length>50?page+1:null},{headers:{"Cache-Control":"private, no-store"}});
  },{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
 }
 export async function POST(request:Request){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
- const p=schema.safeParse(await request.json().catch(()=>null));if(!p.success)return NextResponse.json({error:"Invalid shift action"},{status:400});const {tenantId,companyId,branchId}=p.data;
- if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"pos:manage"})))return NextResponse.json({error:"Forbidden"},{status:403});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
+ const p=schema.safeParse(await request.json().catch(()=>null));if(!p.success)return apiJson({error:"Invalid shift action"},{status:400});const {tenantId,companyId,branchId}=p.data;
+ if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"pos:manage"})))return apiJson({error:"Forbidden"},{status:403});
  try{const result=await db.$transaction(async tx=>{
  const companies=await tx.$queryRaw<{baseCurrency:string}[]>`SELECT "baseCurrency" FROM "Company" WHERE id=${companyId}::uuid AND "tenantId"=${tenantId}::uuid FOR SHARE`;
  const branches=await tx.$queryRaw<{id:string}[]>`SELECT id FROM "Branch" WHERE id=${branchId}::uuid AND "tenantId"=${tenantId}::uuid AND "companyId"=${companyId}::uuid FOR UPDATE`;if(!companies.length||!branches.length)throw new ShiftConflict("Branch not found");
@@ -61,6 +61,6 @@ export async function POST(request:Request){
  if(!difference.eq(0)&&input.reason.length<3)throw new ShiftConflict("Explain the counted cash difference before closing");
  const closed=await tx.posShift.update({where:{id:shift.id},data:{closedAt:new Date(),closedBy:actor.id,countedCash:counted,expectedCash:expected,difference,closeReason:input.reason}});
  await tx.auditLog.create({data:{tenantId,actorId:actor.id,entity:"PosShift",entityId:shift.id,action:"pos-shift.closed",metadata:{expectedCash:expected.toFixed(3),countedCash:counted.toFixed(3),difference:difference.toFixed(3)}}});return{shift:closed,replayed:false};
- },{timeout:15000,maxWait:10000});return NextResponse.json(result,{status:201});}
- catch(error){const drawer=drawerConflictMessage(error);if(drawer)return NextResponse.json({error:drawer},{status:409});if(error instanceof ShiftConflict)return NextResponse.json({error:error.message},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return NextResponse.json({error:"Check the open shift, available cash, movement limit and duplicate records"},{status:409});throw error;}
+ },{timeout:15000,maxWait:10000});return apiJson(result,{status:201});}
+ catch(error){const drawer=drawerConflictMessage(error);if(drawer)return apiJson({error:drawer},{status:409});if(error instanceof ShiftConflict)return apiJson({error:error.message},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return apiJson({error:"Check the open shift, available cash, movement limit and duplicate records"},{status:409});throw error;}
 }

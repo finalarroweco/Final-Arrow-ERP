@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess, readableCompanyBranches } from "@/lib/access";
@@ -19,16 +19,16 @@ const schema = z.object({
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permission: "quote:read" });
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false) return apiJson({ error: "Forbidden" }, { status: 403 });
   const quotes = await db.quote.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, status: true, sentAt: true, decidedAt: true, currency: true, subtotal: true,
@@ -38,31 +38,31 @@ export async function GET(request: Request) {
       lines: { select: { description: true, quantity: true, unitPrice: true, amount: true, position: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ quotes: quotes.slice(0, 50), nextPage: quotes.length > 50 ? page.data + 1 : null });
+  return apiJson({ quotes: quotes.slice(0, 50), nextPage: quotes.length > 50 ? page.data + 1 : null });
 }
 
 export async function POST(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid quote" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid quote" }, { status: 400 });
   const { tenantId, companyId, branchId, customerId, number, notes, lines } = parsed.data;
   if (!(await canAccess({ userId: actor.id, tenantId, companyId, branchId: branchId ?? undefined,
-    permission: "quote:create" }))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    permission: "quote:create" }))) return apiJson({ error: "Forbidden" }, { status: 403 });
   const company = await db.company.findUnique({ where: { tenantId_id: { tenantId, id: companyId } },
     select: { id: true, baseCurrency: true } });
-  if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+  if (!company) return apiJson({ error: "Company not found" }, { status: 404 });
   if (branchId && !(await db.branch.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: branchId } }, select: { id: true } })))
-    return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+    return apiJson({ error: "Branch not found" }, { status: 404 });
   const customer = await db.customer.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: customerId } },
     select: { branchId: true, archivedAt: true } });
-  if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
+  if (!customer) return apiJson({ error: "Customer not found" }, { status: 404 });
   if (customer.archivedAt || (customer.branchId && customer.branchId !== branchId))
-    return NextResponse.json({ error: "Customer is archived or outside quote scope" }, { status: 409 });
+    return apiJson({ error: "Customer is archived or outside quote scope" }, { status: 409 });
   const amounts = lines.map((line) => new Prisma.Decimal(line.unitPrice).mul(line.quantity));
   const subtotal = amounts.reduce((sum, amount) => sum.add(amount), new Prisma.Decimal(0));
   if (subtotal.greaterThan("999999999999999.999"))
-    return NextResponse.json({ error: "Quote total too large" }, { status: 400 });
+    return apiJson({ error: "Quote total too large" }, { status: 400 });
   try {
     const quote = await db.$transaction(async (tx) => {
       const quote = await tx.quote.create({ data: { tenantId, companyId, branchId: branchId ?? null,
@@ -74,10 +74,10 @@ export async function POST(request: Request) {
         entity: "Quote", entityId: quote.id, metadata: { customerId, subtotal: subtotal.toString(), currency: quote.currency } } });
       return quote;
     });
-    return NextResponse.json({ quote }, { status: 201 });
+    return apiJson({ quote }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Quote number already in use" }, { status: 409 });
+      return apiJson({ error: "Quote number already in use" }, { status: 409 });
     throw error;
   }
 }

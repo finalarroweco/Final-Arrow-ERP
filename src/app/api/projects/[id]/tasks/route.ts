@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -14,20 +14,20 @@ const schema = z.object({ tenantId: uuid, title: z.string().trim().min(2).max(20
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const query = new URL(request.url).searchParams;
   const parsed=z.object({tenantId:uuid,page:z.coerce.number().int().min(0).max(100000).default(0),status:z.enum(["TODO","IN_PROGRESS","DONE","CANCELLED"]).optional(),due:z.enum(["OVERDUE","DUE_SOON","UNDATED"]).optional(),q:z.string().trim().max(120).optional()}).safeParse(queryInput(query,["tenantId","page","status","due","q"]));
-  if(!uuid.safeParse(id).success||!parsed.success)return NextResponse.json({error:"Invalid task filters"},{status:400});
+  if(!uuid.safeParse(id).success||!parsed.success)return apiJson({error:"Invalid task filters"},{status:400});
   const {tenantId,page,status,due,q}=parsed.data;
   const project = await db.project.findUnique({ where: { tenantId_id: { tenantId: tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  if (!project) return apiJson({ error: "Project not found" }, { status: 404 });
   const scope = { userId: actor.id, tenantId: tenantId, companyId: project.companyId,
     branchId: project.branchId ?? undefined };
   if (!(await canAccess({ ...scope, permission: "project:read" })) ||
     !(await canAccess({ ...scope, permission: "project-task:read" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const {tasks,summary,blockers}=await db.$transaction(async tx=>{
     const [clock]=await tx.$queryRaw<{today:string}[]>`SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Muscat','YYYY-MM-DD') AS today`;
     const day=new Date(`${clock.today}T00:00:00Z`);const end=new Date(day.getTime()+3*86400000);
@@ -52,31 +52,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const rights = new Map(await Promise.all(branchKeys.map(async (branchId) => [branchId,
     await canAccess({ userId: actor.id, tenantId: tenantId, companyId: project.companyId,
       branchId: branchId || undefined, permission: "employee:read" })] as const)));
-  return NextResponse.json({ summary,tasks: visible.map(({ assignee, ...task }) => ({
+  return apiJson({ summary,tasks: visible.map(({ assignee, ...task }) => ({
     ...task,blockedBy:blockedCounts.get(task.id)??0,dueBucket:["TODO","IN_PROGRESS"].includes(task.status)?!task.dueDate?"UNDATED":task.dueDate.toISOString().slice(0,10)<summary.today?"OVERDUE":task.dueDate.toISOString().slice(0,10)<=summary.nearEnd?"DUE_SOON":null:null, assigneeName: assignee && rights.get(assignee.branchId ?? "") ? assignee.fullName : null,
   })), nextPage: tasks.length > 50 ? page + 1 : null },{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid project task" }, { status: 400 });
+    return apiJson({ error: "Invalid project task" }, { status: 400 });
   const { tenantId, dueDate: date, assigneeEmployeeId, ...data } = parsed.data;
   const project = await db.project.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  if (!project) return apiJson({ error: "Project not found" }, { status: 404 });
   const scope = { userId: actor.id, tenantId, companyId: project.companyId,
     branchId: project.branchId ?? undefined };
   if (!(await canAccess({ ...scope, permission: "project:read" })) ||
     !(await canAccess({ ...scope, permission: "project-task:create" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (assigneeEmployeeId) {
     const problem = await validateEmployeeAssignment({ userId: actor.id, tenantId,
       companyId: project.companyId, recordBranchId: project.branchId, employeeId: assigneeEmployeeId });
-    if (problem) return NextResponse.json({ error: problem.error }, { status: problem.status });
+    if (problem) return apiJson({ error: problem.error }, { status: problem.status });
   }
   const task = await db.$transaction(async (tx) => {
     const changed = await tx.project.updateMany({ where: { id, tenantId,
@@ -90,6 +90,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       entity: "ProjectTask", entityId: task.id, metadata: { projectId: id } } });
     return task;
   });
-  if (!task) return NextResponse.json({ error: "Project does not accept new tasks" }, { status: 409 });
-  return NextResponse.json({ task }, { status: 201 });
+  if (!task) return apiJson({ error: "Project does not accept new tasks" }, { status: 409 });
+  return apiJson({ task }, { status: 201 });
 }

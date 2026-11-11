@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import {OperationalError,operationalFailure} from "@/lib/operational-records";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -14,22 +14,22 @@ const schema = z.union([
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string; taskId: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id, taskId } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !uuid.safeParse(taskId).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid task action" }, { status: 400 });
+    return apiJson({ error: "Invalid task action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const project = await db.project.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  if (!project) return apiJson({ error: "Project not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: project.companyId,
     branchId: project.branchId ?? undefined, permission: "project-task:manage" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (action === "assign" && parsed.data.employeeId) {
     const problem = await validateEmployeeAssignment({ userId: actor.id, tenantId,
       companyId: project.companyId, recordBranchId: project.branchId, employeeId: parsed.data.employeeId });
-    if (problem) return NextResponse.json({ error: problem.error }, { status: problem.status });
+    if (problem) return apiJson({ error: problem.error }, { status: problem.status });
   }
   const expected: ("TODO" | "IN_PROGRESS")[] = action === "start" ? ["TODO"] : ["TODO", "IN_PROGRESS"];
   try { const result = await db.$transaction(async (tx) => {
@@ -51,7 +51,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.projectTask.findUnique({ where: { id: taskId }, select: { id: true, status: true,
       completedAt: true, assigneeEmployeeId: true } });
   });
-  if (!result) return NextResponse.json({ error: "Task or project status does not allow this action" }, { status: 409 });
-  return NextResponse.json({ task: result });
-  } catch(error) {const failure=operationalFailure(error);return NextResponse.json({error:failure.error},{status:failure.status});}
+  if (!result) return apiJson({ error: "Task or project status does not allow this action" }, { status: 409 });
+  return apiJson({ task: result });
+  } catch(error) {const failure=operationalFailure(error);return apiJson({error:failure.error},{status:failure.status});}
 }

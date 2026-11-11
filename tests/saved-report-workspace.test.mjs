@@ -7,7 +7,7 @@ import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as reportPresets from "../src/lib/report-presets.ts";
-import { translate } from "../src/lib/locale.ts";
+import * as localeModule from "../src/lib/locale.ts";
 
 const require = createRequire(import.meta.url);
 const filename = new URL("../src/app/saved-reports/workspace.tsx", import.meta.url);
@@ -74,6 +74,11 @@ function workspace(config = {}) {
       if (!slots[index]) slots[index] = { value: { current: value } };
       return slots[index].value;
     },
+    useCallback(callback, deps) {
+      const index = cursor++, previous = slots[index];
+      if (!previous || deps.some((value, i) => !Object.is(value, previous.deps[i]))) slots[index] = {deps, callback};
+      return slots[index].callback;
+    },
     useEffect(effect, deps) {
       const index = cursor++;
       const previous = slots[index];
@@ -97,7 +102,7 @@ function workspace(config = {}) {
         : config.list?.(call, calls.filter(call => !call.method).length) ?? response({ presets: [], nextPage: null }));
     } catch (error) { return Promise.reject(error); }
   };
-  const overrides = { react: hooks, "@/lib/report-presets": reportPresets, "@/lib/locale": { translate }, "./saved.module.css": { default: { workspace: "workspace", list: "list" } } };
+  const overrides = { react: hooks, "@/lib/report-presets": reportPresets, "@/lib/locale": localeModule, "./saved.module.css": { default: { workspace: "workspace", list: "list" } } };
   const exports = {};
   new Function("require", "exports", "sessionStorage", "fetch", "crypto", outputText)(
     name => Object.hasOwn(overrides, name) ? overrides[name] : require(name), exports, sessionStorage, fetch, { randomUUID },
@@ -274,7 +279,8 @@ test("old v1 and new range caches restore their scope and retry the unchanged or
       await view.click("Retry same request"); await view.settle();
       assertLocked(view);
       assert.deepEqual(JSON.parse(view.cache), pending);
-      assert.match(view.html, /Result uncertain/);
+      assert.match(view.html, /could not confirm the outcome/);
+      assert.doesNotMatch(view.html, /Result uncertain/);
       await view.click("Retry same request"); await view.settle();
       assert.equal(view.mutations.length, 2);
       for (const call of view.mutations) {
@@ -305,7 +311,8 @@ test("network uncertainty and repeated activation keep one request in flight and
   first.reject(new Error("Network disconnected after submission"));
   await Promise.all([firstAttempt, duplicateAttempt]); await view.settle();
   assertLocked(view);
-  assert.match(view.html, /Network disconnected after submission/);
+  assert.match(view.html, /outcome could not be verified/);
+  assert.doesNotMatch(view.html, /Network disconnected after submission/);
   const activateRetry = view.button("Retry same request").props.onClick;
   const retryAttempt = activateRetry(), duplicateRetry = activateRetry();
   view.commit();
@@ -430,4 +437,21 @@ test("storage failure warns in both languages while preserving an uncertain requ
     assert.equal(view.mutations[1].body, view.mutations[0].body);
     assert.equal(view.control(t.company).props.disabled, false);
   }
+});
+
+test('AR/EN unknown mutation outcomes and failed JSON preserve exact pending bodies and safe notices', async () => {
+ for(const language of ['ar','en'])for(const failure of ['unknown','json','network']){
+  const t=labels[language];
+  const view=await workspace({props:{locale:language},mutate:(_call,number)=>{
+   if(number>1)return response();
+   if(failure==='network')throw new Error('SECRET transport details');
+   if(failure==='json')return {ok:true,status:200,json:async()=>{throw new SyntaxError('SECRET invalid JSON');}};
+   return response({code:'FUTURE_UNKNOWN',error:'SECRET internal details'},503);
+  }}).settle();
+  view.change(t.name,'Human title must stay unchanged');await view.submit();await view.settle();assertLocked(view,language);
+  assert.ok(view.cache);assert.doesNotMatch(view.html,/SECRET|SyntaxError|TypeError/);
+  assert.match(view.html,language==='ar'?/تعذر.*النتيجة/:/could not.*(outcome|verified)/);
+  const original=view.mutations[0].body;
+  await view.click(t.retry);await view.settle();assert.equal(view.mutations.length,2);assert.equal(view.mutations[1].body,original);assert.equal(view.cache,undefined);
+ }
 });

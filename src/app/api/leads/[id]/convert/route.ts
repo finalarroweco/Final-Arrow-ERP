@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -10,20 +10,20 @@ const schema = z.object({ tenantId: uuid,
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid conversion" }, { status: 400 });
+    return apiJson({ error: "Invalid conversion" }, { status: 400 });
   const { tenantId, customerCode } = parsed.data;
   const lead = await db.lead.findUnique({ where: { tenantId_id: { tenantId, id } } });
-  if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+  if (!lead) return apiJson({ error: "Lead not found" }, { status: 404 });
   const scope = { userId: actor.id, tenantId, companyId: lead.companyId, branchId: lead.branchId ?? undefined };
   if (!(await canAccess({ ...scope, permission: "lead:convert" })) ||
     !(await canAccess({ ...scope, permission: "customer:create" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (lead.stage === "WON" || lead.stage === "LOST")
-    return NextResponse.json({ error: "Lead is closed" }, { status: 409 });
+    return apiJson({ error: "Lead is closed" }, { status: 409 });
   try {
     const customer = await db.$transaction(async (tx) => {
       const changed = await tx.lead.updateMany({ where: { id, tenantId,
@@ -40,11 +40,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ] });
       return customer;
     });
-    if (!customer) return NextResponse.json({ error: "Lead is closed" }, { status: 409 });
-    return NextResponse.json({ customer }, { status: 201 });
+    if (!customer) return apiJson({ error: "Lead is closed" }, { status: 409 });
+    return apiJson({ customer }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Customer code already in use" }, { status: 409 });
+      return apiJson({ error: "Customer code already in use" }, { status: 409 });
     throw error;
   }
 }

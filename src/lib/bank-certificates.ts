@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
 import { db } from "./db";
 import { scopeMatches } from "./scope";
 import { lockBankAccount } from "./bank-reconciliation";
@@ -79,11 +79,11 @@ export async function recordCertificateEvent(actorId:string,id:string,input:Cert
 }
 export function certificateFailure(error:unknown) {
  const headers={"Cache-Control":"private, no-store"};
- if(error instanceof Error&&/Snapshot (?:source limit exceeded|allocation history limit exceeded|outstanding limit exceeded|exceeds 16 MiB)/.test(error.message))return NextResponse.json({error:"Snapshot exceeds its source, allocation history, outstanding or size limit",code:"SOURCE_LIMIT"},{status:413,headers});
- if(error instanceof CertificateError)return NextResponse.json({error:error.message,...(error.code?{code:error.code}:{})},{status:error.status,headers});
- if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2002")return NextResponse.json({error:"The request ID conflicts with a saved request. Keep the original request and verify its account and result.",code:"REQUEST_CONFLICT"},{status:409,headers});
+ if(error instanceof Error&&/Snapshot (?:source limit exceeded|allocation history limit exceeded|outstanding limit exceeded|exceeds 16 MiB)/.test(error.message))return apiJson({error:"Snapshot exceeds its source, allocation history, outstanding or size limit",code:"SOURCE_LIMIT"},{status:413,headers});
+ if(error instanceof CertificateError)return apiJson({error:error.message,...(error.code?{code:error.code}:{})},{status:error.status,headers});
+ if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2002")return apiJson({error:"The request ID conflicts with a saved request. Keep the original request and verify its account and result.",code:"REQUEST_CONFLICT"},{status:409,headers});
  const constraint=error instanceof Prisma.PrismaClientUnknownRequestError&&error.message.includes("23514")||error instanceof Prisma.PrismaClientKnownRequestError&&(["P2003","P2004"].includes(error.code)||error.code==="P2010"&&["23503","23514"].includes(String(error.meta?.code)));
- if(constraint)return NextResponse.json({error:"Snapshot sources or designation conflict with saved records. This attempt was rejected; reload before creating a new request.",code:"REJECTED"},{status:409,headers});
- if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2034")return NextResponse.json({error:"Concurrent changes interrupted the transaction. Retry the original saved request.",code:"RETRY_REQUEST"},{status:409,headers});
+ if(constraint)return apiJson({error:"Snapshot sources or designation conflict with saved records. This attempt was rejected; reload before creating a new request.",code:"REJECTED"},{status:409,headers});
+ if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2034")return apiJson({error:"Concurrent changes interrupted the transaction. Retry the original saved request.",code:"RETRY_REQUEST"},{status:409,headers});
  throw error;
 }

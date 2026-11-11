@@ -1,4 +1,4 @@
-import {NextResponse} from "next/server";
+import { apiJson } from "@/lib/api-response";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {currentUser} from "@/lib/auth";
@@ -10,11 +10,11 @@ const uuid=z.string().uuid();
 const schema=z.object({tenantId:uuid,companyId:uuid,branchId:uuid,itemId:uuid,from:dueDate,to:dueDate,timeZone:z.enum(["UTC","Asia/Muscat"]).default("Asia/Muscat"),format:z.enum(["json","csv"]).default("json")}).refine(({from,to})=>to>=from&&(Date.parse(to)-Date.parse(from))/86400000<366);
 const cell=(value:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(value)?`'${value}`:value).replaceAll('"','""')}"`;
 export async function GET(request:Request){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
  const parsed=schema.safeParse(queryInput(new URL(request.url).searchParams,["tenantId","companyId","branchId","itemId","from","to","timeZone","format"]));
- if(!parsed.success)return NextResponse.json({error:"Invalid stock report filters (maximum 366 days)"},{status:400});
+ if(!parsed.success)return apiJson({error:"Invalid stock report filters (maximum 366 days)"},{status:400});
  const {tenantId,companyId,branchId,itemId,from,to,timeZone,format}=parsed.data;
- if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"inventory-stock:read"})))return NextResponse.json({error:"Forbidden"},{status:403});
+ if(!(await canAccess({userId:actor.id,tenantId,companyId,branchId,permission:"inventory-stock:read"})))return apiJson({error:"Forbidden"},{status:403});
  const offset=timeZone==="Asia/Muscat"?14400000:0;const start=new Date(Date.parse(`${from}T00:00:00Z`)-offset);const end=new Date(Date.parse(`${to}T00:00:00Z`)+86400000-offset);
  const result=await db.$transaction(async tx=>{
   const branch=await tx.branch.findUnique({where:{tenantId_companyId_id:{tenantId,companyId,id:branchId}},select:{name:true}});
@@ -29,9 +29,9 @@ export async function GET(request:Request){
   const rows=movements.map(movement=>{balance=balance.plus(movement.delta);if(movement.delta.gt(0))incoming=incoming.plus(movement.delta);else outgoing=outgoing.minus(movement.delta);return {...movement,delta:movement.delta.toFixed(3),balance:balance.toFixed(3),timestamp:new Date(movement.createdAt.getTime()+offset).toISOString().replace("T"," ").slice(0,19)};});
   return {basis:"RECORDED_MOVEMENTS_ONLY" as const,undatedOpeningOffset:stockBalance?.transferOpeningDelta?.toFixed(3)??null,branch:branch.name,item,rows,summary:{opening,incoming:incoming.toFixed(3),outgoing:outgoing.toFixed(3),closing:balance.toFixed(3),count:rows.length}};
  },{isolationLevel:"RepeatableRead"});
- if(!result)return NextResponse.json({error:"Branch or item not found in this scope"},{status:404});
- if(result.rows.length>5000)return NextResponse.json({error:"Report exceeds 5000 movements. Narrow the date range."},{status:413});
- if(format==="json")return NextResponse.json({from,to,timeZone,...result},{headers:{"Cache-Control":"private, no-store"}});
+ if(!result)return apiJson({error:"Branch or item not found in this scope"},{status:404});
+ if(result.rows.length>5000)return apiJson({code:"RESULT_LIMIT",error:"Report exceeds 5000 movements. Narrow the date range."},{status:413});
+ if(format==="json")return apiJson({from,to,timeZone,...result},{headers:{"Cache-Control":"private, no-store"}});
  const prefix=[result.item.sku,result.item.name,result.item.unit,result.branch,timeZone];
  const metadata=[result.basis,result.undatedOpeningOffset??"",result.undatedOpeningOffset!==null&&!new Prisma.Decimal(result.undatedOpeningOffset).isZero()?"Undated opening offset excluded. Movement totals are not historical physical balances; no date or backfill is implied.":"Recorded movements only. Undated opening offsets are excluded."];
  const content=[["SKU","Item","Unit","Branch","Time zone","Time","Type","Delta","Running balance","Reason","Report basis","Undated opening offset","Report note"],[...prefix,from,"OPENING","",result.summary.opening,"Opening balance summary",...metadata],...result.rows.map(row=>[...prefix,row.timestamp,row.type,row.delta,row.balance,row.reason,...metadata]),[...prefix,to,"CLOSING","",result.summary.closing,"Closing balance summary",...metadata]].map(row=>row.map(cell).join(",")).join("\r\n")+"\r\n";

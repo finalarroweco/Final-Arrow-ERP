@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 type Permissions = { canCreate: boolean; canUpdate: boolean; canArchive: boolean };
@@ -27,7 +27,7 @@ export function SuppliersWorkspace({ options, locale }: { options: Option[]; loc
       page: String(pageNumber), archived: String(showArchived) });
     const response = await fetch(`/api/suppliers?${query}`);
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not load suppliers", "تعذر تحميل الموردين")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setSuppliers(data.suppliers); setPage(pageNumber); setNextPage(data.nextPage); setError("");
   }, [options, t]);
   useEffect(() => { void load(selected, 0, archived); }, [load, selected, archived]);
@@ -42,7 +42,7 @@ export function SuppliersWorkspace({ options, locale }: { options: Option[]; loc
         displayName: values.get("displayName"), legalName: values.get("legalName") || null,
         email: values.get("email") || null, phone: values.get("phone") || null }) });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not add supplier", "تعذر إضافة المورد")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     form.reset(); setArchived(false); await load(selected);
   }
   async function update(event: FormEvent<HTMLFormElement>, supplier: Supplier) {
@@ -54,7 +54,7 @@ export function SuppliersWorkspace({ options, locale }: { options: Option[]; loc
         legalName: values.get("legalName") || null, email: values.get("email") || null,
         phone: values.get("phone") || null, notes: values.get("notes") || null }) });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not update supplier", "تعذر تحديث المورد")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setEditing(null); await load(selected, page, archived);
   }
   async function archive(supplier: Supplier) {
@@ -62,7 +62,7 @@ export function SuppliersWorkspace({ options, locale }: { options: Option[]; loc
     const response = await fetch(`/api/suppliers/${supplier.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tenantId: option.tenantId, action: "archive", archived: !supplier.archivedAt }) });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? t("Could not change supplier status", "تعذر تغيير حالة المورد")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     await load(selected, page, archived);
   }
   if (!option) return <section><p>{t("No accessible companies yet.", "لا توجد شركات متاحة لك بعد.")}</p></section>;

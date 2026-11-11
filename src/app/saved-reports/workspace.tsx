@@ -1,15 +1,15 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createReportInput, updateReportInput, decodeReportPending, type UpdateReportInput, type PendingReportRequest, type ReportKind, type reportDateMode, isRegisterReport, isRangeMode, registerStatuses } from "@/lib/report-presets";
 import type { z } from "zod";
-import { translate, type Locale } from "@/lib/locale";
+import { LocalizedPresentationError, presentCaughtError, presentApiError, translate, type Locale } from "@/lib/locale";
 import styles from "./saved.module.css";
 export type ReportOption = { tenantId: string; companyId: string; label: string; kinds: { kind: ReportKind; branches: { id: string; name: string }[] }[] };
 type DateMode = z.infer<typeof reportDateMode>;
 type Preset = { id: string; tenantId: string; companyId: string; branchId: string | null; kind: ReportKind; name: string; dateMode: DateMode; asOf: string | null; from: string | null; to: string | null; status: UpdateReportInput["status"]; q: string; version: number; archivedAt: string | null; updatedAt: string };
 type Initial = { companyIndex: number; kind: ReportKind; branchId: string; dateMode: DateMode; asOf: string; from: string; to: string; status: string; q: string };
 export function SavedReportsWorkspace({ options, actorId, locale, initial }: { options: ReportOption[]; actorId: string; locale: Locale; initial: Initial }) {
- const t = (en: string, ar: string) => translate(locale, en, ar);
+ const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
  const [companyIndex, setCompanyIndex] = useState(initial.companyIndex), [kind, setKind] = useState(initial.kind), [branchId, setBranchId] = useState(initial.branchId);
  const [name, setName] = useState(""), [dateMode, setDateMode] = useState<DateMode>(initial.dateMode), [asOf, setAsOf] = useState(initial.asOf), [q, setQ] = useState(initial.q), [editing, setEditing] = useState<Preset | null>(null);
  const [from, setFrom] = useState(initial.from), [to, setTo] = useState(initial.to), [status, setStatus] = useState(initial.status);
@@ -30,18 +30,18 @@ export function SavedReportsWorkspace({ options, actorId, locale, initial }: { o
   if (!option || !ready) return;
   const controller = new AbortController(); setLoading(true); setListError(""); setPresets([]); setNextPage(null);
   const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, archived: String(archived), page: String(page) });
-  fetch("/api/saved-reports?" + query, { cache: "no-store", signal: controller.signal }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); if (!controller.signal.aborted) { setPresets(data.presets); setNextPage(data.nextPage); setLoadedKey(listKey); } }).catch(error => { if (!controller.signal.aborted) setListError(String(error)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+  fetch("/api/saved-reports?" + query, { cache: "no-store", signal: controller.signal }).then(async response => { const data = await response.json(); if (!response.ok) throw new LocalizedPresentationError(presentApiError(t, data, response.status)); if (!controller.signal.aborted) { setPresets(data.presets); setNextPage(data.nextPage); setLoadedKey(listKey); } }).catch(error => { if (!controller.signal.aborted) setListError(presentCaughtError(t, error)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
   return () => controller.abort();
- }, [option, ready, archived, page, refresh, listKey]);
+ }, [option, ready, archived, page, refresh, listKey, t]);
  function remember(value: PendingReportRequest | null) { setPending(value); try { if (value) sessionStorage.setItem(key, JSON.stringify(value)); else sessionStorage.removeItem(key); } catch { setStorageError(true); } }
  function clearForm(nextKind: ReportKind = kind) { setEditing(null); setName(""); setQ(""); setStatus(""); setDateMode(isRegisterReport(nextKind) ? "CURRENT_MONTH_UTC" : "TODAY_UTC"); setFrom(initial.from); setTo(initial.to); }
  async function send(value: PendingReportRequest) {
   if (sendGuard.current) return; sendGuard.current = true;
   setMessage(""); remember(value); setBusy(true);
   try { const request = value.request, response = await fetch(request.mode === "create" ? "/api/saved-reports" : "/api/saved-reports/" + request.id, { method: request.mode === "create" ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request.payload) }); const data = await response.json();
-   if (!response.ok) { if (response.status < 500) { remember(null); setEditing(null); setRefresh(value => value + 1); } throw new Error(data.error); }
+   if (!response.ok) { if (response.status < 500) { remember(null); setEditing(null); setRefresh(value => value + 1); } throw new LocalizedPresentationError(presentApiError(t, data, response.status)); }
    remember(null); clearForm(); setPage(0); setRefresh(value => value + 1); setMessage(t("Saved report updated successfully.", "تم حفظ إعدادات التقرير بنجاح."));
-  } catch (error) { setMessage(String(error)); } finally { sendGuard.current = false; setBusy(false); }
+  } catch (error) { setMessage(presentCaughtError(t, error)); } finally { sendGuard.current = false; setBusy(false); }
  }
  async function submit(event: React.FormEvent) {
   event.preventDefault(); if (!option || locked) return;

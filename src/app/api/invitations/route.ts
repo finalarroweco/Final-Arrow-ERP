@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import { createHash, randomBytes } from "node:crypto";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -17,12 +17,12 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid invitation" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid invitation" }, { status: 400 });
   const { tenantId, email, role: roleName,roleId, scope } = parsed.data;
   if (!(await canAccess({ userId: actor.id, tenantId, permission: "user:invite" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + 7 * 86400_000);
@@ -47,8 +47,8 @@ export async function POST(request: Request) {
     });
     return invitation;
   });
-  if(!invitation)return NextResponse.json({error:"Role unavailable"},{status:400});
-  return NextResponse.json({ path: `/invite/${token}`, expiresAt: invitation.expiresAt }, { status: 201 });
+  if(!invitation)return apiJson({error:"Role unavailable"},{status:400});
+  return apiJson({ path: `/invite/${token}`, expiresAt: invitation.expiresAt }, { status: 201 });
   }catch(error){return roleFailure(error);}
 }
 

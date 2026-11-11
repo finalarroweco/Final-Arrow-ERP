@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -10,18 +10,18 @@ const schema = z.object({ tenantId: uuid,
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid quote action" }, { status: 400 });
+    return apiJson({ error: "Invalid quote action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const quote = await db.quote.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+  if (!quote) return apiJson({ error: "Quote not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: quote.companyId,
     branchId: quote.branchId ?? undefined, permission: action === "send" ? "quote:send" : "quote:decide" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const status = action === "send" ? "SENT" : action === "accept" ? "ACCEPTED" : "REJECTED";
   const expected = action === "send" ? "DRAFT" : "SENT";
   const result = await db.$transaction(async (tx) => {
@@ -32,6 +32,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entity: "Quote", entityId: id, metadata: { from: expected, to: status } } });
     return tx.quote.findUnique({ where: { id }, select: { id: true, status: true, sentAt: true, decidedAt: true } });
   });
-  if (!result) return NextResponse.json({ error: "Quote status has changed or transition is invalid" }, { status: 409 });
-  return NextResponse.json({ quote: result });
+  if (!result) return apiJson({ error: "Quote status has changed or transition is invalid" }, { status: 409 });
+  return apiJson({ quote: result });
 }

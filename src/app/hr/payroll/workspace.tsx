@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { DocumentPosting } from "../../accounting/document-posting";
 type Rights = { canPostLedger: boolean; canCreate: boolean; canApprove: boolean; canPay: boolean; canVoid: boolean };
 type Option = { tenantId: string; companyId: string; label: string; currency: string; companyRights: Rights;
@@ -30,7 +30,7 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
     const request = ++listRequest.current;
     try {
       const response = await fetch(`/api/payroll?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number), ...(month ? { period: month } : {}), ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) })}`);
-      const data = await response.json(); if (request !== listRequest.current) return; if (!response.ok) { setMessage(data.error); return; }
+      const data = await response.json(); if (request !== listRequest.current) return; if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
       setEntries(data.entries); setPage(number); setNext(data.nextPage);
     } catch { if (request === listRequest.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [option, month, filters, t]);
@@ -39,7 +39,7 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
     const request = ++employeeRequest.current;
     try {
       const response = await fetch(`/api/employees?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number) })}`);
-      const data = await response.json(); if (request !== employeeRequest.current) return; if (!response.ok) { setMessage(data.error); return; }
+      const data = await response.json(); if (request !== employeeRequest.current) return; if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
       setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage);
     } catch { if (request === employeeRequest.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [option, t]);
@@ -49,7 +49,7 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
     setBusy(true); setMessage("");
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await response.json(); setMessage(response.ok ? t("Payroll saved", "تم حفظ سجل الراتب") : data.error);
+      const data = await response.json(); setMessage(response.ok ? t("Payroll saved", "تم حفظ سجل الراتب") : presentApiError(t, data, response.status));
       if (response.ok) { setSummary([]); setReportReady(false); await load(method === "POST" ? 0 : page); }
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -92,7 +92,7 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
         try {
           const response = await fetch(`/api/payroll/report?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, period: month, ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) })}`);
           const data = await response.json();
-          if (response.ok) { setSummary(data.summary); setReportReady(true); } else { setSummary([]); setMessage(data.error); }
+          if (response.ok) { setSummary(data.summary); setReportReady(true); } else { setSummary([]); setMessage(presentApiError(t, data, response.status)); }
         } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
       }}>{t("Monthly totals", "إجماليات الشهر")}</button>
       {month && <a href={`/api/payroll/report?${new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, period: month, format: "csv", ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) })}`}>{t("Download monthly CSV", "تنزيل CSV الشهري")}</a>}

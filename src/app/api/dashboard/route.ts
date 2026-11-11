@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import {moneyMillis,moneyText} from "@/lib/exact-money";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { readableCompanyPermissions } from "@/lib/access";
@@ -9,12 +9,12 @@ const uuid = z.string().uuid();
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   if (!tenantId.success || !companyId.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const scope = { userId: actor.id, tenantId: tenantId.data, companyId: companyId.data };
   const permissions = ["customer:read", "lead:read", "quote:read", "order:read",
     "project:read", "employee:read", "expense:read", "ticket:read"];
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     projectBranches, employeeBranches, expenseBranches, ticketBranches] = permissions.map(key => access[key]);
   if ([customerBranches, leadBranches, quoteBranches, orderBranches,
     projectBranches, employeeBranches, expenseBranches, ticketBranches].every((value) => value === false))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const base = { tenantId: tenantId.data, companyId: companyId.data };
   const branchFilter = (branches: string[] | null) => branches === null ? {} : { branchId: { in: branches } };
   const [customers, leads, quotes, orders, projects, employees, expenses, company, tickets, expenseTaxes] = await Promise.all([
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   const counts = <T extends string>(rows: { [key: string]: unknown; _count: { _all: number } }[] | null, key: string, statuses: readonly T[]) =>
     rows === null ? null : Object.fromEntries(statuses.map((status) => [status,
       rows.find((row) => row[key] === status)?._count._all ?? 0]));
-  return NextResponse.json({
+  return apiJson({
     customers,
     leads: counts(leads, "stage", ["NEW", "QUALIFIED", "PROPOSAL", "WON", "LOST"]),
     quotes: counts(quotes, "status", ["DRAFT", "SENT", "ACCEPTED", "REJECTED"]),

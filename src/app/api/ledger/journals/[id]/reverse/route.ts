@@ -1,10 +1,10 @@
+import { apiJson } from "@/lib/api-response";
 import {posRefundOrder,posRefundAllowed,posRefundState,posRefundNumber} from "@/lib/pos-refund";
 import {invoiceGross} from "@/lib/invoice-vat";
 import {settlementInvoice,customerSettlementAllowed,invoiceSettlementState,customerSettlementDependencies,customerSettlementNumber} from "@/lib/customer-settlement";
 import {settlementReceipt,settlementAllowed,settlementDependencies,settlementNumber,receiptSettlementState} from "@/lib/supplier-settlement";
 import {purchaseDocument,purchaseJournalSource,returnJournalDependencies} from "@/lib/purchase-ledger";
 import { writableLedgerCompany, LedgerPeriodClosed, LedgerCompanyMissing } from "@/lib/ledger-period";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -14,15 +14,15 @@ import { journalNumber } from "@/lib/ledger";
 import { documentJournal, documentJournalNumber, lockDocument } from "@/lib/document-journal";
 class PayrollReversalConflict extends Error {}
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const actor = await currentUser(); if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await context.params;
   const parsed = z.object({ tenantId: z.string().uuid(), number: journalNumber, entryDate: dueDate, reason: z.string().trim().min(3).max(500) }).strict().safeParse(await request.json().catch(() => null));
-  if (!z.string().uuid().safeParse(id).success || !parsed.success) return NextResponse.json({ error: "Invalid reversal" }, { status: 400 });
+  if (!z.string().uuid().safeParse(id).success || !parsed.success) return apiJson({ error: "Invalid reversal" }, { status: 400 });
   const original = await db.journalEntry.findFirst({ where: { id, tenantId: parsed.data.tenantId }, include: { lines: true } });
-  if (!original) return NextResponse.json({ error: "Journal not found" }, { status: 404 });
+  if (!original) return apiJson({ error: "Journal not found" }, { status: 404 });
   const scope = { userId: actor.id, tenantId: original.tenantId, companyId: original.companyId, branchId: original.branchId ?? undefined };
-  if (!(await canAccess({ ...scope, permission: "ledger:read" })) || !(await canAccess({ ...scope, permission: "ledger:post" }))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (original.reversalOf || parsed.data.entryDate < original.entryDate.toISOString().slice(0,10)) return NextResponse.json({ error: "Cannot reverse a reversal or use an earlier date" }, { status: 409 });
+  if (!(await canAccess({ ...scope, permission: "ledger:read" })) || !(await canAccess({ ...scope, permission: "ledger:post" }))) return apiJson({ error: "Forbidden" }, { status: 403 });
+  if (original.reversalOf || parsed.data.entryDate < original.entryDate.toISOString().slice(0,10)) return apiJson({ error: "Cannot reverse a reversal or use an earlier date" }, { status: 409 });
   try {
     const entry = await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${original.tenantId}::uuid FOR SHARE`;
@@ -118,13 +118,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         lines: { create: original.lines.map((line) => ({ accountId: line.accountId, position: line.position, debit: line.credit, credit: line.debit })) } } });
       await tx.auditLog.create({ data: { tenantId: original.tenantId, actorId: actor.id, action: "journal.reversed", entity: "JournalEntry", entityId: original.id, metadata: { reversalId: entry.id } } });
       return entry;
-    },{timeout:15000,maxWait:10000}); return NextResponse.json({ entry }, { status: 201 });
+    },{timeout:15000,maxWait:10000}); return apiJson({ entry }, { status: 201 });
   } catch (error) {
-    if (error instanceof PayrollReversalConflict) return NextResponse.json({error:error.message},{status:409});
-    if (error instanceof LedgerPeriodClosed) return NextResponse.json({ error: error.message, lockedThrough: error.lockedThrough }, { status: 409 });
-    if (error instanceof LedgerCompanyMissing) return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    if (error instanceof Error && "code" in error && error.code === "P2002") return NextResponse.json({ error: "Journal already reversed or number already used" }, { status: 409 });
-    if (error instanceof Error && "code" in error && error.code === "P2004") return NextResponse.json({error:"Correction conflicts with the invoice balance or source activity"},{status:409});
+    if (error instanceof PayrollReversalConflict) return apiJson({error:error.message},{status:409});
+    if (error instanceof LedgerPeriodClosed) return apiJson({ error: error.message, lockedThrough: error.lockedThrough }, { status: 409 });
+    if (error instanceof LedgerCompanyMissing) return apiJson({ error: "Company not found" }, { status: 404 });
+    if (error instanceof Error && "code" in error && error.code === "P2002") return apiJson({ error: "Journal already reversed or number already used" }, { status: 409 });
+    if (error instanceof Error && "code" in error && error.code === "P2004") return apiJson({error:"Correction conflicts with the invoice balance or source activity"},{status:409});
     throw error;
   }
 }

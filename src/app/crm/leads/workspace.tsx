@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 
 type Permissions = { canCreate: boolean; canUpdate: boolean; canConvert: boolean };
@@ -25,7 +25,7 @@ export function LeadsWorkspace({ options, locale }: { options: Option[]; locale:
     const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, page: String(pageNumber) });
     const response = await fetch(`/api/leads?${query}`);
     const data = await response.json();
-    if (!response.ok) { setMessage(data.error ?? t("Could not load leads", "تعذر تحميل الفرص")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setLeads(data.leads); setPage(pageNumber); setNextPage(data.nextPage);
   }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
@@ -38,7 +38,7 @@ export function LeadsWorkspace({ options, locale }: { options: Option[]; locale:
           branchId: form.get("branchId") || null, code: form.get("code"), displayName: form.get("displayName"),
           email: form.get("email") || null, phone: form.get("phone") || null }) });
       const data = await response.json();
-      setMessage(response.ok ? t("Lead created", "تم إنشاء الفرصة") : data.error ?? t("Could not create lead", "تعذر إنشاء الفرصة"));
+      setMessage(response.ok ? t("Lead created", "تم إنشاء الفرصة") : presentApiError(t, data, response.status));
       if (response.ok) await load(selected);
     } finally { setBusy(false); }
   }
@@ -53,7 +53,7 @@ export function LeadsWorkspace({ options, locale }: { options: Option[]; locale:
           : { tenantId: option.tenantId, stage }),
       });
       const data = await response.json();
-      setMessage(response.ok ? action === "convert" ? t("Customer created", "تم إنشاء العميل") : t("Stage updated", "تم تحديث المرحلة") : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? action === "convert" ? t("Customer created", "تم إنشاء العميل") : t("Stage updated", "تم تحديث المرحلة") : presentApiError(t, data, response.status));
       if (response.ok) await load(selected, page);
     } finally { setBusy(false); }
   }

@@ -293,8 +293,9 @@ test("HTTP and network failures show no Save or CSV links, with localized connec
     const pending = pendingFetch(), view = reportHarness({ ...baseProps, locale, initial }, pending.fetch);
     await pending.respond(0); view.flush(); assert.equal(links(view.tree).length, 2);
     const invalid = view.submit({ ...initial, q: "Too broad" }); view.flush();
-    await pending.respond(1, { error: "Report exceeds 5000 records. Narrow the filters." }, false); await invalid; view.flush();
-    assert.deepEqual(links(view.tree), []); assert.match(renderToStaticMarkup(view.tree), /Report exceeds 5000/);
+    await pending.respond(1, { code: "RESULT_LIMIT", error: "Report exceeds 5000 records. Narrow the filters." }, false); await invalid; view.flush();
+    assert.deepEqual(links(view.tree), []); assert.match(renderToStaticMarkup(view.tree), locale === "ar" ? /تتجاوز النتائج الحد/ : /result exceeds the supported record limit/);
+    assert.doesNotMatch(renderToStaticMarkup(view.tree), /Report exceeds 5000/);
     const retry = view.submit(initial); await pending.reject(2); await retry; view.flush();
     assert.deepEqual(links(view.tree), []); assert.equal(elements(view.tree, "button")[0].props.disabled, false);
     assert.match(renderToStaticMarkup(view.tree), locale === "ar" ? /فشل الاتصال بالشبكة/ : /Network request failed/); view.unmount();

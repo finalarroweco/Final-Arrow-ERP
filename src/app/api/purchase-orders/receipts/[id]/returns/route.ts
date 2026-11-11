@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import {Prisma} from "@prisma/client";
-import {NextResponse} from "next/server";
 import {z} from "zod";
 import {currentUser} from "@/lib/auth";
 import {canAccess} from "@/lib/access";
@@ -8,16 +8,16 @@ const uuid=z.string().uuid();
 const schema=z.object({tenantId:uuid,requestId:uuid,reason:z.string().trim().min(3).max(150),lines:z.array(z.object({receiptLineId:uuid,quantity:z.number().int().min(1).max(100000)}).strict()).min(1).max(50)}).strict();
 class ReturnConflict extends Error {constructor(message:string,public status=409){super(message);}}
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
  const {id}=await params,parsed=schema.safeParse(await request.json().catch(()=>null));
- if(!uuid.safeParse(id).success||!parsed.success)return NextResponse.json({error:"Invalid stock return: submit positive whole quantities and a request ID"},{status:400});
+ if(!uuid.safeParse(id).success||!parsed.success)return apiJson({error:"Invalid stock return: submit positive whole quantities and a request ID"},{status:400});
  const {tenantId,requestId,reason,lines}=parsed.data;
- if(new Set(lines.map(l=>l.receiptLineId)).size!==lines.length)return NextResponse.json({error:"Submit each receipt line once"},{status:400});
+ if(new Set(lines.map(l=>l.receiptLineId)).size!==lines.length)return apiJson({error:"Submit each receipt line once"},{status:400});
  const receipt=await db.goodsReceipt.findUnique({where:{tenantId_id:{tenantId,id}},select:{companyId:true,branchId:true,order:{select:{branchId:true}}}});
- if(!receipt)return NextResponse.json({error:"Receipt not found"},{status:404});
+ if(!receipt)return apiJson({error:"Receipt not found"},{status:404});
  const scope={userId:actor.id,tenantId,companyId:receipt.companyId};
  const rights=await Promise.all([canAccess({...scope,branchId:receipt.branchId,permission:"inventory-stock:read"}),canAccess({...scope,branchId:receipt.branchId,permission:"inventory-stock:adjust"}),canAccess({...scope,branchId:receipt.order.branchId??undefined,permission:"purchase-order:read"}),canAccess({...scope,branchId:receipt.order.branchId??undefined,permission:"purchase-order:manage"})]);
- if(!rights.every(Boolean))return NextResponse.json({error:"Forbidden"},{status:403});
+ if(!rights.every(Boolean))return apiJson({error:"Forbidden"},{status:403});
  try{
   const result=await db.$transaction(async tx=>{
    await tx.$queryRaw`SELECT id FROM "GoodsReceipt" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
@@ -48,10 +48,10 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
    await tx.auditLog.create({data:{tenantId,actorId:actor.id,entity:"GoodsReturn",entityId:header.id,action:"purchase-order.stock_returned",metadata:{receiptId:id,branchId:receipt.branchId,reason}}});
    return {goodsReturn:await tx.goodsReturn.findUniqueOrThrow({where:{id:header.id},include:{lines:true}}),replayed:false};
   },{timeout:20000,maxWait:10000});
-  return NextResponse.json(result,{status:201});
+  return apiJson(result,{status:201});
  }catch(error){
-  if(error instanceof ReturnConflict)return NextResponse.json({error:error.message},{status:error.status});
-  if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004","P2034"].includes(error.code))return NextResponse.json({error:"Stock return conflict. Retry the same request."},{status:409});
+  if(error instanceof ReturnConflict)return apiJson({error:error.message},{status:error.status});
+  if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004","P2034"].includes(error.code))return apiJson({error:"Stock return conflict. Retry the same request."},{status:409});
   throw error;
  }
 }

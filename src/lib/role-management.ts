@@ -1,7 +1,7 @@
+import { apiJson } from "@/lib/api-response";
 import {createHash} from "node:crypto";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
-import {NextResponse} from "next/server";
 export const protectedRoles=["Owner","Manager","Viewer"];
 export const scopeSchema=z.discriminatedUnion("type",[
  z.object({type:z.literal("TENANT")}).strict(),
@@ -41,4 +41,4 @@ export async function assignableRole(tx:Prisma.TransactionClient,tenantId:string
  return role;
 }
 
-export function roleFailure(error:unknown){if(error instanceof RoleError)return NextResponse.json({error:error.message},{status:error.status});if(error instanceof Error&&"code" in error&&error.code==="P2002")return NextResponse.json({error:"Role name is already in use"},{status:409});throw error;}
+export function roleFailure(error:unknown){if(error instanceof RoleError)return apiJson({error:error.message},{status:error.status});if(error instanceof Error&&"code" in error&&error.code==="P2002")return apiJson({error:"Role name is already in use"},{status:409});throw error;}

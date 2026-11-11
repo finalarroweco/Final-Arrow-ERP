@@ -1,7 +1,7 @@
 "use client";
 import {browserAuthLost} from "@/lib/browser-auth-loss";
 import {useCallback,useEffect,useRef,useState,type FormEvent} from "react";
-import {translate,type Locale} from "@/lib/locale";
+import {presentApiError,translate,type Locale} from "@/lib/locale";
 import {orderStockHoldRequest,orderStockHoldRow,pendingOrderStockHold,confirmedOrderStockHold,confirmedClosedOrderStockHold,orderHoldCsv,availableOrderStock,type OrderStockHoldRequest,type OrderStockHoldRow} from "@/lib/order-stock-hold-input";
 type Order={id:string;number:string;tenantId:string;companyId:string;branchId:string|null;status:string;lines:{id:string;position:number;description:string}[]};
 type Branch={id:string;name:string;canManage:boolean;items:{id:string;sku:string;name:string;unit:string}[]};
@@ -73,7 +73,7 @@ function OrderStockHoldsController({actorId,order,branches,locale}:Props){
       const current=readStored();if(!current||JSON.stringify(current)!==JSON.stringify(request))throw new Error("Saved request changed");
       if(mounted.current&&identity.current===ownKey){setRejected(result);setTerminal(true);setMessage(t("Confirmed: this hold was not recorded because the order is permanently closed. The saved request remains until you explicitly discard it below. Existing holds still need their own full release.","تأكد عدم تسجيل هذا الحجز لأن الطلب مغلق نهائيًا. يبقى الطلب محفوظًا حتى تلغيه صراحةً أدناه. لا تزال الحجوزات القائمة بحاجة إلى فك كامل مستقل."));}return;
      }
-     const detail=typeof result?.error==="string"?result.error.replace(/[\u0000-\u001f\u007f]/gu," ").slice(0,500):"";
+     const detail=presentApiError(t,result,response.status);
      if(mounted.current&&identity.current===ownKey)setMessage(t("Outcome unresolved. Keep this exact request and retry. Do not replace it; restore access with an administrator if necessary.","النتيجة غير محسومة. احتفظ بالطلب نفسه وأعد المحاولة دون استبداله. اطلب من المسؤول استعادة الصلاحية عند الحاجة.")+(detail?` ${detail}`:""));
     }catch{if(mounted.current&&identity.current===ownKey)setMessage(t("Outcome uncertain. The exact request is retained. Retry it without changing its details.","النتيجة غير مؤكدة. احتُفظ بالطلب نفسه. أعد المحاولة دون تغيير تفاصيله."));}
    });

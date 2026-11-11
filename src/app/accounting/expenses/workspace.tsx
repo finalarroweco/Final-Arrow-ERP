@@ -3,7 +3,7 @@ import {sourceLink} from "@/app/approvals/workflows/read-input";
 
 import { DocumentPosting } from "../document-posting";
 import {FinancialReport} from "../financial-report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Rights = { canPostLedger: boolean; canCreate: boolean; canPost: boolean; canVoid: boolean };
@@ -34,7 +34,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
     const response = await fetch(`/api/expenses?${query}`);
     const data = await response.json();
     if (request !== requestNumber.current) return;
-    if (!response.ok) { setMessage(data.error ?? t("Could not load expenses", "تعذر تحميل المصاريف")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setExpenses(data.expenses); setPage(number); setNextPage(data.nextPage);
     } catch { if (request === requestNumber.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
@@ -44,7 +44,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json();
-      setMessage(response.ok ? success : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? success : presentApiError(t, data, response.status));
       if (response.ok) {setReportVersion(value=>value+1);await load(selected, pageNumber);}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }

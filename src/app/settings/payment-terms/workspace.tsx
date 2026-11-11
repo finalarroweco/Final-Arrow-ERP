@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { pendingTermTemplate, termTemplateRequest, type TermTemplateRequest } from "@/lib/payment-term-template-input";
-import { translate, type Locale } from "@/lib/locale";
+import { LocalizedPresentationError, presentCaughtError, presentApiError, translate, type Locale } from "@/lib/locale";
 type Template = { id: string; name: string; label: string; days: number; createdAt: string; archivedAt: string | null; archiveReason: string | null };
 export function TermTemplatesWorkspace({ actorId, scope, locale }: { actorId: string; scope: { tenantId: string; companyId: string; label: string; canManage: boolean }; locale: Locale }) {
-  const t = (en: string, ar: string) => translate(locale, en, ar);
+  const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
   const [rows, setRows] = useState<Template[]>([]), [page, setPage] = useState(0), [nextPage, setNextPage] = useState<number | null>(null);
   const [state, setState] = useState("ACTIVE"), [refresh, setRefresh] = useState(0), [loading, setLoading] = useState(true), [listError, setListError] = useState("");
   const [pending, setPending] = useState<TermTemplateRequest | null>(null), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [storageError, setStorageError] = useState(false);
@@ -13,10 +13,10 @@ export function TermTemplatesWorkspace({ actorId, scope, locale }: { actorId: st
   useEffect(() => {
     let active = true; setLoading(true); setRows([]); setNextPage(null); setListError("");
     fetch("/api/payment-term-templates?" + new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, page: String(page), state }))
-      .then(async response => { const data = await response.json(); if (!active) return; if (!response.ok) throw new Error(data.error); setRows(data.templates); setNextPage(data.nextPage); })
-      .catch(error => { if (active) setListError(String(error)); }).finally(() => { if (active) setLoading(false); });
+      .then(async response => { const data = await response.json(); if (!active) return; if (!response.ok) throw new LocalizedPresentationError(presentApiError(t, data, response.status)); setRows(data.templates); setNextPage(data.nextPage); })
+      .catch(error => { if (active) setListError(presentCaughtError(t, error)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [scope.tenantId, scope.companyId, page, state, refresh]);
+  }, [scope.tenantId, scope.companyId, page, state, refresh, t]);
   function remember(request: TermTemplateRequest | null) {
     setPending(request); try { if (request) sessionStorage.setItem(key, JSON.stringify({ version: 1, actorId, request })); else sessionStorage.removeItem(key); } catch { setStorageError(true); }
   }
@@ -25,9 +25,9 @@ export function TermTemplatesWorkspace({ actorId, scope, locale }: { actorId: st
     try {
       const response = await fetch("/api/payment-term-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
       const data = await response.json();
-      if (!response.ok) { if (response.status < 500) { remember(null); setRefresh(value => value + 1); } throw new Error(data.error); }
+      if (!response.ok) { if (response.status < 500) { remember(null); setRefresh(value => value + 1); } throw new LocalizedPresentationError(presentApiError(t, data, response.status)); }
       remember(null); setPage(0); setRefresh(value => value + 1); setMessage(t("Saved successfully.", "تم الحفظ بنجاح.")); return true;
-    } catch (error) { setMessage(String(error)); return false; } finally { setBusy(false); }
+    } catch (error) { setMessage(presentCaughtError(t, error)); return false; } finally { setBusy(false); }
   }
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (locked || !scope.canManage) return;

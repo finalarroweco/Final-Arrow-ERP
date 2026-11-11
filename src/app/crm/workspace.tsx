@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import {presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 export type CompanyOption = {
@@ -51,7 +51,7 @@ export function CrmWorkspace({ options, locale }: { options: CompanyOption[]; lo
     });
     if (!response.ok) {
       const result: { error?: string } = await response.json();
-      setError(result.error ?? t("Could not add customer.", "تعذر إضافة العميل.")); return;
+      setError(presentApiError(t, result, response.status)); return;
     }
     form.reset(); setShowArchived(false); await load(selected, 0, false);
   }

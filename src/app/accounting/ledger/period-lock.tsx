@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 export function PeriodLock({ scope, locale, onChange }: { scope: {tenantId:string;companyId:string}; locale:Locale; onChange:(date:string|null)=>void }) {
   const t = useCallback((en:string,ar:string)=>translate(locale,en,ar),[locale]);
   const [state,setState] = useState<{lockedThrough:string|null;canManage:boolean}|null>(null);
@@ -11,7 +11,7 @@ export function PeriodLock({ scope, locale, onChange }: { scope: {tenantId:strin
     try {
       const response=await fetch(`/api/ledger/period-lock?${new URLSearchParams({tenantId:scope.tenantId,companyId:scope.companyId})}`,{cache:"no-store"});
       const data=await response.json();if(generation!==request.current)return;
-      if(response.ok){setState(data);onChange(data.lockedThrough);}else{setState(null);setMessage(data.error);}
+      if(response.ok){setState(data);onChange(data.lockedThrough);}else{setState(null);setMessage(presentApiError(t, data, response.status));}
     } catch {if(generation===request.current)setMessage(t("Network request failed","فشل الاتصال بالشبكة"));}
     finally{if(generation===request.current)setBusy(false);}
   },[scope.tenantId,scope.companyId,onChange,t]);
@@ -24,7 +24,7 @@ export function PeriodLock({ scope, locale, onChange }: { scope: {tenantId:strin
       const response=await fetch("/api/ledger/period-lock",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({tenantId:scope.tenantId,companyId:scope.companyId,lockedThrough,expectedLockedThrough:state.lockedThrough,reason})});
       const data=await response.json();if(generation!==request.current)return;
       if(response.ok){setState({...state,lockedThrough:data.lockedThrough});onChange(data.lockedThrough);setMessage(data.changed?t("Period lock updated","تم تحديث قفل الفترة"):t("Period lock is unchanged","قفل الفترة لم يتغير"));}
-      else{setMessage(data.error);if(response.status===409)await load();}
+      else{setMessage(presentApiError(t, data, response.status));if(response.status===409)await load();}
     }catch{if(generation===request.current)setMessage(t("Network request failed","فشل الاتصال بالشبكة"));}finally{if(generation===request.current)setBusy(false);}
   }
   return <section className="card" id="ledger-period">

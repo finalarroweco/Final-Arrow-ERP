@@ -2,7 +2,7 @@
 
 import {StockReservations} from "./reservations";
 import {StockReport} from "./report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 type Option = { tenantId: string; companyId: string; branchId: string; label: string; canAdjust: boolean };
@@ -33,7 +33,7 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
     const response = await fetch(`/api/inventory/stock?${query}`);
     const data = await response.json();
     if (request !== requestNumber.current) return;
-    if (!response.ok) { setError(data.error ?? t("Could not load stock", "تعذر تحميل المخزون")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setItems(data.items); setBalances(data.balances); setMovements(data.movements); setError("");
     } catch { if (request === requestNumber.current) setError(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
@@ -50,7 +50,7 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
           itemId: values.get("itemId"), action: values.get("action"), quantity: values.get("quantity"),
           reason: values.get("reason") }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not adjust stock", "تعذر تعديل المخزون"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else {setReportVersion(value=>value+1); form.reset(); await load(selected); }
     } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -61,7 +61,7 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
       const response = await fetch(`/api/inventory/movements/${id}/reverse`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, reason: values.get("reason") }) });
       const data = await response.json();
-      if (!response.ok) { setError(data.error ?? t("Could not reverse movement", "تعذر عكس الحركة")); return; }
+      if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
       setReportVersion(value => value + 1); await load(selected);
     } catch { setError(t("Connection failed. Reload stock before retrying.", "فشل الاتصال. أعد تحميل المخزون قبل إعادة المحاولة.")); }
     finally { setBusy(false); }

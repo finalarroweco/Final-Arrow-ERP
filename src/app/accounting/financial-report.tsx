@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { reportDate, registerStatuses, type RegisterReportKind } from "@/lib/report-presets";
 
 type Group = { status: string; currency: string; category: string; count: number; amount: string };
@@ -62,7 +62,7 @@ function FinancialReportView({ kind, scope, locale, initial }: Props) {
       const data = await response.json();
       if (!current()) return;
       if (response.ok) setSuccessful({ result: data, query: params.toString() });
-      else setError(typeof data.error === "string" ? data.error : translate(locale, "Unable to load report.", "تعذّر تحميل التقرير."));
+      else setError(presentApiError((en, ar) => translate(locale, en, ar), data, response.status));
     } catch {
       if (current()) setError(translate(locale, "Network request failed", "فشل الاتصال بالشبكة"));
     } finally {

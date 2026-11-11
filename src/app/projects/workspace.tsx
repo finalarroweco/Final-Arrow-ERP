@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState, useRef } from "react";
 
 type Permissions = {canReadBilling:boolean;canReadBudget:boolean; canReadTime:boolean; canCreate: boolean; canManage: boolean; canCreateTask: boolean; canManageTask: boolean };
@@ -37,7 +37,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
     const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, page: String(number) });
     const response = await fetch(`/api/projects?${query}`);
     const data = await response.json();
-    if (!response.ok) { setMessage(data.error ?? t("Could not load projects", "تعذر تحميل المشاريع")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setProjects(data.projects); setPage(number); setNextPage(data.nextPage);
   }, [options, t]);
   const loadTasks = useCallback(async (index: number, projectId: string, number = 0) => {
@@ -48,7 +48,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
     try {
       const response = await fetch(`/api/projects/${projectId}/tasks?${query}`);
       const data = await response.json();if(version!==taskRequest.current)return;
-      if (!response.ok) { setMessage(data.error ?? t("Could not load tasks", "تعذر تحميل المهام")); return; }
+      if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
       setTasks(data.tasks);setTaskSummary(data.summary);setTaskPage(number);setNextTaskPage(data.nextPage);
     } catch {if(version===taskRequest.current)setMessage(t("Network request failed","فشل الاتصال بالشبكة"));}
   }, [options, t,taskFilters]);
@@ -70,7 +70,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json();
-      setMessage(response.ok ? success : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? success : presentApiError(t, data, response.status));
       if (response.ok) await refresh();
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }

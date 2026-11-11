@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import {drawerConflictMessage} from "@/lib/pos-drawer-conflict";
-import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {currentUser} from "@/lib/auth";
@@ -13,14 +13,14 @@ const schema=z.discriminatedUnion("action",[
 ]);
 class OrderConflict extends Error{}
 export async function PATCH(request:Request,context:{params:Promise<{id:string}>}){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});const {id}=await context.params;
- const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success||!z.string().uuid().safeParse(id).success)return NextResponse.json({error:"Invalid order action"},{status:400});
- const order=await db.posOrder.findFirst({where:{id,tenantId:parsed.data.tenantId}});if(!order)return NextResponse.json({error:"Order not found"},{status:404});
- if(!(await canAccess({userId:actor.id,tenantId:order.tenantId,companyId:order.companyId,branchId:order.branchId,permission:"pos:manage"})))return NextResponse.json({error:"Forbidden"},{status:403});
- if(order.status!=="OPEN")return NextResponse.json({error:"Only open orders can be paid or cancelled"},{status:409});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});const {id}=await context.params;
+ const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success||!z.string().uuid().safeParse(id).success)return apiJson({error:"Invalid order action"},{status:400});
+ const order=await db.posOrder.findFirst({where:{id,tenantId:parsed.data.tenantId}});if(!order)return apiJson({error:"Order not found"},{status:404});
+ if(!(await canAccess({userId:actor.id,tenantId:order.tenantId,companyId:order.companyId,branchId:order.branchId,permission:"pos:manage"})))return apiJson({error:"Forbidden"},{status:403});
+ if(order.status!=="OPEN")return apiJson({error:"Only open orders can be paid or cancelled"},{status:409});
  const data:Prisma.PosOrderUpdateManyMutationInput=parsed.data.action==="cancel"?{status:"CANCELLED",cancelledAt:new Date(),cancelReason:parsed.data.reason}:
  parsed.data.action==="pay-card"?{status:"PAID",paidAt:new Date(),paymentMethod:"CARD",paymentReference:parsed.data.reference}:{status:"PAID",paidAt:new Date(),paymentMethod:"CASH",tendered:new Prisma.Decimal(parsed.data.tendered),change:new Prisma.Decimal(parsed.data.tendered).minus(order.total)};
- if(parsed.data.action==="pay"&&new Prisma.Decimal(parsed.data.tendered).lt(order.total))return NextResponse.json({error:"Cash tendered is below the order total"},{status:400});
- try{await db.$transaction(async(tx)=>{await tx.$queryRaw`SELECT set_config('erp.pos_actor',${actor.id},true)`;const changed=await tx.posOrder.updateMany({where:{id,status:"OPEN"},data});if(changed.count!==1)throw new OrderConflict();await tx.auditLog.create({data:{tenantId:order.tenantId,actorId:actor.id,action:parsed.data.action==="cancel"?"pos-order.cancelled":"pos-order.paid",entity:"PosOrder",entityId:id}});});return NextResponse.json({ok:true});}
- catch(error){const drawer=drawerConflictMessage(error);if(drawer)return NextResponse.json({error:drawer},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2004")return NextResponse.json({error:"Check the open branch shift and its movement limit before recording payment"},{status:409});if(error instanceof OrderConflict)return NextResponse.json({error:"Order changed; refresh and retry"},{status:409});throw error;}
+ if(parsed.data.action==="pay"&&new Prisma.Decimal(parsed.data.tendered).lt(order.total))return apiJson({error:"Cash tendered is below the order total"},{status:400});
+ try{await db.$transaction(async(tx)=>{await tx.$queryRaw`SELECT set_config('erp.pos_actor',${actor.id},true)`;const changed=await tx.posOrder.updateMany({where:{id,status:"OPEN"},data});if(changed.count!==1)throw new OrderConflict();await tx.auditLog.create({data:{tenantId:order.tenantId,actorId:actor.id,action:parsed.data.action==="cancel"?"pos-order.cancelled":"pos-order.paid",entity:"PosOrder",entityId:id}});});return apiJson({ok:true});}
+ catch(error){const drawer=drawerConflictMessage(error);if(drawer)return apiJson({error:drawer},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==="P2004")return apiJson({error:"Check the open branch shift and its movement limit before recording payment"},{status:409});if(error instanceof OrderConflict)return apiJson({error:"Order changed; refresh and retry"},{status:409});throw error;}
 }

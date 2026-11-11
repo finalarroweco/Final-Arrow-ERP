@@ -1,7 +1,7 @@
 "use client";
 import {sourceLink} from "./workflows/read-input";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Option = { tenantId: string; companyId: string; label: string;
@@ -28,7 +28,7 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
     const response = await fetch(`/api/approvals?${query}`);
     const data = await response.json();
     if (currentRequest !== requestNumber.current) return;
-    if (!response.ok) { setMessage(data.error ?? t("Could not load approvals", "تعذر تحميل الموافقات")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setItems(data.items); setCounts(data.counts); setHasMore(data.hasMore);
   }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
@@ -42,7 +42,7 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
       const response = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, action, ...(note ? { [item.type === "LEAVE" ? "note" : "reason"]: note } : {}) }) });
       const data = await response.json();
-      setMessage(response.ok ? t("Decision saved", "تم حفظ القرار") : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? t("Decision saved", "تم حفظ القرار") : presentApiError(t, data, response.status));
       if (response.ok) await load(selected);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -21,23 +21,23 @@ const schema = z.union([updateSchema, archiveSchema]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
-  if (!uuid.safeParse(id).success) return NextResponse.json({ error: "Invalid customer" }, { status: 400 });
+  if (!uuid.safeParse(id).success) return apiJson({ error: "Invalid customer" }, { status: 400 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid update" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid update" }, { status: 400 });
   const { tenantId } = parsed.data;
   const customer = await db.customer.findUnique({
     where: { tenantId_id: { tenantId, id } },
     select: { id: true, companyId: true, branchId: true, archivedAt: true },
   });
-  if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
+  if (!customer) return apiJson({ error: "Customer not found" }, { status: 404 });
   const permission = parsed.data.action === "archive" ? "customer:archive" : "customer:update";
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: customer.companyId,
     branchId: customer.branchId ?? undefined, permission })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (parsed.data.action === "update" && customer.archivedAt)
-    return NextResponse.json({ error: "Restore customer before editing" }, { status: 409 });
+    return apiJson({ error: "Restore customer before editing" }, { status: 409 });
   const update = parsed.data.action === "archive"
     ? { archivedAt: parsed.data.archived ? new Date() : null }
     : { displayName: parsed.data.displayName, legalName: parsed.data.legalName,
@@ -51,5 +51,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
     return result;
   });
-  return NextResponse.json({ customer: result });
+  return apiJson({ customer: result });
 }
