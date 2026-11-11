@@ -130,8 +130,20 @@ test('SQL first-document history edit race and overflow maintain the legacy offs
   await tx.stockMovement.create({data:{tenantId:base.tenantId,balanceId:b.id,type:'ADJUSTMENT_IN',delta,reason:'Fill to maximum stock precision',actorId:base.createdBy}});
  });
  await assert.rejects(f.create({kind:'RETURN',deliveryId:d.id,quantity:'0.001'}));await assert.rejects(f.create({kind:'CORRECTION',correctsId:d.id,quantity:d.quantity,reference:d.reference}));
- const functions=await db.$queryRaw`SELECT has_function_privilege('anon','erp_prepare_sales_stock()','EXECUTE') AS public_execute,has_table_privilege('authenticated','"SalesStockDocument"','SELECT') AS public_read`;
- assert.equal(functions[0].public_execute,false);assert.equal(functions[0].public_read,false);
+ // Vanilla PostgreSQL has no provider roles. Always inspect PUBLIC defaults and
+ // object existence; only named-role checks depend on those roles being installed.
+ const roles=await db.$queryRaw`SELECT rolname FROM pg_roles WHERE rolname IN ('anon','authenticated') ORDER BY rolname`;
+ const signatures=['erp_sales_stock_rights(uuid,uuid,uuid,uuid,uuid,boolean)','erp_prepare_sales_stock()','erp_apply_sales_stock()','erp_guard_sales_stock_movement()','erp_check_sales_stock_document()','erp_guard_sales_stock_audit()','erp_guard_sales_stock_source()','erp_guard_sales_hold_marker()','erp_check_sales_hold_marker()','erp_guard_sales_stock_cancellation()','erp_audit_sales_stock_cancellation()','erp_stock_reservation_request_guard()'];
+ for(const signature of signatures){
+  const rows=await db.$queryRaw`SELECT p.oid::text AS id,EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS "publicExecute" FROM pg_proc p WHERE p.oid=to_regprocedure(${signature})`;
+  assert.equal(rows.length,1,`Required sales function missing: ${signature}`);assert.equal(rows[0].publicExecute,false,`PUBLIC EXECUTE: ${signature}`);
+  for(const {rolname} of roles){const [row]=await db.$queryRaw`SELECT has_function_privilege(${rolname},${signature},'EXECUTE') AS allowed`;assert.equal(row.allowed,false,`${rolname} EXECUTE: ${signature}`);}
+ }
+ for(const table of ['"SalesStockDocument"','"SalesStockCancellation"']){
+  const rows=await db.$queryRaw`SELECT c.relrowsecurity AS rls,EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) AS "publicPrivileges" FROM pg_class c WHERE c.oid=to_regclass(${table}) AND c.relkind='r'`;
+  assert.equal(rows.length,1,`Required sales table missing: ${table}`);assert.equal(rows[0].rls,true,`RLS required: ${table}`);assert.equal(rows[0].publicPrivileges,false,`PUBLIC table privileges: ${table}`);
+  for(const {rolname} of roles){const [row]=await db.$queryRaw`SELECT has_table_privilege(${rolname},${table},'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS allowed`;assert.equal(row.allowed,false,`${rolname} table privileges: ${table}`);}
+ }
 });
 async function release(f,id,requestId=randomUUID()){
  return db.$transaction(async tx=>{
