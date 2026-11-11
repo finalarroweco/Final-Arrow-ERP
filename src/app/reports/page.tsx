@@ -22,6 +22,7 @@ const groups = [
     ["/accounting/expenses", "Expense register", "سجل المصاريف", "Expense-date totals, categories and saved VAT", "إجماليات تاريخ المصروف والتصنيفات والضريبة المحفوظة"],
     ["/sales/quotes", "Quote register", "سجل عروض الأسعار", "Creation-date, status and customer filters", "فلاتر تاريخ الإنشاء والحالة والعميل"],
     ["/sales/orders", "Sales-order register", "سجل طلبات البيع", "Saved orders, status totals and CSV", "الطلبات المحفوظة وإجماليات الحالات والتصدير"],
+    ["/purchasing/rfqs", "Supplier offer comparison", "مقارنة عروض الموردين", "Explicit same-currency net prices, completeness and expiry; no automatic award", "أسعار صافية صريحة بعملة واحدة مع اكتمال العروض وصلاحيتها؛ دون ترسية تلقائية"],
     ["/purchasing/orders", "Purchase-order register", "سجل أوامر الشراء", "Order values, supplier and status filters", "قيم الأوامر وفلاتر المورد والحالة"],
     ["/purchasing/receipts", "Goods receipt register", "سجل استلام البضائع", "UTC receipt dates and saved source values", "تواريخ الاستلام بتوقيت UTC وقيم المستندات المحفوظة"],
     ["/purchasing/returns", "Goods return register", "سجل مرتجعات البضائع", "Return documents and source-linked history", "مستندات المرتجعات وتاريخها المرتبط بالمصدر"],

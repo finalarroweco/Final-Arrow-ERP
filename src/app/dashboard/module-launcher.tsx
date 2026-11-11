@@ -29,7 +29,7 @@ const groups = [
     ["/purchasing/settlements", "Supplier settlements", "تسويات الموردين"],
     ["/purchasing/supplier-overdue", "Supplier due-date aging", "استحقاقات الموردين"],
     ["/purchasing/supplier-statement", "Supplier statements", "كشوف الموردين"],
-    ["/purchasing/supplier-balances", "Supplier balances", "أرصدة الموردين"], ["/purchasing/supplier-aging", "Supplier aging", "أعمار أرصدة الموردين"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"], ["/inventory/reordering", "Manual reorder policies", "سياسات إعادة الطلب اليدوية"],
+    ["/purchasing/rfqs", "Supplier RFQs and offer comparison", "طلبات عروض الموردين ومقارنتها"], ["/purchasing/supplier-balances", "Supplier balances", "أرصدة الموردين"], ["/purchasing/supplier-aging", "Supplier aging", "أعمار أرصدة الموردين"], ["/inventory/items", "Items", "الأصناف"], ["/inventory/stock", "Stock & movements", "المخزون والحركات"], ["/inventory/reordering", "Manual reorder policies", "سياسات إعادة الطلب اليدوية"],
   ] },
   { en: "People & operations", ar: "الموظفون والعمليات", links: [
     ["/hr/employees", "Employees", "الموظفون"], ["/hr/attendance", "Attendance", "الحضور"],

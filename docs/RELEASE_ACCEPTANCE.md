@@ -87,3 +87,11 @@ Use approved expected results and isolated fixtures, not demonstration records i
 - [ ] Verify current role/membership revocation, independent scope intersections, same-account refresh, browser profile/account switches, interrupted submissions, exact retries, two tabs, terminal check-and-abandon and invalid pending-data quarantine.
 - [ ] Race list, detail, picker and CSV reads with access loss, scope switches, Close, Back/Forward and delayed JSON callbacks. Verify private metadata does not return after clearing and pending requests remain recoverable.
 - [ ] Open the formula-safe metadata CSV in the intended spreadsheet software; item names/SKUs are literal text, reasons are absent, quantities remain exact and no cross-item/unit totals appear.
+
+## Supplier RFQ acceptance (not run)
+
+- [ ] In Arabic and English, create an explicit request and revision, open it for internal offer recording, record complete and incomplete supplier offers, and review validity and same-currency totals across every comparison page. Opening must not imply a message was sent.
+- [ ] Select a complete eligible whole offer with an explicit reason and PO number. Verify exactly one linked DRAFT purchase order, unchanged stock and ledger, and a stable original award receipt after later PO issue/receipt/cancellation.
+- [ ] Exercise stale request/offer versions, invalid dates, expired offers, archived/out-of-scope suppliers, duplicate PO numbers, concurrent award/abandonment and lost responses. A failed or uncertain attempt must never silently create another order.
+- [ ] Verify independent source/RFQ/PO permission intersections, company-wide and branch scopes, permission revocation, account switching, two-tab pending recovery and delayed reads during scope/permission changes. Verify paginated history/export completeness and literal legacy supplier names.
+- [ ] Retain migration81 immutable snapshots and durable cancellation fences during any application rollback. No split award, external sending, tax/FX, automatic issuance or supplier commitment is implied.

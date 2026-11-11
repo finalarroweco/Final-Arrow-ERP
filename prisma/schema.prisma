@@ -2138,3 +2138,81 @@ model InventoryReorderRequest {
  @@index([tenantId,companyId,policyId,createdAt])
  @@index([itemId])
 }
+
+model SupplierRfq {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ title String
+ deadline DateTime? @db.Date
+ notes String
+ lines Json
+ currency String @db.VarChar(3)
+ version Int
+ requestRevision Int
+ status String @db.VarChar(9)
+ purchaseOrderId String? @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId,updatedAt,id])
+}
+model SupplierOffer {
+ id String @id @db.Uuid
+ rfqId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ supplierId String @db.Uuid
+ supplierBranchId String? @db.Uuid
+ supplierName String
+ supplierCode String
+ version Int
+ requestRevision Int
+ currency String @db.VarChar(3)
+ validUntil DateTime? @db.Date
+ notes String
+ lines Json
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,rfqId,updatedAt,id])
+ @@index([supplierId])
+}
+model SupplierRfqRevision {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ rfqId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ version Int
+ action String @db.VarChar(6)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ request Json
+ rfq Json
+ offer Json?
+ purchaseOrder Json?
+ @@unique([rfqId,version])
+ @@index([tenantId,companyId,rfqId,version])
+}
+model SupplierRfqRequest {
+ id String @id @db.Uuid
+ rfqId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(6)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,rfqId,createdAt])
+}

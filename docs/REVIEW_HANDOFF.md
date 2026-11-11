@@ -2,9 +2,9 @@
 
 ## Delivery boundary
 
-This is a review candidate, not a claim that the complete commercial ERP or its live operating environment is finished. The authorized delivery is [draft PR #2](https://github.com/finalarroweco/Final-Arrow-ERP/pull/2) on `codex/erp-release-hardening-20261108`. No merge, manual deployment or live migration is included. Use the exact head and exact-head CI links recorded in the PR when reviewing; a prior passing commit is not evidence for a later candidate.
+This is an ongoing development review candidate, not a claim that the complete commercial ERP or its live operating environment is finished. The operating acceptance gates below are not a development freeze: missing modules continue to be implemented and independently tested using explicit operator configuration and documented safe defaults. The authorized delivery is [draft PR #2](https://github.com/finalarroweco/Final-Arrow-ERP/pull/2) on `codex/erp-release-hardening-20261108`. No merge, manual deployment or live migration is included. Use the exact head and exact-head CI links recorded in the PR when reviewing; a prior passing commit is not evidence for a later candidate.
 
-The [current module inventory](RELEASE_STATUS.md) is authoritative. It covers implemented CRM/sales, purchasing and physical stock workflows, source-linked accounting/settlements, explicit bank allocations and durable recovery, projects/time/manual costs, HR/manual payroll, POS, helpdesk, internal text documents, manual agreement tracking and configured reorder observations. Those bounded workflows do not imply statutory accounting certification, automated commercial fulfilment, recurring billing, enterprise document management or AI automation.
+The [current module inventory](RELEASE_STATUS.md) is authoritative. It covers implemented CRM/sales, versioned supplier RFQs with explicit DRAFT-PO selection, purchasing and physical stock workflows, source-linked accounting/settlements, explicit bank allocations and durable recovery, projects/time/manual costs, HR/manual payroll, POS, helpdesk, internal text documents, manual agreement tracking and configured reorder observations. Those bounded workflows do not imply statutory accounting certification, automated commercial fulfilment, recurring billing, enterprise document management or AI automation.
 
 ## Decisions needed before operating a pilot
 
@@ -36,4 +36,8 @@ Permanent request cancellation records fence delayed requests. In particular, mi
 
 ## Next step
 
-Complete the candidate's independent technical checks, review the exact draft head, then agree the limited release scope and isolated acceptance environment. Record real-browser/business/operational evidence before requesting rollout approval. Work requiring undecided policies or new provider access remains explicitly pending rather than being replaced by arbitrary manual features.
+Continue implementing the remaining major workflows and running independent technical checks on each integrated candidate. User acceptance occurs after the intended system is implemented, while real-browser/business/operational acceptance remains necessary before live operations. Make commercial values, policies and provider choices explicit configuration; do not invent them or represent unconfigured integrations as working. Escalate only concrete consequential decisions or permissions that actually block further implementation. Merge, deployment and live migration still require separate authorization.
+
+## Continued procurement development
+
+Supplier RFQs connect explicit internal request revisions and supplier offers to the existing DRAFT purchase-order flow. See [the feature boundary and recovery model](SUPPLIER_RFQS.md). Final user testing is deferred until their requested development is complete; automated checks continue without treating user acceptance as a prerequisite to further engineering. No automatic supplier award, external message, issue, tax/FX calculation or stock/ledger effect is included.

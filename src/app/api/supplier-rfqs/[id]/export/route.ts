@@ -1,0 +1,7 @@
+import {NextResponse} from 'next/server';
+import {z} from 'zod';
+import {currentUser} from '@/lib/auth';
+import {rfqExportFilters} from '@/lib/supplier-rfq-input';
+import {RfqError,readRfq} from '@/lib/supplier-rfqs';
+import {uniqueRfqQuery,rfqFailure,rfqHeaders as headers} from '@/lib/supplier-rfq-route';
+export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){const actor=await currentUser();if(!actor)return NextResponse.json({error:'Unauthenticated'},{status:401,headers});try{const id=z.string().uuid().parse((await params).id),p=rfqExportFilters.safeParse(uniqueRfqQuery(request));if(!p.success)throw new RfqError('Invalid export filters',400);if(p.data.expectedActorId&&p.data.expectedActorId!==actor.id)throw new RfqError('Signed-in user changed. Reload before reading.',403);const result=await readRfq(actor.id,id,p.data,0,p.data.eventId);return new Response(JSON.stringify({notice:'Internal RFQ revision. No request or offer was sent to a supplier by this system. Net prices only; no tax, FX, stock or payment calculation.',event:result.events[0]},null,2)+'\n',{headers:{...headers,'X-Rfq-Actor-Id':actor.id,'Content-Type':'application/json; charset=utf-8','Content-Disposition':`attachment; filename="rfq-${id}-revision-${result.events[0].version}.json"`}});}catch(e){if(e instanceof z.ZodError)return NextResponse.json({error:'Invalid RFQ identity'},{status:400,headers});return rfqFailure(e);}}

@@ -48,7 +48,7 @@
 
 ## 4. Procurement & Inventory
 - Vendors
-- RFQ
+- RFQ: implemented request revisions, scoped supplier offers/comparison and explicit DRAFT purchase-order award; see [supplier RFQs](SUPPLIER_RFQS.md). No automatic supplier selection or external sending.
 - Purchase orders
 - Receipts
 - Products
