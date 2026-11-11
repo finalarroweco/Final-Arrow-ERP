@@ -18,7 +18,7 @@ async function authorize(tx:Prisma.TransactionClient,actorId:string,p:AlertReque
   if(!rows[0]?.allowed)throw new AlertError('Current private rule and source access required',403);
  }
 }
-export async function mutateAlert(actorId:string,p:AlertRequest,abandon=false){return db.$transaction(async tx=>{
+export async function mutateAlertTx(tx:Prisma.TransactionClient,actorId:string,p:AlertRequest,abandon=false){
  await lock(tx,p.tenantId);
  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${'private-alert-request:'+p.requestId},0))`;
  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${'private-alert-rule:'+p.ruleId},0))`;
@@ -27,7 +27,8 @@ export async function mutateAlert(actorId:string,p:AlertRequest,abandon=false){r
  if(saved.length){const row=saved[0];if(row.actorId!==actorId||JSON.stringify(canonicalAlertRequest(p))!==JSON.stringify(canonicalAlertRequest(row.request)))throw new AlertError('Request identity belongs to different details');if(row.outcome==='ABANDONED'&&!abandon)throw new AlertError('Request was abandoned. Prepare a new request.');const receipt=row.result??{requestId:p.requestId,ruleId:p.ruleId,actorId,action:p.action,version:p.expectedVersion+1,outcome:'ABANDONED',request:canonicalAlertRequest(p)};if(!alertReceiptMatches(p,receipt))throw new AlertError('Unverified saved receipt');return {receipt};}
  const rows=await tx.$queryRaw<{result:unknown}[]>`INSERT INTO "PrivateAlertRequest"(id,"tenantId","companyId","actorId","ruleId",action,"expectedVersion",request,outcome) VALUES(${p.requestId}::uuid,${p.tenantId}::uuid,${p.companyId}::uuid,${actorId}::uuid,${p.ruleId}::uuid,${p.action},${p.expectedVersion},${JSON.stringify(canonicalAlertRequest(p))}::jsonb,${abandon?'ABANDONED':'COMMITTED'}) RETURNING result`;
  const receipt=rows[0].result??{requestId:p.requestId,ruleId:p.ruleId,actorId,action:p.action,version:p.expectedVersion+1,outcome:'ABANDONED',request:canonicalAlertRequest(p)};if(!alertReceiptMatches(p,receipt))throw new AlertError('Unverified alert receipt');return {receipt};
- },options);}
+}
+export async function mutateAlert(actorId:string,p:AlertRequest,abandon=false){return db.$transaction(tx=>mutateAlertTx(tx,actorId,p,abandon),options);}
 export async function listAlerts(actorId:string,p:z.infer<typeof alertQuery>){return db.$transaction(async tx=>{
  await lock(tx,p.tenantId);await member(tx,actorId,p.tenantId);
  if(p.expectedActorId!==actorId)throw new AlertError('Signed-in user changed. Reload before reading.',403);

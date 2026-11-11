@@ -1,6 +1,6 @@
 # Private in-app operational alerts
 
-`/private-alerts` is a deterministic, personal observation center. It is not an AI agent or a background scheduler. No rule exists after migration. An operator explicitly chooses a permitted source and scope, creates a **disabled** rule, enables it, then presses **Evaluate now**. Opening the center does not evaluate anything. This module does not modify source records, money, stock, orders, subscriptions, ticket state or deadlines. It never sends messages or contacts an external service.
+`/private-alerts` is a deterministic, personal observation center. It is not an AI agent. The optional [durable automation engine](AUTOMATION.md) can evaluate one explicitly selected enabled personal rule under a separate finite opt-in job; its runner remains disabled and unconfigured by default. No rule exists after migration. An operator explicitly chooses a permitted source and scope, creates a **disabled** rule, enables it, then presses **Evaluate now**. Opening the center does not evaluate anything. This module does not modify source records, money, stock, orders, subscriptions, ticket state or deadlines. It never sends messages or contacts an external service.
 
 ## Explicit criteria
 

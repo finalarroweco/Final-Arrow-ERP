@@ -51,3 +51,7 @@ New bank-statement import clients must send `X-Expected-Actor-Id`. Current works
 Actor-bound pending bank imports support explicit permanent abandonment with immutable UUID fences and exact terminal receipts. It never reverses a saved statement or changes money. Keep migration79 guards and tombstones on application rollback; see [the recovery contract](docs/BANK_STATEMENT_IMPORT_ABANDONMENT.md).
 
 Private, explicitly configured [operational alerts](docs/PRIVATE_ALERTS.md) cover ticket deadlines, manual subscription review dates and configured stock shortages. They are evaluated only when requested in-app, with no background scheduler or external delivery.
+
+### Controlled automation
+
+The opt-in [durable automation engine](docs/AUTOMATION.md) supports finite, scoped recurring DRAFT billing and private alert evaluations at `/automation`. Jobs begin paused; the separately protected runner is disabled and unconfigured by default. No scheduler, credentials, provider or external messages are activated by this release.

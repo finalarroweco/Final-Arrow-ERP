@@ -188,6 +188,7 @@ model Company {
   @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@index([tenantId])
+ automationJobs AutomationJob[]
 }
 
 model PaymentTermTemplate {
@@ -249,6 +250,7 @@ model Branch {
   @@unique([tenantId, companyId, id])
   @@index([tenantId, companyId])
   posShifts PosShift[]
+ automationJobs AutomationJob[]
 }
 
 model Department {
@@ -307,6 +309,7 @@ model Membership {
   @@unique([tenantId, userId])
   @@unique([tenantId, id])
   @@index([userId])
+ automationJobs AutomationJob[]
 }
 
 model Role {
@@ -2461,4 +2464,58 @@ model ProjectTimeInvoiceRequest {
  createdAt DateTime @default(now())
  creationTransaction String @default(dbgenerated("(txid_current())::text"))
  @@unique([tenantId,companyId,id])
+}
+
+model AutomationJob {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ actorId String @db.Uuid
+ kind String
+ sourceId String @db.Uuid
+ config Json
+ authorizedFingerprint String
+ state String
+ version Int
+ nextDueAt DateTime @db.Timestamptz(3)
+ runsUsed Int @default(0)
+ cursor Int?
+ lastCode String @default("CONFIGURED")
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ branch Branch? @relation(fields:[tenantId,companyId,branchId],references:[tenantId,companyId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ runs AutomationRun[]
+ @@index([state,nextDueAt,id],map:"automation_due")
+ @@index([actorId,tenantId,companyId,branchId,id],map:"automation_owner")
+}
+model AutomationRun {
+ id String @id @db.Uuid
+ jobId String @db.Uuid
+ sequence Int
+ state String
+ downstreamId String @unique @db.Uuid
+ payload Json?
+ scheduledAt DateTime @db.Timestamptz(3)
+ attempts Int @default(0)
+ fence Int @default(0)
+ leaseToken String? @db.Uuid
+ leaseUntil DateTime? @db.Timestamptz(3)
+ nextAttemptAt DateTime @db.Timestamptz(3)
+ code String @default("QUEUED")
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ finishedAt DateTime? @db.Timestamptz(3)
+ job AutomationJob @relation(fields:[jobId],references:[id],onDelete:Restrict)
+ @@unique([jobId,sequence])
+}
+model AutomationEvent {
+ id String @id @db.Uuid
+ jobId String @db.Uuid
+ actorId String @db.Uuid
+ operation String
+ data Json
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@index([jobId,createdAt,id],map:"automation_events")
 }

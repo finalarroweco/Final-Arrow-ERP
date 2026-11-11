@@ -40,7 +40,7 @@ async function subscriptionContext(tx:Prisma.TransactionClient,actorId:string,p:
  if(!customer||!access.can('customer:read',customer)||customer.branchId!==null&&customer.branchId!==p.branchId)throw new BillingError('Customer access required',403);
  return {access,subscription,customer};
 }
-async function periodPreview(tx:Prisma.TransactionClient,actorId:string,p:z.infer<typeof recurringPreviewRequest>,index:number){
+export async function periodPreview(tx:Prisma.TransactionClient,actorId:string,p:z.infer<typeof recurringPreviewRequest>,index:number){
  const {access,subscription,customer}=await subscriptionContext(tx,actorId,p,'billing-subscription:read');
  if(p.replacesSourceId&&!access.can('invoice:read',p))throw new BillingError('Invoice read access required for correction preview',403);
  const revision=await tx.billingSubscriptionRevision.findFirst({where:{subscriptionId:subscription.id,effectivePeriod:{lte:index}},orderBy:{version:'desc'}});
@@ -97,7 +97,7 @@ async function generate(tx:Prisma.TransactionClient,actorId:string,p:RecurringGe
  await tx.auditLog.create({data:{tenantId:p.tenantId,actorId,action:'invoice.created',entity:'Invoice',entityId:invoice.id,metadata:{serviceSourceId:id,requestId:p.requestId,subscriptionId:p.subscriptionId,periodIndex:p.periodIndex,subtotal:preview.prices.subtotal,currency:preview.currency}}});
  return {kind:'invoice',subscriptionId:p.subscriptionId,periodIndex:p.periodIndex,serviceSourceId:id,invoice:{id:invoice.id,number:invoice.number,status:invoice.status},alreadyGenerated:false};
 }
-export async function mutateRecurringBilling(actorId:string,p:RecurringRequest,abandon=false){return db.$transaction(async tx=>{
+export async function mutateRecurringBillingTx(tx:Prisma.TransactionClient,actorId:string,p:RecurringRequest,abandon=false){
  const identity='subscriptionId'in p?await tx.billingSubscription.findFirst({where:{id:p.subscriptionId,tenantId:p.tenantId,companyId:p.companyId},select:{customerId:true}}):null;
  await locks(tx,{...p,customerId:'customerId'in p?p.customerId:identity?.customerId});
  const permission=p.action==='plan'||p.action==='configure'?'billing-subscription:manage':'billing-subscription:generate';
@@ -143,7 +143,8 @@ export async function mutateRecurringBilling(actorId:string,p:RecurringRequest,a
  }else if(!abandon&&p.action!=='plan'&&p.action!=='configure')result=await generate(tx,actorId,p);
  const row=await tx.billingRequest.create({data:{id:p.requestId,tenantId:p.tenantId,companyId:p.companyId,branchId:p.branchId,action:p.action,request:canonicalRecurringRequest(p),result:json(result),outcome:abandon?'ABANDONED':'COMMITTED',createdBy:actorId}});
  return receipt(row,p);
- },options);}
+}
+export async function mutateRecurringBilling(actorId:string,p:RecurringRequest,abandon=false){return db.$transaction(tx=>mutateRecurringBillingTx(tx,actorId,p,abandon),options);}
 export async function listRecurringBilling(actorId:string,p:z.infer<typeof recurringFilters>){return db.$transaction(async tx=>{
  await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${p.tenantId}::uuid FOR SHARE`;
  if(p.expectedActorId!==actorId)throw new BillingError('Signed-in user changed',403);
