@@ -96,8 +96,8 @@
 
 ## 8. Subscriptions
 - Implemented review slice: [Manual subscription register](MANUAL_SUBSCRIPTIONS.md) with immutable customer/scope identity, operator-reported status, plain-text agreement metadata, calendar dates, next review date, full revisions and explicit archive/restore. Source-customer permissions apply to every read and replay. This does not activate, suspend, renew or terminate service.
-- Planned: configured plans and the broader subscription platform
-- Recurring billing
+- Implemented review slice: [configured recurring draft billing](recurring-billing-operator-workspace.md), with versioned exact-price plans, finite UTC calendars, explicit generation/backfill and linked void replacements through real service-source invoices. Manual register status never authorizes charges.
+- Planned: background scheduling, the broader subscription platform and automated service entitlements
 - Renewals
 - Outstanding balances
 - Suspension

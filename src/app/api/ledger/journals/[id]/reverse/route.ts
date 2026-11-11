@@ -25,12 +25,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (original.reversalOf || parsed.data.entryDate < original.entryDate.toISOString().slice(0,10)) return NextResponse.json({ error: "Cannot reverse a reversal or use an earlier date" }, { status: 409 });
   try {
     const entry = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${original.tenantId}::uuid FOR SHARE`;
       if (/^SYS[KF]-/.test(original.number)) {
         const saved=await tx.customerSettlement.findFirst({where:{tenantId:original.tenantId,entryId:original.id}});
         if(!saved||customerSettlementNumber(saved.kind as "COLLECTION"|"REFUND",saved.id)!==original.number)throw new PayrollReversalConflict("Customer settlement source could not be verified");
         await lockDocument(tx,"invoice",original.tenantId,saved.invoiceId);
         const invoice=await settlementInvoice(tx,original.tenantId,saved.invoiceId);
-        if(!invoice||!(await customerSettlementAllowed(actor.id,invoice,true)))throw new PayrollReversalConflict("Invoice, order, customer and ledger permissions are required");
+        if(!invoice||!(await customerSettlementAllowed(actor.id,invoice,true,tx)))throw new PayrollReversalConflict("Invoice, source, customer and ledger permissions are required");
         const state=await invoiceSettlementState(tx,invoice);
         if(parsed.data.entryDate<state.latest)throw new PayrollReversalConflict("Correction cannot precede later invoice activity");
         const after=saved.kind==="COLLECTION"?state.collected.minus(saved.amount):state.collected.plus(saved.amount);
@@ -41,7 +42,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         if(!link?.entityId||!z.string().uuid().safeParse(link.entityId).success||documentJournalNumber("invoice",link.entityId)!==original.number)throw new PayrollReversalConflict("Invoice source could not be verified");
         await lockDocument(tx,"invoice",original.tenantId,link.entityId);
         const source=await settlementInvoice(tx,original.tenantId,link.entityId);
-        if(!source||!(await customerSettlementAllowed(actor.id,source,true)))throw new PayrollReversalConflict("Invoice, order, customer and ledger permissions are required");
+        if(!source||!(await customerSettlementAllowed(actor.id,source,true,tx)))throw new PayrollReversalConflict("Invoice, source, customer and ledger permissions are required");
         const dependencies=await customerSettlementDependencies(tx,original.tenantId,link.entityId);
         if(dependencies.active)throw new PayrollReversalConflict("Reverse active customer settlements before the invoice journal");
         if(dependencies.latest&&parsed.data.entryDate<dependencies.latest)throw new PayrollReversalConflict("Invoice reversal cannot precede settlement corrections");

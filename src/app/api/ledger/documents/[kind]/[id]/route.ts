@@ -1,3 +1,4 @@
+import {invoiceDocumentSourceAllowed,invoiceSourceInclude} from "@/lib/invoice-source";
 import {expenseVatInput,calculateExpenseVat,expenseGross} from "@/lib/expense-vat";
 import {purchaseVatInput,calculatePurchaseVat} from "@/lib/purchase-vat";
 import {VatConflict} from "@/lib/invoice-vat";
@@ -27,7 +28,7 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
       eligible:kind === "payroll" ? ["APPROVED","PAID"].includes(row.status) : row.status === "PAID"};
   }
   if (kind === "invoice") {
-    const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true} });
+    const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true,...invoiceSourceInclude} });
     return row && { ...row, amount: invoiceGross(row), date: row.issuedAt?.toISOString().slice(0,10), eligible: row.status === "ISSUED" };
   }
   if (kind === "pos") {
@@ -37,10 +38,15 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
   const row = await client.expense.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true} });
   return row && { ...row, netAmount:row.amount,amount:expenseGross(row), date: row.expenseDate.toISOString().slice(0,10), eligible: row.status === "POSTED" };
 }
-async function permitted(userId: string, kind: DocumentKind, tenantId: string, row: { companyId: string; branchId: string | null; orderBranchId?:string|null }, post: boolean) {
+async function permitted(userId: string, kind: DocumentKind, tenantId: string, row: { companyId: string; branchId: string | null; orderBranchId?:string|null; id?:string }, post: boolean, client:Prisma.TransactionClient=db) {
+  if(kind==="invoice"){
+    if(!row.id)return false;
+    const invoice=await client.invoice.findUnique({where:{tenantId_id:{tenantId,id:row.id}},include:invoiceSourceInclude});
+    if(!invoice||!(await invoiceDocumentSourceAllowed(userId,invoice,client)))return false;
+  }
   const scope = { userId, tenantId, companyId: row.companyId, branchId: row.branchId ?? undefined };
-  const checks = await Promise.all([canAccess({ ...scope, ...(isPurchaseDocument(kind)?{branchId:row.orderBranchId??undefined}:{}), permission: `${isPurchaseDocument(kind) ? "purchase-order" : kind === "payroll-payment" ? "payroll" : kind}:read` }),
-    canAccess({ ...scope, permission: "ledger:read" }), ...(isPurchaseDocument(kind)?[canAccess({...scope,permission:"inventory-stock:read"})]:[]), ...(post ? [canAccess({ ...scope, permission: "ledger:post" })] : [])]);
+  const checks = await Promise.all([canAccess({ ...scope, ...(isPurchaseDocument(kind)?{branchId:row.orderBranchId??undefined}:{}), permission: `${isPurchaseDocument(kind) ? "purchase-order" : kind === "payroll-payment" ? "payroll" : kind}:read` },client),
+    canAccess({ ...scope, permission: "ledger:read" },client), ...(isPurchaseDocument(kind)?[canAccess({...scope,permission:"inventory-stock:read"},client)]:[]), ...(post ? [canAccess({ ...scope, permission: "ledger:post" },client)] : [])]);
   return checks.every(Boolean);
 }
 export async function GET(request: Request, context: Context) {
@@ -84,8 +90,10 @@ export async function POST(request: Request, context: Context) {
   if (!(await permitted(actor.id,kind,tenantId,initial,true))) return NextResponse.json({error:"Forbidden"},{status:403});
   try {
     const entry = await db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
       await lockDocument(tx,kind,tenantId,id);
       const row = await source(kind,tenantId,id,tx);
+      if(row&&!(await permitted(actor.id,kind,tenantId,row,true,tx)))throw new PostingConflict("Current document and ledger permissions are required");
       if (!row?.eligible || !row.date) throw new PostingConflict("Document is unavailable for posting: check its status and any reversed receipt stock movements");
       if (entryDate < row.date) throw new PostingConflict("Journal date cannot precede the document date");
       if (await documentJournal(tx,kind,tenantId,row.companyId,id)) throw new PostingConflict("Document already has a ledger journal, including if reversed");

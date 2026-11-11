@@ -1,3 +1,4 @@
+import {invoiceDocumentSourceAllowed,invoiceSourceSelect} from "./invoice-source";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {db} from "./db";
@@ -15,11 +16,12 @@ const sourceWhere=(tenantId:string,kind:PaymentTermSourceKind,id:string)=>({tena
 async function paymentSource(tx:Prisma.TransactionClient,actorId:string,tenantId:string,kind:PaymentTermSourceKind,id:string,manage=false){
  if(!z.string().uuid().safeParse(id).success||!z.string().uuid().safeParse(tenantId).success)throw new OperationalError("Invalid source",400);
  const common={id:true,tenantId:true,companyId:true,branchId:true,paymentTerms:true,paymentDueDate:true} as const;
- const invoice=kind==="invoice"?await tx.invoice.findUnique({where:{tenantId_id:{tenantId,id}},select:{...common,number:true,status:true}}):null;
+ const invoice=kind==="invoice"?await tx.invoice.findUnique({where:{tenantId_id:{tenantId,id}},select:{...common,...invoiceSourceSelect,number:true,status:true}}):null;
  const receipt=kind==="receipt"?await tx.goodsReceipt.findUnique({where:{tenantId_id:{tenantId,id}},select:{...common,order:{select:{number:true,branchId:true}}}}):null;
  const source=invoice??receipt;if(!source)throw new OperationalError("Source not found",404);
  const scope={userId:actorId,tenantId,companyId:source.companyId,branchId:source.branchId??undefined};
  const checks=[canAccess({...scope,permission:kind==="invoice"?"invoice:read":"inventory-stock:read"},tx)];
+ if(invoice)checks.push(invoiceDocumentSourceAllowed(actorId,invoice,tx));
  if(receipt)checks.push(canAccess({...scope,branchId:receipt.order.branchId??undefined,permission:"purchase-order:read"},tx));
  if(!(await Promise.all(checks)).every(Boolean))throw new OperationalError("Forbidden",403);
  const hasManagement=await canAccess({...scope,permission:kind==="invoice"?"invoice-payment-term:manage":"receipt-payment-term:manage"},tx);

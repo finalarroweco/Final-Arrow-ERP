@@ -61,8 +61,10 @@ export function reportTarget(value: Filters & { kind: ReportKind; tenantId: stri
 }
 export function reportPermissions(kind: ReportKind) {
  if (isRegisterReport(kind)) return [{ INVOICE_REGISTER: "invoice:read", EXPENSE_REGISTER: "expense:read", QUOTE_REGISTER: "quote:read", SALES_ORDER_REGISTER: "order:read", PURCHASE_ORDER_REGISTER: "purchase-order:read" }[kind]];
- return kind.startsWith("CUSTOMER") ? ["customer:read", "order:read", "invoice:read", "ledger:read"] : ["supplier:read", "purchase-order:read", "inventory-stock:read", "ledger:read"];
+ return kind.startsWith("CUSTOMER") ? ["customer:read", "invoice:read", "ledger:read"] : ["supplier:read", "purchase-order:read", "inventory-stock:read", "ledger:read"];
 }
+/** Source kinds are alternatives, not an AND of unrelated financial permissions. */
+export function reportSourcePermissions(kind:ReportKind){return kind.startsWith("CUSTOMER")?["order:read","billing-subscription:read"]:[];}
 export const pendingReportRequest = z.object({ version: z.literal(1), actorId: z.string().uuid(), scope: z.object(reportScope).strict(), request: z.discriminatedUnion("mode", [z.object({ mode: z.literal("create"), payload: z.object(createShape).strict() }).strict(), z.object({ mode: z.literal("update"), id: z.string().uuid(), payload: z.object(updateShape).strict() }).strict()]) }).strict().superRefine((value, context) => {
  checkReportDate(value.request.payload, context); checkReportKind(value.request.payload, value.scope.kind, context);
  if (value.scope.tenantId !== value.request.payload.tenantId || (value.request.mode === "create" && (value.scope.companyId !== value.request.payload.companyId || value.scope.branchId !== value.request.payload.branchId || value.scope.kind !== value.request.payload.kind))) context.addIssue({ code: "custom", message: "Retry scope mismatch" });

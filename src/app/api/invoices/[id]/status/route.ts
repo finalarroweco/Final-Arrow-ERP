@@ -1,3 +1,4 @@
+import {invoiceDocumentSourceAllowed,invoiceSourceSelect} from "@/lib/invoice-source";
 import { documentJournal, lockDocument } from "@/lib/document-journal";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -20,13 +21,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Invalid invoice action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const invoice = await db.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },
-    select: { companyId: true, branchId: true } });
+    select: { tenantId:true,companyId: true, branchId: true,...invoiceSourceSelect } });
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-  if (!(await canAccess({ userId: actor.id, tenantId, companyId: invoice.companyId,
+  if (!(await invoiceDocumentSourceAllowed(actor.id,invoice)) || !(await canAccess({ userId: actor.id, tenantId, companyId: invoice.companyId,
     branchId: invoice.branchId ?? undefined, permission: action === "issue" ? "invoice:issue" : "invoice:void" })))
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
     await lockDocument(tx, "invoice", tenantId, id);
+    const current=await tx.invoice.findUnique({where:{id},select:{tenantId:true,companyId:true,branchId:true,...invoiceSourceSelect}});
+    if(!current||!(await invoiceDocumentSourceAllowed(actor.id,current,tx))||!(await canAccess({userId:actor.id,tenantId,companyId:current.companyId,branchId:current.branchId??undefined,permission:action==="issue"?"invoice:issue":"invoice:void"},tx)))return {forbidden:true as const};
     if (action === "void") {
       const journal = await documentJournal(tx, "invoice", tenantId, invoice.companyId, id);
       if (journal && !journal.reversal) return { ledgerBlocked: true as const };
@@ -43,6 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.invoice.findUnique({ where: { id }, select: { id: true, status: true,
       issuedAt: true, voidedAt: true, voidReason: true } });
   });
+  if(result && "forbidden" in result)return NextResponse.json({error:"Forbidden"},{status:403});
   if (result && "ledgerBlocked" in result) return NextResponse.json({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
   if (!result) return NextResponse.json({ error: "Invoice status has changed or transition is invalid" }, { status: 409 });
   return NextResponse.json({ invoice: result });

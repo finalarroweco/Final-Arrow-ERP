@@ -11,7 +11,7 @@ type Option = { tenantId: string; companyId: string; label: string; vatActive: b
   branches: ({ id: string; name: string } & Rights)[] };
 type Order = { id: string; number: string; customerName: string; branchId: string | null;
   status: string; currency: string; subtotal: string; lines: {position:number;description:string;amount:string}[]; invoice: { id: string } | null };
-type Invoice = { id: string; number: string; orderId: string; customerName: string;
+type Invoice = { id: string; number: string; orderId: string|null; serviceSourceId: string|null; customerName: string;
   branchId: string | null; status: "DRAFT" | "ISSUED" | "VOID"; currency: string;
   paymentTerms:string|null;paymentDueDate:string|null;subtotal: string; gross: string; vat: {taxAmount:string}|null; voidReason: string | null;
   lines: { description: string; quantity: number; unitPrice: string; amount: string }[] };

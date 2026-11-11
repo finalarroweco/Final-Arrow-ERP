@@ -21,8 +21,11 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
  if(input.action==="LINK")invoiceId=input.invoiceId;else{const link=await db.projectInvoiceLink.findFirst({where:{id:input.linkId,tenantId,projectId:id},select:{invoiceId:true}});if(!link)throw new OperationalError("Invoice link not found",404);invoiceId=link.invoiceId;}
  const invoice=await settlementInvoice(db,tenantId,invoiceId);if(!invoice)throw new OperationalError("Invoice not found",404);if(invoice.companyId!==project.companyId||(project.branchId&&invoice.branchId!==project.branchId))throw new OperationalError("Invoice is outside the project company or branch");if(!(await customerSettlementAllowed(actor.id,invoice)))throw new OperationalError("Forbidden invoice source",403);
  const link=await db.$transaction(async tx=>{
+ await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
  const [parent]=await tx.$queryRaw<{status:string}[]>`SELECT status FROM "Project" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
  await tx.$queryRaw`SELECT id FROM "Invoice" WHERE id=${invoiceId}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+ const currentSource=await settlementInvoice(tx,tenantId,invoiceId);
+ if(!currentSource||!(await customerSettlementAllowed(actor.id,currentSource,false,tx)))throw new OperationalError("Current invoice source permissions required",403);
  if(input.action==="LINK"){
   const saved=await tx.projectInvoiceLink.findUnique({where:{id:input.requestId}});if(saved){if(saved.tenantId!==tenantId||saved.projectId!==project.id||saved.invoiceId!==invoiceId||saved.createdBy!==actor.id||saved.note!==input.note)throw new OperationalError("Request ID already used for different invoice link");return saved;}
   if(!parent||!["PLANNED","ACTIVE","ON_HOLD"].includes(parent.status))throw new OperationalError("Project is closed");

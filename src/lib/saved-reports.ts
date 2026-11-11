@@ -2,24 +2,27 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { readableCompanyPermissions } from "./access";
-import { reportKind, reportPermissions, validReportKindFilters, type ReportKind, type CreateReportInput, type UpdateReportInput } from "./report-presets";
+import { reportKind, reportPermissions, reportSourcePermissions, validReportKindFilters, type ReportKind, type CreateReportInput, type UpdateReportInput } from "./report-presets";
 import { OperationalError } from "./operational-records";
 export type ReportScope = { tenantId: string; companyId: string; branchId: string | null; kind: ReportKind };
 type Visibility = string[] | null | false;
 function visibilityFromRights(kind: ReportKind, rights: Record<string, Visibility>): Visibility {
  const permissions = reportPermissions(kind);
+ const alternatives=reportSourcePermissions(kind);
+ if(alternatives.length&&alternatives.every(permission=>rights[permission]===false))return false;
  if (permissions.some(permission => rights[permission] === false)) return false;
+ if(kind==="INVOICE_REGISTER")return rights["invoice:read"];
  if (permissions.length === 1) return rights[permissions[0]];
- const a = rights[permissions[2]], b = rights["ledger:read"];
+ const a = rights[kind.startsWith("CUSTOMER")?"invoice:read":"inventory-stock:read"], b = rights["ledger:read"];
  return a === null ? b : b === null ? a : (a as string[]).filter(id => (b as string[]).includes(id));
 }
 export async function reportVisibility(actorId: string, tenantId: string, companyId: string, kind: ReportKind) {
- const rights = await readableCompanyPermissions({ userId: actorId, tenantId, companyId, permissions: reportPermissions(kind) });
+ const rights = await readableCompanyPermissions({ userId: actorId, tenantId, companyId, permissions: [...reportPermissions(kind),...reportSourcePermissions(kind)] });
  return visibilityFromRights(kind, rights);
 }
 // One current-request permissions snapshot per company, never a cross-request cache.
 export async function reportVisibilities(actorId: string, tenantId: string, companyId: string) {
- const permissions = [...new Set(reportKind.options.flatMap(reportPermissions))];
+ const permissions = [...new Set(reportKind.options.flatMap(kind=>[...reportPermissions(kind),...reportSourcePermissions(kind)]))];
  const rights = await readableCompanyPermissions({ userId: actorId, tenantId, companyId, permissions });
  return Object.fromEntries(reportKind.options.map(kind => [kind, visibilityFromRights(kind, rights)])) as Record<ReportKind, Visibility>;
 }

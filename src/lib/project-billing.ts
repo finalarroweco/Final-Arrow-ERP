@@ -1,3 +1,4 @@
+import {invoiceSourceWhere} from "./invoice-source";
 import {Prisma} from "@prisma/client";
 import {db} from "./db";
 import {canAccess,readableCompanyPermissions} from "./access";
@@ -6,10 +7,10 @@ import {documentJournalNumber} from "./document-journal";
 import {invoiceGross} from "./invoice-vat";
 import {billingSummary,type BillingRow} from "./project-billing-input";
 export async function billingProject(userId:string,tenantId:string,id:string,write=false){const project=await db.project.findUnique({where:{tenantId_id:{tenantId,id}},select:{id:true,tenantId:true,companyId:true,branchId:true,name:true,code:true,status:true}});if(!project)throw new OperationalError("Project not found",404);for(const permission of ["project:read","project-billing:read",...(write?["project-billing:manage"]:[])])if(!(await canAccess({userId,tenantId,companyId:project.companyId,branchId:project.branchId??undefined,permission})))throw new OperationalError("Forbidden",403);return project;}
-export async function billingInvoiceWhere(userId:string,project:Awaited<ReturnType<typeof billingProject>>):Promise<Prisma.InvoiceWhereInput>{const rights=await readableCompanyPermissions({userId,tenantId:project.tenantId,companyId:project.companyId,permissions:["invoice:read","order:read","customer:read","ledger:read"]});if(Object.values(rights).some(r=>r===false))throw new OperationalError("Invoice, order, customer and ledger read permissions are required",403);
+export async function billingInvoiceWhere(userId:string,project:Awaited<ReturnType<typeof billingProject>>):Promise<Prisma.InvoiceWhereInput>{const rights=await readableCompanyPermissions({userId,tenantId:project.tenantId,companyId:project.companyId,permissions:["invoice:read","order:read","billing-subscription:read","customer:read","ledger:read"]});if([rights["invoice:read"],rights["ledger:read"],rights["customer:read"]].some(r=>r===false)||(rights["order:read"]===false&&rights["billing-subscription:read"]===false))throw new OperationalError("Invoice, order, customer and ledger read permissions are required",403);
  const invoice=rights["invoice:read"],ledger=rights["ledger:read"],order=rights["order:read"],customer=rights["customer:read"];
  const branches=invoice===null?ledger:ledger===null?invoice:(invoice as string[]).filter(id=>(ledger as string[]).includes(id));
- return {tenantId:project.tenantId,companyId:project.companyId,AND:[...(project.branchId?[{branchId:project.branchId}]:[]),...(branches===null?[]:[{branchId:{in:branches as string[]}}])],order:order===null?{}:{branchId:{in:order as string[]}},customer:customer===null?{}:{branchId:{in:customer as string[]}}};
+ return {tenantId:project.tenantId,companyId:project.companyId,AND:[...(project.branchId?[{branchId:project.branchId}]:[]),...(branches===null?[]:[{branchId:{in:branches as string[]}}])],...invoiceSourceWhere(order,rights["billing-subscription:read"]),customer:customer===null?{}:{branchId:{in:customer as string[]}}};
 }
 export async function projectBillingReport(userId:string,tenantId:string,id:string,page=0,state="LINKED",q=""){
  const project=await billingProject(userId,tenantId,id),invoiceWhere=await billingInvoiceWhere(userId,project);

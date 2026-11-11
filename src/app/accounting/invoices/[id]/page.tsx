@@ -1,3 +1,4 @@
+import {invoiceDocumentSourceAllowed,invoiceSourceInclude} from "@/lib/invoice-source";
 import {invoiceGross} from "@/lib/invoice-vat";
 import {settlementInvoice,customerSettlementAllowed,invoiceSettlementState} from "@/lib/customer-settlement";
 import {notFound,redirect} from "next/navigation";
@@ -11,8 +12,8 @@ import {PrintReceipt} from "../../../pos/[id]/print";
 import {LanguageSwitcher} from "../../../language-switcher";
 export default async function InvoiceDocument({params}:{params:Promise<{id:string}>}){
  const actor=await currentUser();if(!actor)redirect("/login");const {id}=await params;if(!z.string().uuid().safeParse(id).success)notFound();
- const invoice=await db.invoice.findUnique({where:{id},include:{vat:true,company:{select:{name:true}},branch:{select:{name:true}},lines:{orderBy:{position:"asc"}}}});
- if(!invoice||!(await canAccess({userId:actor.id,tenantId:invoice.tenantId,companyId:invoice.companyId,branchId:invoice.branchId??undefined,permission:"invoice:read"})))notFound();
+ const invoice=await db.invoice.findUnique({where:{id},include:{...invoiceSourceInclude,vat:true,company:{select:{name:true}},branch:{select:{name:true}},lines:{orderBy:{position:"asc"}}}});
+ if(!invoice||!(await invoiceDocumentSourceAllowed(actor.id,invoice))||!(await canAccess({userId:actor.id,tenantId:invoice.tenantId,companyId:invoice.companyId,branchId:invoice.branchId??undefined,permission:"invoice:read"})))notFound();
  const locale=await getLocale();const t=(en:string,ar:string)=>translate(locale,en,ar);
  const source=await settlementInvoice(db,invoice.tenantId,id);
  const settlement=source&&await customerSettlementAllowed(actor.id,source)?await db.$transaction(tx=>invoiceSettlementState(tx,source),{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000}):null;

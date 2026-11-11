@@ -18,6 +18,7 @@ const groups = [
   { en: "Finance and registers", ar: "المالية وسجلات المستندات", reports: [
     ["/accounting/ledger", "Ledger and financial reports", "دفتر الأستاذ والتقارير المالية", "Trial balance, account statements and financial views", "ميزان المراجعة وكشوف الحسابات والعروض المالية"],
     ["/accounting/bank", "Bank reconciliation", "التسوية البنكية", "Imported lines, matching and live reconciliation", "الحركات المستوردة والمطابقة والتسوية الحالية"],
+    ["/accounting/recurring-billing", "Recurring billing calendar and history", "تقويم الفوترة الدورية وسجلها", "Finite periods, exact plan revisions, explicit draft invoices and linked corrections", "فترات محدودة ومراجعات أسعار دقيقة ومسودات صريحة وتصحيحات مرتبطة"],
     ["/accounting/invoices", "Invoice register", "سجل الفواتير", "Creation-date filters; invoice value is not cash collected", "فلاتر تاريخ الإنشاء؛ قيمة الفاتورة ليست التحصيل النقدي"],
     ["/accounting/expenses", "Expense register", "سجل المصاريف", "Expense-date totals, categories and saved VAT", "إجماليات تاريخ المصروف والتصنيفات والضريبة المحفوظة"],
     ["/sales/quotes", "Quote register", "سجل عروض الأسعار", "Creation-date, status and customer filters", "فلاتر تاريخ الإنشاء والحالة والعميل"],

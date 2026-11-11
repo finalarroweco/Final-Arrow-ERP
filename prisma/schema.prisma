@@ -766,7 +766,8 @@ model Invoice {
   companyId    String        @db.Uuid
   branchId     String?       @db.Uuid
   customerId   String        @db.Uuid
-  orderId      String        @unique @db.Uuid
+  orderId      String?       @unique @db.Uuid
+  serviceSourceId String? @unique @db.Uuid
   number       String
   customerName String
   currency     String        @db.VarChar(3)
@@ -781,7 +782,8 @@ model Invoice {
   company      Company       @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   branch       Branch?       @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   customer     Customer      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
-  order        SalesOrder    @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  order        SalesOrder?   @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  serviceSource ServiceInvoiceSource? @relation(fields: [tenantId, companyId, serviceSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        InvoiceLine[]
   vat InvoiceVat?
   creationTransaction String @default(dbgenerated("(txid_current())::text"))
@@ -789,6 +791,7 @@ model Invoice {
 
   @@unique([companyId, number])
   @@unique([tenantId, companyId, orderId])
+  @@unique([tenantId, companyId, serviceSourceId])
   @@unique([tenantId, companyId, id])
   @@unique([tenantId, id])
   @@index([tenantId, companyId, branchId, createdAt])
@@ -2137,6 +2140,136 @@ model InventoryReorderRequest {
  @@unique([tenantId,companyId,id])
  @@index([tenantId,companyId,policyId,createdAt])
  @@index([itemId])
+}
+
+// Recurring billing is separate from ManualSubscription metadata. All history is
+// append-only; SQL guards validate scope, requests, snapshots and source parity.
+model BillingPlan {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ version Int
+ label String
+ currency String @db.VarChar(3)
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ updatedAt DateTime @default(now())
+ revisions BillingPlanRevision[]
+ @@unique([tenantId, companyId, id])
+ @@index([tenantId, companyId, branchId])
+}
+model BillingPlanRevision {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ planId String @db.Uuid
+ version Int
+ label String
+ currency String @db.VarChar(3)
+ lines Json
+ archived Boolean
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ plan BillingPlan @relation(fields: [tenantId,companyId,planId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([planId,version])
+ @@unique([tenantId,companyId,id])
+}
+model BillingSubscription {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ manualSubscriptionId String? @db.Uuid
+ anchor DateTime @db.Date
+ cadence Json
+ currency String @db.VarChar(3)
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ updatedAt DateTime @default(now())
+ revisions BillingSubscriptionRevision[]
+ sources ServiceInvoiceSource[]
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId])
+}
+model BillingSubscriptionRevision {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ subscriptionId String @db.Uuid
+ version Int
+ effectivePeriod Int
+ planRevisionId String @db.Uuid
+ horizon DateTime @db.Date
+ status String
+ terms Json
+ archived Boolean
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ subscription BillingSubscription @relation(fields:[tenantId,companyId,subscriptionId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([subscriptionId,version])
+ @@unique([tenantId,companyId,id])
+ @@index([subscriptionId,effectivePeriod,version])
+}
+model BillingRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ action String
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId])
+}
+model ServiceInvoiceSource {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ customerName String
+ subscriptionId String @db.Uuid
+ subscriptionRevisionId String @db.Uuid
+ planRevisionId String @db.Uuid
+ periodIndex Int
+ periodStart DateTime @db.Date
+ periodEnd DateTime @db.Date
+ correctionIndex Int @default(0)
+ replacesSourceId String? @unique @db.Uuid
+ currency String @db.VarChar(3)
+ lines Json
+ subtotal Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ vatProfileRevision Int?
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ subscription BillingSubscription @relation(fields:[tenantId,companyId,subscriptionId],references:[tenantId,companyId,id],onDelete:Restrict)
+ invoice Invoice?
+ @@unique([tenantId,companyId,id])
+ @@unique([subscriptionId,periodIndex,correctionIndex])
+ @@index([tenantId,companyId,branchId])
 }
 
 model SupplierRfq {

@@ -37,7 +37,10 @@ export async function POST(request:Request,context:Context){
  const invoice=await settlementInvoice(db,tenantId,id);if(!invoice)return NextResponse.json({error:"Invoice not found"},{status:404});
  if(!(await customerSettlementAllowed(actor.id,invoice,true)))return NextResponse.json({error:"Forbidden"},{status:403});
  try{const result=await db.$transaction(async tx=>{
+  await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
   await lockDocument(tx,"invoice",tenantId,id);
+  const invoice=await settlementInvoice(tx,tenantId,id);
+  if(!invoice||!(await customerSettlementAllowed(actor.id,invoice,true,tx)))throw new CustomerSettlementConflict("Current invoice source and ledger permissions are required");
   const saved=await tx.customerSettlement.findUnique({where:{id:requestId},include:{entry:{select:{id:true,number:true,entryDate:true,lines:{where:kind==="COLLECTION"?{position:0}:{position:1},select:{accountId:true}}}}}});
   if(saved){if(saved.tenantId!==tenantId||saved.invoiceId!==id||saved.kind!==kind||!saved.amount.eq(amount)||saved.reference!==reference||saved.entry.entryDate.toISOString().slice(0,10)!==entryDate||!saved.entry.lines.some(l=>l.accountId===assetAccountId))throw new CustomerSettlementConflict("Retry ID belongs to a different settlement");return {settlement:saved,replayed:true};}
   const state=await invoiceSettlementState(tx,invoice);

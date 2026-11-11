@@ -1,10 +1,11 @@
+import {invoiceDocumentWhere} from "./invoice-source";
 import {moneyMillis,moneyText} from "./exact-money";
 import {invoiceGross} from "./invoice-vat";
 import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {currentUser} from "./auth";
-import {readableCompanyBranches} from "./access";
+import {readableCompanyBranches,readableCompanyPermissions} from "./access";
 import {db} from "./db";
 import {dueDate} from "./date";
 import {queryInput} from "./ledger";
@@ -18,10 +19,16 @@ export async function financialReport(request:Request,kind:"expenses"|"invoices"
  const branches=await readableCompanyBranches({userId:actor.id,tenantId,companyId,permission:kind==="expenses"?"expense:read":kind==="purchase-orders"?"purchase-order:read":"invoice:read"});
  if(branches===false||(branchId&&branches!==null&&!branches.includes(branchId)))return NextResponse.json({error:"Forbidden"},{status:403});
  const scope={tenantId,companyId,...(branchId?{branchId}:branches===null?{}:{branchId:{in:branches}})};
+ const invoiceSource:Prisma.InvoiceWhereInput={};
+ if(kind==="invoices"){
+  const rights=await readableCompanyPermissions({userId:actor.id,tenantId,companyId,permissions:["customer:read","billing-subscription:read"]});
+  const customers=rights["customer:read"];
+  Object.assign(invoiceSource,{AND:[invoiceDocumentWhere(rights["billing-subscription:read"],customers)]});
+ }
  const start=new Date(`${from}T00:00:00Z`);const end=new Date(`${to}T00:00:00Z`);const nextDay=new Date(end.getTime()+86400000);
  const purchaseRows=kind==="purchase-orders"?await db.purchaseOrder.findMany({where:{...scope,createdAt:{gte:start,lt:nextDay},...(status?{status:status as "DRAFT"|"ISSUED"|"RECEIVED"|"CANCELLED"}:{}),...(q?{OR:[{number:{contains:q,mode:"insensitive"}},{supplierName:{contains:q,mode:"insensitive"}}]}:{})},select:{number:true,createdAt:true,supplierId:true,supplierName:true,subtotal:true,currency:true,status:true,branchId:true},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001}):[];
  const rows=kind==="purchase-orders"?purchaseRows.map(row=>({number:row.number,date:row.createdAt.toISOString().slice(0,10),description:row.supplierName,category:"",amount:row.subtotal,currency:row.currency,status:row.status,branchId:row.branchId})):kind==="expenses"?(await db.expense.findMany({where:{...scope,expenseDate:{gte:start,lte:end},...(status?{status:status as "DRAFT"|"POSTED"|"VOID"}:{}),...(q?{OR:[{number:{contains:q,mode:"insensitive"}},{description:{contains:q,mode:"insensitive"}},{category:{contains:q,mode:"insensitive"}}]}:{})},select:{number:true,expenseDate:true,description:true,category:true,amount:true,vat:{select:{taxAmount:true,recoverableTax:true}},currency:true,status:true,branchId:true},orderBy:[{expenseDate:"asc"},{id:"asc"}],take:5001})).map(({vat,...row})=>({...row,netAmount:row.amount,taxAmount:vat?.taxAmount??new Prisma.Decimal(0),recoverableTax:vat?.recoverableTax??new Prisma.Decimal(0),grossAmount:row.amount.plus(vat?.taxAmount??0),amount:row.amount.plus(vat?.taxAmount??0).minus(vat?.recoverableTax??0),date:row.expenseDate.toISOString().slice(0,10)})):
- (await db.invoice.findMany({where:{...scope,createdAt:{gte:start,lt:nextDay},...(status?{status:status as "DRAFT"|"ISSUED"|"VOID"}:{}),...(q?{OR:[{number:{contains:q,mode:"insensitive"}},{customerName:{contains:q,mode:"insensitive"}}]}:{})},select:{number:true,createdAt:true,customerName:true,subtotal:true,vat:{select:{taxAmount:true}},currency:true,status:true,branchId:true},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001})).map(row=>({number:row.number,date:row.createdAt.toISOString().slice(0,10),description:row.customerName,category:"",amount:invoiceGross(row),currency:row.currency,status:row.status,branchId:row.branchId}));
+ (await db.invoice.findMany({where:{...scope,...invoiceSource,createdAt:{gte:start,lt:nextDay},...(status?{status:status as "DRAFT"|"ISSUED"|"VOID"}:{}),...(q?{OR:[{number:{contains:q,mode:"insensitive"}},{customerName:{contains:q,mode:"insensitive"}}]}:{})},select:{number:true,createdAt:true,customerName:true,subtotal:true,vat:{select:{taxAmount:true}},currency:true,status:true,branchId:true},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001})).map(row=>({number:row.number,date:row.createdAt.toISOString().slice(0,10),description:row.customerName,category:"",amount:invoiceGross(row),currency:row.currency,status:row.status,branchId:row.branchId}));
  if(rows.length>5000)return NextResponse.json({error:"Report exceeds 5000 records. Narrow the filters."},{status:413});
  const names=new Map((await db.branch.findMany({where:{tenantId,companyId,id:{in:[...new Set(rows.flatMap(row=>row.branchId?[row.branchId]:[]))]}},select:{id:true,name:true}})).map(branch=>[branch.id,branch.name]));
  type Group={status:string;currency:string;category:string;count:number;amount:bigint};

@@ -14,7 +14,7 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Management | Scoped dashboard, report directory, private saved filters for customer/supplier balances and posting-date/due-date aging, invoice/expense/quote/sales-order/purchase-order register presets, company payment-term templates and action inbox for leave, expense and purchase drafts | Configurable approval policies, presets for other report types |
 | POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV, saved Oman VAT, full/partial refund accounting, branch cash shifts/closure and a kitchen queue | inclusive tax pricing, kitchen printers, device payment, stock recipes |
 | Internal documents | Scoped plain-text operating notes/reference documents, immutable revisions, explicit archive/restore, metadata export and selected-version download/print | Attachments, approval chains, signatures, external sharing and retention policies |
-| Subscriptions | Manual customer agreement register, operator-reported status and review dates, immutable revisions, explicit archive/restore and scoped history/export | Billing plans, recurrence, invoicing/payment, renewals, service entitlement changes and alerts |
+| Subscriptions | Manual customer agreement register with immutable revisions and scoped history/export; separate configured recurring price plans, finite UTC billing calendars, explicit exact-price/VAT DRAFT-invoice generation/backfill, original-source-linked void replacements, durable recovery and source-authorized invoice/ledger/settlement/report integration | Background billing scheduling, automatic issue/collection, renewals, proration, service entitlement changes and alerts |
 | Other planned modules | Preview cards only | AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
 
@@ -31,6 +31,24 @@ The existing hosted review environment is not evidence of business or regulatory
 The configured Core checks workflow audits dependencies, runs ESLint and TypeScript checks, applies migrations, runs unit and database tests, builds the app and exercises API flows against disposable PostgreSQL. It does not run a browser acceptance suite. Passing CI verifies the tested code slice, not the entire ERP, current live service health or production readiness. Dated CI results below are historical evidence; verify the exact candidate commit separately.
 
 ## Implementation history
+
+### Final integrated recurring billing verification — 11 November 2026
+
+The clean integrated candidate passed 82 fresh migrations, 530 unit/component tests, 74 database tests and 42 API checks, plus both recurring-billing and RFQ API suites with eight- and one-connection pools. TypeScript, production build, warning-rejecting lint and dependency audit all passed with zero warnings or vulnerabilities. Initial and final tracked-file manifests and the complete source archive digest matched.
+
+The final populated 81-to-82 migration passed vanilla and broad-provider-default profiles, original business-row/snapshot preservation, atomic catalog visibility and injected late-failure rollback. Direct database checks include service-source exclusivity, same-transaction invoice/line/VAT/audit creation, immutable history, duplicate-period prevention, actor-bound request fencing and replacement rejection while financial dependencies remain unreversed. Explicitly backfilled paused/ended periods can be corrected without changing service state.
+
+Regression coverage includes original-anchor calendars, bounded/partial periods, exact large amounts through invoice print/register/CSV, posting, trial balance and customer balances, per-consumer legacy permission compatibility, new service-source privacy, actual Owner-only default-role grants and exact three-decimal source DTOs. Oversized canonical requests never enter browser recovery storage or reach the network; an exact 1,200,000-byte request can be captured and terminally abandoned. The large-value fixture uses an explicitly matching company currency rather than weakening the existing posting restriction.
+
+A prior integrated diagnostic caught a merged test-command syntax error; it was corrected and the complete final aggregate rerun. No failed diagnostic is counted as passing evidence. These are isolated technical checks, not browser/business acceptance, live recurring billing, a scheduler or production readiness. Exact-head clean-install CI remains required after publication; no merge, manual deployment or live migration was performed.
+
+### Configured recurring draft billing — review candidate
+
+Adds independently authorized billing plans and subscriptions, original-anchor UTC calendars with explicit month-end/leap-day behavior, finite horizons, exact three-decimal prices and explicit tax/payment-term choices. Generation, past-period backfill and linked replacement are deliberate operator actions. Each period creates a real immutable service-source DRAFT invoice with no fabricated sales order; issue, posting, collection, reversal and void remain separate existing actions. Manual subscription metadata never authorizes billing or changes service entitlement.
+
+The source-aware integration preserves prior order-invoice authorization contracts while requiring independent billing/customer access for service invoices. Journal aggregates remain complete under ledger authorization. Migration82 is additive and keeps old invoice rows and snapshots; new service histories and audit/request guards prevent duplicate periods and replacements with unreversed financial dependencies. Database test files run serially to isolate shared negative DDL fixtures, while their internal multi-connection concurrency tests remain active.
+
+See [operator workflow and limits](recurring-billing-operator-workspace.md). No scheduler, external provider, automatic issue/payment, renewal, proration, live migration or deployment is included. Final integrated technical verification is recorded above; exact-head remote checks must also pass after publication.
 
 ### Integrated supplier RFQ verification — 11 November 2026
 
