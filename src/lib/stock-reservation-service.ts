@@ -76,7 +76,7 @@ export async function changeReservation(actorId:string,input:ReservationRequest|
   }
   if(!saved||saved.tenantId!==tenantId||saved.balanceId!==source.id)throw new ReservationError("Reservation not found");
   if(orderId&&saved.orderLink?.orderId!==orderId)throw new ReservationError("Reservation does not belong to this order");
-  if(saved.releasedAt){if(saved.releaseRequestId!==input.requestId||saved.releasedBy!==actorId||saved.releaseReason!==input.reason)throw new ReservationError("Reservation already released by another request");return saved;}
+  if(saved.releasedAt){if(saved.salesDeliveryId)throw new ReservationError("This hold was released by a physical delivery; verify its delivery document instead");if(saved.releaseRequestId!==input.requestId||saved.releasedBy!==actorId||saved.releaseReason!==input.reason)throw new ReservationError("Reservation already released by another request");return saved;}
   if(await tx.stockReservation.findUnique({where:{id:input.requestId},select:{id:true}}))throw new ReservationError("Request ID was already used to create a reservation");
   const released=await tx.stockReservation.update({where:{id:saved.id},data:{releaseRequestId:input.requestId,releasedBy:actorId,releaseReason:input.reason},include:reservationDetails});
   await tx.auditLog.create({data:{tenantId,actorId,action:"inventory-stock.reservation-released",entity:"StockReservation",entityId:saved.id,metadata:{balanceId:source.id,transactionId:released.releaseTransaction,requestId:input.requestId,reason:linkedId?"Order-linked manual hold release":input.reason}}});

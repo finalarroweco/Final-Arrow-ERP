@@ -17,7 +17,7 @@ export default async function ReleaseStatusPage(){
  ["/accounting/ledger",t("Source journals, corrections, period locks and financial reports","قيود المستندات والعكس وإقفال الفترات والتقارير المالية")],
  ["/inventory/stock",t("Manual stock reservations, available quantities and permanent release history","حجز المخزون اليدوي والكميات المتاحة وسجل فك الحجز الدائم")],
  ["/inventory/transfers",t("Completed same-company branch stock transfers with paired corrections, two-branch authorization and safe pending-request cancellation","تسجيل تحويلات مخزون مكتملة بين فروع الشركة مع تصحيح مزدوج وصلاحيات للفرعين وإلغاء آمن للطلبات المعلّقة")],
- ["/sales/orders",t("Explicit order-linked manual stock holds with separate source/stock permissions and permanent release history","حجوزات مخزون يدوية مرتبطة صراحة بطلبات البيع بصلاحيات مستقلة للطلب والمخزون وسجل فك حجز دائم")],
+ ["/sales/orders",t("Order-linked stock holds, manual physical deliveries, usable-stock returns and atomic delivery of one explicitly selected full hold","حجوزات مخزون مرتبطة بطلبات البيع وتسليم فعلي يدوي ومرتجعات صالحة وتسليم كامل حجز مختار صراحةً في عملية واحدة")],
  ["/accounting/customer-overdue",t("Audited invoice/receipt payment-term amendments, immutable originals and historical customer/supplier due-date aging","تعديلات مدققة لشروط دفع الفواتير والاستلام مع حفظ الأصل وتقارير استحقاقات تاريخية للعملاء والموردين")],
  ["/accounting/customer-aging",t("Customer and supplier balances, statements and posting-date aging","أرصدة وكشوف العملاء والموردين وأعمار الأرصدة من تاريخ القيد")],
  ["/pos",t("POS, saved VAT, full/partial refunds, drawer shifts and cash counting","نقاط البيع والضريبة المحفوظة والاسترداد الكامل والجزئي وورديات الصندوق والعدّ")],
@@ -28,7 +28,7 @@ export default async function ReleaseStatusPage(){
  ["/helpdesk",t("Ticket workflow and permanent internal follow-up","مسار التذاكر وسجل المتابعة الداخلية الدائم")]]},
  {title:t("Remaining product development","تطوير منتج متبقٍ"),description:t("These items require additional implementation and verification; existing module screens do not mean these capabilities are complete.","تحتاج هذه البنود إلى تنفيذ وفحص إضافيين؛ وجود شاشة القسم لا يعني اكتمال هذه الإمكانات."),items:[
  ["",t("Sales: unallocated advances and statutory documents","المبيعات: الدفعات غير المخصصة والمستندات النظامية")],
- ["",t("Inventory: physical sales fulfilment, automatic allocation/unit conversion, valuation and supplier advances","المخزون: تسليم المبيعات الفعلي والتخصيص وتحويل الوحدات تلقائيًا والتقييم ودفعات الموردين المقدمة")],
+ ["",t("Inventory: automatic commercial fulfilment/allocation, unit conversion, valuation and supplier advances","المخزون: تنفيذ الكميات التجارية والتخصيص تلقائيًا وتحويل الوحدات والتقييم ودفعات الموردين المقدمة")],
  ["",t("Projects: invoice generation from time/milestones, capacity calendars/estimates and automatic cost allocations","المشاريع: توليد الفواتير من الساعات والمراحل وتقاويم الطاقة وتقديرات العمل وتوزيع التكاليف تلقائيًا")],
  ["",t("Helpdesk: attachments, notifications, customer portal and SLA rules","الدعم: المرفقات والإشعارات وبوابة العميل وقواعد مستوى الخدمة")],
  ["",t("Management: configurable approval policies and broader report preset coverage","الإدارة: سياسات اعتماد قابلة للتهيئة وتوسيع أنواع التقارير المحفوظة")],

@@ -117,6 +117,10 @@ enum PurchaseOrderStatus {
 }
 
 enum StockMovementType {
+  SALES_DELIVERY
+  SALES_RETURN
+  SALES_CORRECTION_IN
+  SALES_CORRECTION_OUT
   TRANSFER_IN
   TRANSFER_OUT
   ADJUSTMENT_IN
@@ -507,6 +511,8 @@ model StockBalance {
 }
 
 model StockMovement {
+  salesDocumentId String? @unique @db.Uuid
+  salesDocument SalesStockDocument? @relation(fields:[salesDocumentId],references:[id],onDelete:Restrict)
   transferId String? @db.Uuid
   transfer StockTransfer? @relation(fields:[transferId],references:[id],onDelete:Restrict)
   @@unique([transferId,type])
@@ -1649,6 +1655,7 @@ model TicketDeadlineChange {
 }
 
 model StockReservation {
+  salesDeliveryId String? @unique @db.Uuid
  sourceKind String @default("MANUAL") @db.VarChar(20)
  orderLink OrderStockReservation?
  id String @id @db.Uuid
@@ -1858,4 +1865,52 @@ model BankRequestResolution {
  statement BankStatement @relation(fields:[tenantId,companyId,accountId,statementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
  actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
  @@index([tenantId,statementId,createdAt])
+}
+
+model SalesStockDocument {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ orderId String @db.Uuid
+ lineId String? @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ balanceId String @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ kind String @db.VarChar(16)
+ deliveryId String? @db.Uuid
+ correctsId String? @unique @db.Uuid
+ holdId String? @unique @db.Uuid
+ releaseRequestId String? @unique @db.Uuid
+ quantity Decimal @db.Decimal(18,3)
+ delta Decimal @default(0) @db.Decimal(18,3)
+ unit String @db.VarChar(16)
+ reference String @db.VarChar(120)
+ reason String @db.VarChar(300)
+ physicalConfirmed Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ orderNumber String @default("")
+ customerName String @default("")
+ linePosition Int?
+ lineDescription String?
+ itemName String @default("")
+ itemSku String @default("")
+ branchName String @default("")
+ companyName String @default("")
+ actorName String @default("")
+ movement StockMovement?
+ @@unique([tenantId,companyId,orderId,branchId,itemId,id])
+ @@index([tenantId,companyId,orderId,createdAt,id])
+ @@index([deliveryId])
+ @@index([itemId])
+}
+model SalesStockCancellation {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ request Json
+ @@index([tenantId,companyId,createdAt])
 }

@@ -88,7 +88,7 @@ export function ItemsWorkspace({ options, locale }: { options: Option[]; locale:
       return <article key={item.id}>{editing === item.id ?
         <form className="crm-form" onSubmit={(event) => void update(event, item)}>
           <input name="name" defaultValue={item.name} required minLength={2} maxLength={160} />
-          <input name="unit" defaultValue={item.unit} required pattern="[A-Za-z0-9-]{1,16}" maxLength={16} />
+          <p>{t("Changing a stock unit does not convert stock. Historical delivery returns and corrections require their original unit.", "تغيير وحدة المخزون لا يحوّل الكميات. تتطلب مرتجعات التسليمات السابقة وتصحيحاتها الوحدة الأصلية.")}</p><input name="unit" defaultValue={item.unit} required pattern="[A-Za-z0-9-]{1,16}" maxLength={16} />
           <input name="description" defaultValue={item.description ?? ""} maxLength={1000} />
           <button>{t("Save", "حفظ")}</button><button type="button" onClick={() => setEditing(null)}>{t("Cancel", "إلغاء")}</button>
         </form> : <><div><h3>{item.name}</h3>

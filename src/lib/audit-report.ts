@@ -18,6 +18,8 @@ export function auditWhere({ tenantId, action, entity, entityId, actorId, from, 
   const offset = timeZone === "Asia/Muscat" ? 14400000 : 0;
   return {
     tenantId,
+    // Source-private physical-document identifiers stay in their reauthorized register.
+    AND: [{ entity: { notIn: ["SalesStockDocument", "SalesStockCancellation"] } }],
     ...(action ? { action: { contains: action, mode: "insensitive" } } : {}),
     ...(entity ? { entity: { contains: entity, mode: "insensitive" } } : {}),
     ...(entityId ? { entityId } : {}),

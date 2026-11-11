@@ -9,7 +9,7 @@ type Option = { tenantId: string; companyId: string; branchId: string; label: st
 type Item = { id: string; sku: string; name: string; unit: string };
 type Balance = { itemId: string; quantity: string; reservedQuantity:string;availableQuantity:string;
   item: { sku: string; name: string; unit: string; archivedAt: string | null } };
-type Movement = { transferId:string|null; returnId:string|null; hasReturns:boolean; receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT" | "PURCHASE_RETURN" | "TRANSFER_IN" | "TRANSFER_OUT"; delta: string;
+type Movement = { transferId:string|null; returnId:string|null; hasReturns:boolean; receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT" | "PURCHASE_RETURN" | "TRANSFER_IN" | "TRANSFER_OUT" | "SALES_DELIVERY" | "SALES_RETURN" | "SALES_CORRECTION_IN" | "SALES_CORRECTION_OUT"; delta: string;
   reason: string; createdAt: string; balance: { item: Item } };
 
 export function StockWorkspace({ options, locale,actorId }: { actorId:string;options: Option[]; locale: Locale }) {
@@ -96,7 +96,7 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
       {movement.hasReturns && <p>{t("Receipt has stock returns", "الاستلام مرتبط بمرتجعات مخزون")}</p>}
       {movement.reversed && <p>{t("Reversed", "تم عكسها")}</p>}
       {movement.isReversal && <p>{t("Correction movement", "حركة تصحيحية")}</p>}
-      {scope.canAdjust && !movement.reversed && !movement.isReversal && !movement.hasReturns && movement.type!=="PURCHASE_RETURN" && movement.type!=="TRANSFER_IN" && movement.type!=="TRANSFER_OUT" && <details><summary>{t("Reverse full movement", "عكس كامل الحركة")}</summary>
+      {scope.canAdjust && !movement.type.startsWith("SALES_") && !movement.reversed && !movement.isReversal && !movement.hasReturns && movement.type!=="PURCHASE_RETURN" && movement.type!=="TRANSFER_IN" && movement.type!=="TRANSFER_OUT" && <details><summary>{t("Reverse full movement", "عكس كامل الحركة")}</summary>
         <form className="formrow" onSubmit={event => void reverse(event, movement.id)}>
           <label>{t("Reason", "السبب")} <input name="reason" required minLength={3} maxLength={150}/></label>
           <button disabled={busy}>{t("Record opposite movement", "تسجيل الحركة المقابلة")}</button>
