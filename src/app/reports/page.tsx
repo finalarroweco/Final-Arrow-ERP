@@ -29,6 +29,7 @@ const groups = [
   { en: "People and operations", ar: "الموظفون والعمليات", reports: [
     ["/projects/workload", "Cross-project employee workload", "عبء عمل الموظفين عبر المشاريع", "Current open tasks and recorded time by review status", "المهام المفتوحة الحالية والساعات حسب حالة المراجعة"],
     ["/projects", "Project time, budgets and invoices", "ساعات المشاريع والميزانيات والفواتير", "Select a project for its separately authorized reports", "اختر مشروعًا لفتح تقاريره حسب صلاحيات كل تقرير"],
+    ["/inventory/reordering", "Configured low-stock report", "تقرير نقص المخزون المُعدّ", "Explicit item/branch thresholds against current available stock; no purchase orders", "حدود صريحة للصنف والفرع مقابل المخزون المتاح الحالي؛ دون إنشاء أوامر شراء"],
     ["/inventory/stock", "Stock movements and reservations", "حركات المخزون والحجوزات", "Select an item/branch for physical movements and available quantity", "اختر الصنف والفرع للحركات الفعلية والكمية المتاحة"],
     ["/hr/attendance", "Attendance report", "تقرير الحضور", "Work dates and recorded attendance status", "تواريخ العمل وحالات الحضور المسجلة"],
     ["/hr/payroll", "Payroll report", "تقرير الرواتب", "Monthly manual payroll, status and currency totals", "الرواتب اليدوية الشهرية وإجماليات الحالة والعملة"],

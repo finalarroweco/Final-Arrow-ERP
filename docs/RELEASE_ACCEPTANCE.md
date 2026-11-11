@@ -78,3 +78,12 @@ Use approved expected results and isolated fixtures, not demonstration records i
 - Verify the exact saved actor-bound request resolves to COMMITTED or ABANDONED before allowing replacement; UNKNOWN, malformed receipts and unavailable or changed storage retain the pending request. Confirm uppercase UUID inputs retain their original body/digest while matching the same database identity.
 - Check concurrent import-versus-abandonment outcomes and old account-lock-first import compatibility; no abandonment may void, alter or erase a committed statement, journal, allocation or certificate.
 - Apply migration79 only through controlled rollout after backup/restore and populated-upgrade acceptance. Retain all cancellation tombstones and insertion guards on application rollback. Legacy actorless storage still requires separately authorized manual recovery.
+
+## Manual reorder policy acceptance (not run)
+
+- [ ] In Arabic and English, choose an exact branch, search beyond the first 200 eligible items, and explicitly create a policy for a never-stocked company-wide item. Verify zero physical/reserved quantities and no new stock balance.
+- [ ] Correct thresholds, archive and restore, review paginated immutable history and confirm no stock, purchasing, supplier, order or financial changes.
+- [ ] Verify equality is not below minimum, reservation/release and physical movements change the current observation, and unavailable sources or unit generations never produce actionable quantities. Test a unit change away and back.
+- [ ] Verify current role/membership revocation, independent scope intersections, same-account refresh, browser profile/account switches, interrupted submissions, exact retries, two tabs, terminal check-and-abandon and invalid pending-data quarantine.
+- [ ] Race list, detail, picker and CSV reads with access loss, scope switches, Close, Back/Forward and delayed JSON callbacks. Verify private metadata does not return after clearing and pending requests remain recoverable.
+- [ ] Open the formula-safe metadata CSV in the intended spreadsheet software; item names/SKUs are literal text, reasons are absent, quantities remain exact and no cross-item/unit totals appear.

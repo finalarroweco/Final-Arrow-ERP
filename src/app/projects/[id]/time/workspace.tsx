@@ -33,7 +33,7 @@ export function TimeWorkspace({ project, canManage, canApprove, locale }: { proj
       setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [project, canManage, t]);
-  useEffect(() => { void load(); void loadEmployees();return()=>{loadSequence.current++;}; }, [load, loadEmployees]);
+  useEffect(() => { const loadSequenceRef = loadSequence; void load(); void loadEmployees();return()=>{loadSequenceRef.current++;}; }, [load, loadEmployees]);
   async function save(form: FormData) {
     setBusy(true); setMessage("");
     try {

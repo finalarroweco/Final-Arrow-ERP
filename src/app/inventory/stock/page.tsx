@@ -23,7 +23,7 @@ export default async function StockPage() {
       label: `${tenant.name} / ${company.name} / ${branch.name}`,
       canAdjust: await canAccess({ ...scope, permission: "inventory-stock:adjust" }) };
   }))).filter((option) => option !== null);
-  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/inventory/transfers">{t("Transfers", "التحويلات")}</a><a href="/inventory/items">{t("Items", "الأصناف")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
+  return <main><header><strong>FINAL <span>ARROW</span> ERP</strong><LanguageSwitcher locale={locale} /><a href="/inventory/transfers">{t("Transfers", "التحويلات")}</a><a href="/inventory/items">{t("Items", "الأصناف")}</a><a href="/inventory/reordering">{t("Reorder policies", "سياسات إعادة الطلب")}</a><a href="/workspace">{t("Workspace", "مساحة العمل")}</a></header>
     <section className="hero"><p>{t("INVENTORY", "المخزون")}</p><h1>{t("Branch stock.", "مخزون الفروع.")}</h1><p className="sub">{t("Balances and manual stock adjustments by branch.", "الأرصدة والتسويات اليدوية لكل فرع.")}</p></section>
     <StockWorkspace actorId={user.id} options={options} locale={locale} />
   </main>;

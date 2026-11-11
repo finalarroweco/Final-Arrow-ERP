@@ -47,7 +47,7 @@ export function HelpdeskWorkspace({ options, locale }: { options: Option[]; loca
     const data = await response.json();
     if (kind === "customers") { setCustomers((old) => number === 0 ? data.customers : [...old, ...data.customers]); setCustomerPage(data.nextPage); }
     else { setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage); }
-  }, [options, t]);
+  }, [options]);
   useEffect(() => { void load(selected); void loadPeople(selected, "customers"); void loadPeople(selected, "employees"); },
     [load, loadPeople, selected]);
   useEffect(() => {

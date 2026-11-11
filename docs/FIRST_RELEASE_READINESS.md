@@ -1,5 +1,7 @@
 # First release readiness — 7 November 2026
 
+**Historical snapshot only.** Its candidate, checks and deferred-feature list describe 7 November, not the current review candidate. Use [current release status](RELEASE_STATUS.md), [review handoff](REVIEW_HANDOFF.md) and [acceptance checklist](RELEASE_ACCEPTANCE.md) for current scope and remaining decisions. This historical record does not authorize rollout.
+
 Status: release candidate; not approved for general customer rollout.
 
 ## Evidence

@@ -17,7 +17,7 @@ export function StockReservations({actorId,scope,canAdjust,items,locale,onSaved}
    if(!r.ok){setRows([]);setMessage(data.error??t("Could not load reservations","تعذر تحميل الحجوزات"));return;}setRows(data.reservations);setPage(index);setNextPage(data.nextPage);
   }catch{if(mounted.current&&n===generation.current)setMessage(t("Connection failed","فشل الاتصال"));}
  },[tenantId,companyId,branchId,t]);
- useEffect(()=>{mounted.current=true;try{const raw=sessionStorage.getItem(key);if(raw){const restored=pendingReservation(JSON.parse(raw),actorId,{tenantId,companyId,branchId});if(restored)setPending(restored);else sessionStorage.removeItem(key);}}catch{setMessage(t("Pending requests can only be retained while this page stays open.","يمكن الاحتفاظ بالطلب المعلق ما دامت الصفحة مفتوحة فقط."));}return()=>{mounted.current=false;++generation.current;};},[key,actorId,tenantId,companyId,branchId,t]);
+ useEffect(()=>{ const generationRef = generation; mounted.current=true;try{const raw=sessionStorage.getItem(key);if(raw){const restored=pendingReservation(JSON.parse(raw),actorId,{tenantId,companyId,branchId});if(restored)setPending(restored);else sessionStorage.removeItem(key);}}catch{setMessage(t("Pending requests can only be retained while this page stays open.","يمكن الاحتفاظ بالطلب المعلق ما دامت الصفحة مفتوحة فقط."));}return()=>{mounted.current=false;++generationRef.current;};},[key,actorId,tenantId,companyId,branchId,t]);
  useEffect(()=>{void load(state);},[load,state]);
  async function save(candidate:unknown){
   if(inFlight.current)return;const p=reservationRequest.safeParse(pending??candidate);if(!p.success){setMessage(t("Check the reservation fields","راجع حقول الحجز"));return;}

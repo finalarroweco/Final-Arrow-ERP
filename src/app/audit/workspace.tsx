@@ -31,7 +31,7 @@ export function AuditWorkspace({ options, locale }: { options: { id: string; nam
     } catch { if (generation === listRequest.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
     finally { if (generation === listRequest.current) setBusy(false); }
   }, [option, filters, t]);
-  useEffect(() => { void load(); return () => { listRequest.current++; }; }, [load]);
+  useEffect(() => { const listRequestRef = listRequest; void load(); return () => { listRequestRef.current++; }; }, [load]);
   useEffect(() => () => { reportRequest.current++; }, []);
   async function summarize(values: Record<string, string>) {
     if (!option) return;

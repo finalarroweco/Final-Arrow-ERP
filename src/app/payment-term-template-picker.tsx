@@ -10,6 +10,8 @@ export function PaymentTermTemplatePicker({ locale, tenantId, companyId, disable
     [busy, setBusy] = useState(false), [error, setError] = useState("");
   const requestNumber = useRef(0);
   useEffect(() => {
+    // Retain the ref object so cleanup invalidates even requests started after setup.
+    const requestNumberRef = requestNumber;
     const request = ++requestNumber.current;
     if (disabled) return;
     setBusy(true); setError("");
@@ -18,7 +20,7 @@ export function PaymentTermTemplatePicker({ locale, tenantId, companyId, disable
         if (!response.ok) throw new Error(); setRows(data.templates); setNextPage(data.nextPage); })
       .catch(() => { if (request === requestNumber.current) { setRows([]); setNextPage(null); setError(t("Company templates are unavailable. You can still enter agreed terms manually.", "قوالب الشركة غير متاحة. يمكنك إدخال الشروط المتفق عليها يدويًا.")); } })
       .finally(() => { if (request === requestNumber.current) setBusy(false); });
-    return () => { requestNumber.current++; };
+    return () => { requestNumberRef.current++; };
   }, [tenantId, companyId, disabled, t]);
   async function more() {
     if (disabled || busy || nextPage === null) return;

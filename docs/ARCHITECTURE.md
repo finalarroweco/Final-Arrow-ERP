@@ -141,3 +141,7 @@
 4. Financial actions must be deterministic and not depend on LLM guesses.
 5. AI executes only through permission-aware tools.
 6. Modules remain decoupled through clear service boundaries.
+
+## Manual inventory reordering
+
+The bounded manual reorder implementation lives at `/inventory/reordering`; see [manual reorder policies](MANUAL_REORDER_POLICIES.md). Operators explicitly configure per-item, concrete-branch minimum and target thresholds, with immutable revisions and current policies-first stock reporting. This does not implement procurement planning, supplier selection, purchase recommendations, orders, forecasting or automation. Unit revisions invalidate old thresholds even after an away-and-back unit change.

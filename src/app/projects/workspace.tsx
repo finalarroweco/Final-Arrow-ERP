@@ -62,7 +62,7 @@ export function ProjectsWorkspace({ options, locale }: { options: Option[]; loca
     const data = await response.json();
     setEmployees((previous) => number === 0 ? data.employees : [...previous, ...data.employees]);
     setNextEmployeePage(data.nextPage);
-  }, [options, t]);
+  }, [options]);
   useEffect(() => { void load(selected); void loadEmployees(selected); }, [load, loadEmployees, selected]);
   useEffect(() => { if (openId) void loadTasks(selected, openId); }, [loadTasks, openId, selected]);
   async function mutate(url: string, method: "POST" | "PATCH", body: object, success: string, refresh: () => Promise<void>) {

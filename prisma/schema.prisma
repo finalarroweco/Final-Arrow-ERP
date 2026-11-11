@@ -463,6 +463,8 @@ model Supplier {
 }
 
 model InventoryItem {
+  reorderUnitVersion Int @default(0)
+  reorderPolicies InventoryReorderPolicy[]
   importBatchId String? @db.Uuid
   importBatch CatalogImportBatch? @relation(fields:[importBatchId],references:[id],onDelete:Restrict)
   @@index([importBatchId])
@@ -2063,4 +2065,76 @@ model BankStatementImportCancellation {
  actor Membership @relation(fields:[tenantId,createdBy],references:[tenantId,userId],onDelete:Restrict,onUpdate:Restrict)
  audit AuditLog @relation(fields:[auditId],references:[id],onDelete:Restrict,onUpdate:Restrict)
  @@index([tenantId,companyId,accountId,cancelledAt],map:"BankStatementImportCancellation_scope_time_idx")
+}
+
+// Manual, operator-configured thresholds. Never a purchase or stock mutation.
+model InventoryReorderPolicy {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ itemBranchId String? @db.Uuid
+ itemName String
+ itemSku String
+ unit String @db.VarChar(16)
+ unitVersion Int
+ reference String @db.VarChar(40)
+ minimumQuantity Decimal @db.Decimal(18,3)
+ targetQuantity Decimal @db.Decimal(18,3)
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ item InventoryItem @relation(fields:[itemId],references:[id],onDelete:Restrict,onUpdate:Restrict)
+ revisions InventoryReorderRevision[]
+ @@unique([tenantId,companyId,id])
+ @@unique([tenantId,companyId,reference])
+ @@index([tenantId,companyId,branchId,archived,updatedAt,id],map:"inventory_reorder_register")
+ @@index([itemId])
+}
+model InventoryReorderRevision {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ policyId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ itemBranchId String? @db.Uuid
+ itemName String
+ itemSku String
+ unit String @db.VarChar(16)
+ unitVersion Int
+ reference String @db.VarChar(40)
+ minimumQuantity Decimal @db.Decimal(18,3)
+ targetQuantity Decimal @db.Decimal(18,3)
+ version Int
+ action String @db.VarChar(7)
+ reason String @db.VarChar(300)
+ archived Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ policy InventoryReorderPolicy @relation(fields:[tenantId,companyId,policyId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([policyId,version])
+ @@index([tenantId,companyId,policyId,version])
+}
+model InventoryReorderRequest {
+ id String @id @db.Uuid
+ policyId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(7)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,policyId,createdAt])
+ @@index([itemId])
 }

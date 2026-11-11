@@ -43,8 +43,8 @@ export function PayrollWorkspace({ options, locale }: { options: Option[]; local
       setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage);
     } catch { if (request === employeeRequest.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [option, t]);
-  useEffect(() => { setSummary([]); setReportReady(false); void load(); return () => { listRequest.current++; }; }, [load]);
-  useEffect(() => { void loadEmployees(); return () => { employeeRequest.current++; }; }, [loadEmployees]);
+  useEffect(() => { const listRequestRef = listRequest; setSummary([]); setReportReady(false); void load(); return () => { listRequestRef.current++; }; }, [load]);
+  useEffect(() => { const employeeRequestRef = employeeRequest; void loadEmployees(); return () => { employeeRequestRef.current++; }; }, [loadEmployees]);
   async function mutate(url: string, method: "POST" | "PATCH", body: object) {
     setBusy(true); setMessage("");
     try {
