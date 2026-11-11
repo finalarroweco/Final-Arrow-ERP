@@ -117,6 +117,12 @@ enum PurchaseOrderStatus {
 }
 
 enum StockMovementType {
+  SALES_DELIVERY
+  SALES_RETURN
+  SALES_CORRECTION_IN
+  SALES_CORRECTION_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
   PURCHASE_RECEIPT
@@ -137,6 +143,9 @@ model Tenant {
 }
 
 model Company {
+ automationJobs AutomationJob[]
+  privateAlertRules PrivateAlertRule[]
+  privateAlertRequests PrivateAlertRequest[]
   paymentTermTemplates PaymentTermTemplate[]
   savedReports SavedReport[]
   importBatches CatalogImportBatch[]
@@ -202,6 +211,8 @@ model PaymentTermTemplate {
 }
 
 model Branch {
+ automationJobs AutomationJob[]
+  privateAlertRules PrivateAlertRule[]
   savedReports SavedReport[]
   importBatches CatalogImportBatch[]
   id             String          @id @default(uuid()) @db.Uuid
@@ -279,6 +290,13 @@ model Session {
 }
 
 model Membership {
+ automationJobs AutomationJob[]
+  privateAlertRules PrivateAlertRule[]
+  privateAlertRequests PrivateAlertRequest[]
+ bankImportCancellations BankStatementImportCancellation[]
+ bankRequestResolutions BankRequestResolution[]
+ certificatesCreated BankReconciliationCertificate[] @relation("CertificateCreator")
+ certificateEventsCreated BankReconciliationCertificateEvent[] @relation("CertificateEventCreator")
   savedReports SavedReport[]
   id         String           @id @default(uuid()) @db.Uuid
   tenantId   String           @db.Uuid
@@ -350,6 +368,7 @@ model AccessScope {
 }
 
 model AuditLog {
+ bankImportCancellation BankStatementImportCancellation?
   id        String   @id @default(uuid()) @db.Uuid
   tenantId  String   @db.Uuid
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
@@ -387,6 +406,8 @@ model Invitation {
 }
 
 model Customer {
+  manualSubscriptions ManualSubscription[]
+  manualSubscriptionRequests ManualSubscriptionRequest[]
   importBatchId String? @db.Uuid
   importBatch CatalogImportBatch? @relation(fields:[importBatchId],references:[id],onDelete:Restrict)
   @@index([importBatchId])
@@ -450,6 +471,8 @@ model Supplier {
 }
 
 model InventoryItem {
+  reorderUnitVersion Int @default(0)
+  reorderPolicies InventoryReorderPolicy[]
   importBatchId String? @db.Uuid
   importBatch CatalogImportBatch? @relation(fields:[importBatchId],references:[id],onDelete:Restrict)
   @@index([importBatchId])
@@ -478,6 +501,9 @@ model InventoryItem {
 }
 
 model StockBalance {
+  transferOpeningDelta Decimal? @db.Decimal(30,3)
+
+  orderLinks OrderStockReservation[]
   reservedQuantity Decimal @default(0) @db.Decimal(18,3)
   reservations StockReservation[]
   id        String          @id @default(uuid()) @db.Uuid
@@ -494,10 +520,16 @@ model StockBalance {
 
   @@unique([tenantId, id])
   @@unique([tenantId, companyId, branchId, itemId])
+  @@unique([tenantId, companyId, branchId, itemId, id])
   @@index([tenantId, companyId, branchId])
 }
 
 model StockMovement {
+  salesDocumentId String? @unique @db.Uuid
+  salesDocument SalesStockDocument? @relation(fields:[salesDocumentId],references:[id],onDelete:Restrict)
+  transferId String? @db.Uuid
+  transfer StockTransfer? @relation(fields:[transferId],references:[id],onDelete:Restrict)
+  @@unique([transferId,type])
   id            String            @id @default(uuid()) @db.Uuid
   tenantId      String            @db.Uuid
   balanceId     String            @db.Uuid
@@ -566,6 +598,7 @@ model PurchaseOrderLine {
 }
 
 model GoodsReceipt {
+  paymentTermAmendments PaymentTermAmendment[]
   paymentTerms String? @db.VarChar(120)
   paymentDueDate DateTime? @db.Date
  vatSnapshots PurchaseVat[]
@@ -682,6 +715,7 @@ model QuoteLine {
 }
 
 model SalesOrder {
+  stockReservations OrderStockReservation[]
   id           String           @id @default(uuid()) @db.Uuid
   tenantId     String           @db.Uuid
   companyId    String           @db.Uuid
@@ -714,6 +748,7 @@ model SalesOrder {
 }
 
 model SalesOrderLine {
+  stockReservations OrderStockReservation[]
   id          String     @id @default(uuid()) @db.Uuid
   tenantId    String     @db.Uuid
   orderId     String     @db.Uuid
@@ -725,10 +760,12 @@ model SalesOrderLine {
   order       SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
 
   @@unique([orderId, position])
+  @@unique([tenantId, orderId, id])
   @@index([tenantId, orderId])
 }
 
 model Invoice {
+  paymentTermAmendments PaymentTermAmendment[]
  projectLinks ProjectInvoiceLink[]
   paymentTerms String? @db.VarChar(120)
   paymentDueDate DateTime? @db.Date
@@ -737,7 +774,10 @@ model Invoice {
   companyId    String        @db.Uuid
   branchId     String?       @db.Uuid
   customerId   String        @db.Uuid
-  orderId      String        @unique @db.Uuid
+  orderId      String?       @unique @db.Uuid
+  projectMilestoneSourceId String? @unique @db.Uuid
+  projectTimeSourceId String? @unique @db.Uuid
+  serviceSourceId String? @unique @db.Uuid
   number       String
   customerName String
   currency     String        @db.VarChar(3)
@@ -752,7 +792,10 @@ model Invoice {
   company      Company       @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict)
   branch       Branch?       @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   customer     Customer      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
-  order        SalesOrder    @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  order        SalesOrder?   @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  projectMilestoneSource ProjectMilestoneInvoiceSource? @relation(fields: [tenantId, companyId, projectMilestoneSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
+  projectTimeSource ProjectTimeInvoiceSource? @relation(fields: [tenantId, companyId, projectTimeSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
+  serviceSource ServiceInvoiceSource? @relation(fields: [tenantId, companyId, serviceSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        InvoiceLine[]
   vat InvoiceVat?
   creationTransaction String @default(dbgenerated("(txid_current())::text"))
@@ -760,6 +803,9 @@ model Invoice {
 
   @@unique([companyId, number])
   @@unique([tenantId, companyId, orderId])
+  @@unique([tenantId, companyId, projectMilestoneSourceId])
+  @@unique([tenantId, companyId, projectTimeSourceId])
+  @@unique([tenantId, companyId, serviceSourceId])
   @@unique([tenantId, companyId, id])
   @@unique([tenantId, id])
   @@index([tenantId, companyId, branchId, createdAt])
@@ -937,6 +983,7 @@ model LeaveRequest {
 }
 
 model Ticket {
+  alertReopenVersion Int @default(0)
   resolutionDueAt DateTime? @db.Timestamptz(3)
   deadlineSequence Int @default(0)
   deadlineChanges TicketDeadlineChange[]
@@ -1036,6 +1083,7 @@ enum LedgerAccountType {
 }
 
 model LedgerAccount {
+ bankImportCancellations BankStatementImportCancellation[]
   id String @id @default(uuid()) @db.Uuid
   tenantId String @db.Uuid
   companyId String @db.Uuid
@@ -1268,6 +1316,8 @@ model CustomerSettlement {
 }
 
 model BankStatement {
+ requestResolutions BankRequestResolution[]
+ certificates BankReconciliationCertificate[]
  id String @id @db.Uuid
  tenantId String @db.Uuid
  companyId String @db.Uuid
@@ -1314,6 +1364,8 @@ model BankMatch {
  accountId String @db.Uuid
  bankLineId String @db.Uuid
  journalLineId String @db.Uuid
+ amount Decimal @db.Decimal(18,3)
+ kind String @default("match") @db.VarChar(8)
  createdBy String @db.Uuid
  createdAt DateTime @default(now())
  cancelledAt DateTime?
@@ -1322,6 +1374,8 @@ model BankMatch {
  bankLine BankStatementLine @relation(fields:[tenantId,companyId,accountId,bankLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
  journalLine JournalLine @relation(fields:[tenantId,companyId,accountId,journalLineId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
  @@index([tenantId,companyId,accountId,createdAt])
+ @@index([bankLineId,createdAt,id], map:"bank_match_bank_history")
+ @@index([journalLineId,createdAt,id], map:"bank_match_journal_history")
 }
 
 model RecoveryCode {
@@ -1592,6 +1646,9 @@ model SavedReport {
  name String @db.VarChar(120)
  dateMode String @db.VarChar(24)
  asOf DateTime? @db.Date
+ from DateTime? @db.Date
+ to DateTime? @db.Date
+ status String? @db.VarChar(24)
  q String @db.VarChar(120)
  version Int @default(1)
  creationDigest String @db.VarChar(64)
@@ -1623,6 +1680,9 @@ model TicketDeadlineChange {
 }
 
 model StockReservation {
+  salesDeliveryId String? @unique @db.Uuid
+ sourceKind String @default("MANUAL") @db.VarChar(20)
+ orderLink OrderStockReservation?
  id String @id @db.Uuid
  tenantId String @db.Uuid
  balanceId String @db.Uuid
@@ -1639,6 +1699,7 @@ model StockReservation {
  balance StockBalance @relation(fields:[tenantId,balanceId],references:[tenantId,id],onDelete:Restrict)
  @@index([tenantId,balanceId,createdAt,id])
  @@index([balanceId,releasedAt])
+ @@unique([tenantId,balanceId,id])
 }
 
 model ProjectBudgetEvent {
@@ -1683,4 +1744,874 @@ model ProjectInvoiceLink {
  invoice Invoice @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
  @@index([tenantId,projectId,createdAt,id])
  @@index([invoiceId,unlinkedAt])
+}
+
+model PaymentTermAmendment {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ invoiceId String? @db.Uuid
+ receiptId String? @db.Uuid
+ sequence Int
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ reason String @db.VarChar(1000)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ invoice Invoice? @relation(fields:[tenantId,companyId,invoiceId],references:[tenantId,companyId,id],onDelete:Restrict)
+ receipt GoodsReceipt? @relation(fields:[tenantId,companyId,receiptId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([invoiceId,sequence])
+ @@unique([receiptId,sequence])
+ @@index([tenantId,invoiceId,createdAt,sequence])
+ @@index([tenantId,receiptId,createdAt,sequence])
+}
+
+model BankReconciliationCertificate {
+ statement BankStatement @relation(fields:[tenantId,companyId,accountId,statementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
+ creator Membership @relation("CertificateCreator",fields:[tenantId,createdBy],references:[tenantId,userId],onDelete:Restrict)
+ events BankReconciliationCertificateEvent[] @relation("CertificateEvents")
+ replacementEvents BankReconciliationCertificateEvent[] @relation("CertificateReplacement")
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ statementId String @db.Uuid
+ snapshot Json
+ summary Json
+ digest String @db.VarChar(64)
+ requestDigest String @db.VarChar(64)
+ note String @db.VarChar(300)
+ observedAt DateTime @db.Timestamptz(3)
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ createdBy String @db.Uuid
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,accountId,id])
+ @@index([tenantId,statementId,createdAt,id],map:"bank_certificate_statement_created")
+}
+model BankReconciliationCertificateEvent {
+ certificate BankReconciliationCertificate @relation("CertificateEvents",fields:[tenantId,companyId,accountId,certificateId],references:[tenantId,companyId,accountId,id],onDelete:Restrict,map:"bank_certificate_event_source_fk")
+ replacement BankReconciliationCertificate? @relation("CertificateReplacement",fields:[tenantId,companyId,accountId,replacementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict,map:"bank_certificate_event_replacement_fk")
+ creator Membership @relation("CertificateEventCreator",fields:[tenantId,createdBy],references:[tenantId,userId],onDelete:Restrict)
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ certificateId String @db.Uuid
+ sequence Int
+ action String @db.VarChar(10)
+ replacementId String? @db.Uuid
+ reason String @db.VarChar(300)
+ requestDigest String @db.VarChar(64)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ @@unique([certificateId,sequence])
+}
+
+model StockTransfer {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ sourceBranchId String @db.Uuid
+ destinationBranchId String @db.Uuid
+ itemId String @db.Uuid
+ quantity Decimal @db.Decimal(18,3)
+ reference String @db.VarChar(120)
+ reason String @db.VarChar(300)
+ correctsId String? @unique @db.Uuid
+ original StockTransfer? @relation("TransferCorrection",fields:[correctsId],references:[id],onDelete:Restrict)
+ corrections StockTransfer[] @relation("TransferCorrection")
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ unit String @default("") @db.VarChar(16)
+ itemName String @default("")
+ itemSku String @default("")
+ companyName String @default("")
+ sourceBranchName String @default("")
+ destinationBranchName String @default("")
+ actorName String @default("")
+ movements StockMovement[]
+ @@index([tenantId,companyId,createdAt,id])
+ @@index([itemId])
+}
+
+model StockTransferCancellation {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ request Json
+ @@index([tenantId,companyId,createdAt])
+}
+
+
+model OrderStockReservation {
+ reservationId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ balanceId String @db.Uuid
+ itemId String @db.Uuid
+ orderId String @db.Uuid
+ lineId String? @db.Uuid
+ note String @db.VarChar(120)
+ orderNumber String
+ customerName String
+ linePosition Int?
+ lineDescription String?
+ itemSku String
+ itemName String
+ itemUnit String
+ branchName String
+ reservation StockReservation @relation(fields:[tenantId,balanceId,reservationId],references:[tenantId,balanceId,id],onDelete:Restrict)
+ balance StockBalance @relation(fields:[tenantId,companyId,branchId,itemId,balanceId],references:[tenantId,companyId,branchId,itemId,id],onDelete:Restrict)
+ order SalesOrder @relation(fields:[tenantId,companyId,orderId],references:[tenantId,companyId,id],onDelete:Restrict)
+ line SalesOrderLine? @relation(fields:[tenantId,orderId,lineId],references:[tenantId,orderId,id],onDelete:Restrict)
+ @@unique([tenantId,balanceId,reservationId])
+ @@index([tenantId,orderId,branchId,reservationId])
+ @@index([itemId])
+}
+
+model BankRequestResolution {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ statementId String @db.Uuid
+ actorId String @db.Uuid
+ outcome String @default("ABANDONED") @db.VarChar(9)
+ requestDigest String @db.VarChar(64)
+ request Json
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ statement BankStatement @relation(fields:[tenantId,companyId,accountId,statementId],references:[tenantId,companyId,accountId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ @@index([tenantId,statementId,createdAt])
+}
+
+model SalesStockDocument {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ orderId String @db.Uuid
+ lineId String? @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ balanceId String @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ kind String @db.VarChar(16)
+ deliveryId String? @db.Uuid
+ correctsId String? @unique @db.Uuid
+ holdId String? @unique @db.Uuid
+ releaseRequestId String? @unique @db.Uuid
+ quantity Decimal @db.Decimal(18,3)
+ delta Decimal @default(0) @db.Decimal(18,3)
+ unit String @db.VarChar(16)
+ reference String @db.VarChar(120)
+ reason String @db.VarChar(300)
+ physicalConfirmed Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ orderNumber String @default("")
+ customerName String @default("")
+ linePosition Int?
+ lineDescription String?
+ itemName String @default("")
+ itemSku String @default("")
+ branchName String @default("")
+ companyName String @default("")
+ actorName String @default("")
+ movement StockMovement?
+ @@unique([tenantId,companyId,orderId,branchId,itemId,id])
+ @@index([tenantId,companyId,orderId,createdAt,id])
+ @@index([deliveryId])
+ @@index([itemId])
+}
+model SalesStockCancellation {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ request Json
+ @@index([tenantId,companyId,createdAt])
+}
+
+model InternalTextDocument {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ title String @db.VarChar(200)
+ body String
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId,archived,updatedAt,id],map:"internal_text_document_register")
+}
+model InternalTextDocumentEvent {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ documentId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ version Int
+ action String @db.VarChar(7)
+ title String @db.VarChar(200)
+ body String
+ reason String @db.VarChar(300)
+ archived Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([documentId,version])
+ @@index([tenantId,companyId,documentId,version])
+}
+model InternalTextDocumentRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ documentId String @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(7)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,documentId,createdAt])
+}
+
+model ManualSubscription {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ reference String @db.VarChar(40)
+ customerBranchId String? @db.Uuid
+ customerName String
+ customerCode String
+ serviceLabel String @db.VarChar(200)
+ description String
+ agreementReference String @db.VarChar(200)
+ status String @db.VarChar(7)
+ startDate DateTime? @db.Date
+ endDate DateTime? @db.Date
+ nextReviewDate DateTime? @db.Date
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ customer Customer @relation(fields:[tenantId,companyId,customerId],references:[tenantId,companyId,id],onDelete:Restrict)
+ revisions ManualSubscriptionRevision[]
+ @@unique([tenantId,companyId,id])
+ @@unique([tenantId,companyId,reference])
+ @@index([tenantId,companyId,branchId,archived,updatedAt,id],map:"manual_subscription_register")
+ @@index([tenantId,companyId,customerId])
+}
+model ManualSubscriptionRevision {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ subscriptionId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ reference String @db.VarChar(40)
+ customerBranchId String? @db.Uuid
+ customerName String
+ customerCode String
+ serviceLabel String @db.VarChar(200)
+ description String
+ agreementReference String @db.VarChar(200)
+ status String @db.VarChar(7)
+ startDate DateTime? @db.Date
+ endDate DateTime? @db.Date
+ nextReviewDate DateTime? @db.Date
+ version Int
+ action String @db.VarChar(7)
+ reason String @db.VarChar(300)
+ archived Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ subscription ManualSubscription @relation(fields:[tenantId,companyId,subscriptionId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([subscriptionId,version])
+ @@index([tenantId,companyId,subscriptionId,version])
+}
+model ManualSubscriptionRequest {
+ id String @id @db.Uuid
+ subscriptionId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(7)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ customer Customer @relation(fields:[tenantId,companyId,customerId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,subscriptionId,createdAt])
+ @@index([tenantId,companyId,customerId])
+}
+
+// Permanent technical request tombstones. No imported amounts or statement content.
+model BankStatementImportCancellation {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ accountId String @db.Uuid
+ requestHash String @db.VarChar(64)
+ createdBy String @db.Uuid
+ cancelledAt DateTime @default(now()) @db.Timestamptz(3)
+ auditId String @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ account LedgerAccount @relation(fields:[tenantId,companyId,accountId],references:[tenantId,companyId,id],onDelete:Restrict,onUpdate:Restrict)
+ actor Membership @relation(fields:[tenantId,createdBy],references:[tenantId,userId],onDelete:Restrict,onUpdate:Restrict)
+ audit AuditLog @relation(fields:[auditId],references:[id],onDelete:Restrict,onUpdate:Restrict)
+ @@index([tenantId,companyId,accountId,cancelledAt],map:"BankStatementImportCancellation_scope_time_idx")
+}
+
+// Manual, operator-configured thresholds. Never a purchase or stock mutation.
+model InventoryReorderPolicy {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ itemBranchId String? @db.Uuid
+ itemName String
+ itemSku String
+ unit String @db.VarChar(16)
+ unitVersion Int
+ reference String @db.VarChar(40)
+ minimumQuantity Decimal @db.Decimal(18,3)
+ targetQuantity Decimal @db.Decimal(18,3)
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ item InventoryItem @relation(fields:[itemId],references:[id],onDelete:Restrict,onUpdate:Restrict)
+ revisions InventoryReorderRevision[]
+ @@unique([tenantId,companyId,id])
+ @@unique([tenantId,companyId,reference])
+ @@index([tenantId,companyId,branchId,archived,updatedAt,id],map:"inventory_reorder_register")
+ @@index([itemId])
+}
+model InventoryReorderRevision {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ policyId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ itemBranchId String? @db.Uuid
+ itemName String
+ itemSku String
+ unit String @db.VarChar(16)
+ unitVersion Int
+ reference String @db.VarChar(40)
+ minimumQuantity Decimal @db.Decimal(18,3)
+ targetQuantity Decimal @db.Decimal(18,3)
+ version Int
+ action String @db.VarChar(7)
+ reason String @db.VarChar(300)
+ archived Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ policy InventoryReorderPolicy @relation(fields:[tenantId,companyId,policyId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([policyId,version])
+ @@index([tenantId,companyId,policyId,version])
+}
+model InventoryReorderRequest {
+ id String @id @db.Uuid
+ policyId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ itemId String @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(7)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,policyId,createdAt])
+ @@index([itemId])
+}
+
+// Recurring billing is separate from ManualSubscription metadata. All history is
+// append-only; SQL guards validate scope, requests, snapshots and source parity.
+model BillingPlan {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ version Int
+ label String
+ currency String @db.VarChar(3)
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ updatedAt DateTime @default(now())
+ revisions BillingPlanRevision[]
+ @@unique([tenantId, companyId, id])
+ @@index([tenantId, companyId, branchId])
+}
+model BillingPlanRevision {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ planId String @db.Uuid
+ version Int
+ label String
+ currency String @db.VarChar(3)
+ lines Json
+ archived Boolean
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ plan BillingPlan @relation(fields: [tenantId,companyId,planId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([planId,version])
+ @@unique([tenantId,companyId,id])
+}
+model BillingSubscription {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ manualSubscriptionId String? @db.Uuid
+ anchor DateTime @db.Date
+ cadence Json
+ currency String @db.VarChar(3)
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ updatedAt DateTime @default(now())
+ revisions BillingSubscriptionRevision[]
+ sources ServiceInvoiceSource[]
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId])
+}
+model BillingSubscriptionRevision {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ subscriptionId String @db.Uuid
+ version Int
+ effectivePeriod Int
+ planRevisionId String @db.Uuid
+ horizon DateTime @db.Date
+ status String
+ terms Json
+ archived Boolean
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ subscription BillingSubscription @relation(fields:[tenantId,companyId,subscriptionId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([subscriptionId,version])
+ @@unique([tenantId,companyId,id])
+ @@index([subscriptionId,effectivePeriod,version])
+}
+model BillingRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ action String
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId])
+}
+model ServiceInvoiceSource {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ customerName String
+ subscriptionId String @db.Uuid
+ subscriptionRevisionId String @db.Uuid
+ planRevisionId String @db.Uuid
+ periodIndex Int
+ periodStart DateTime @db.Date
+ periodEnd DateTime @db.Date
+ correctionIndex Int @default(0)
+ replacesSourceId String? @unique @db.Uuid
+ currency String @db.VarChar(3)
+ lines Json
+ subtotal Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ vatProfileRevision Int?
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ subscription BillingSubscription @relation(fields:[tenantId,companyId,subscriptionId],references:[tenantId,companyId,id],onDelete:Restrict)
+ invoice Invoice?
+ @@unique([tenantId,companyId,id])
+ @@unique([subscriptionId,periodIndex,correctionIndex])
+ @@index([tenantId,companyId,branchId])
+}
+
+model SupplierRfq {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ title String
+ deadline DateTime? @db.Date
+ notes String
+ lines Json
+ currency String @db.VarChar(3)
+ version Int
+ requestRevision Int
+ status String @db.VarChar(9)
+ purchaseOrderId String? @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId,updatedAt,id])
+}
+model SupplierOffer {
+ id String @id @db.Uuid
+ rfqId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ supplierId String @db.Uuid
+ supplierBranchId String? @db.Uuid
+ supplierName String
+ supplierCode String
+ version Int
+ requestRevision Int
+ currency String @db.VarChar(3)
+ validUntil DateTime? @db.Date
+ notes String
+ lines Json
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,rfqId,updatedAt,id])
+ @@index([supplierId])
+}
+model SupplierRfqRevision {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ rfqId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ version Int
+ action String @db.VarChar(6)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ request Json
+ rfq Json
+ offer Json?
+ purchaseOrder Json?
+ @@unique([rfqId,version])
+ @@index([tenantId,companyId,rfqId,version])
+}
+model SupplierRfqRequest {
+ id String @id @db.Uuid
+ rfqId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(6)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,rfqId,createdAt])
+}
+
+model PrivateAlertRule {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ actorId String @db.Uuid
+ kind String
+ lookbackDays Int?
+ horizonDays Int?
+ priority String?
+ enabled Boolean @default(false)
+ version Int
+ lastEvaluatedAt DateTime? @db.Timestamptz(3)
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ branch Branch? @relation(fields:[tenantId,companyId,branchId],references:[tenantId,companyId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ notices PrivateAlertNotice[]
+ @@unique([id,tenantId,companyId,actorId])
+ @@index([tenantId,companyId,actorId,createdAt,id],map:"private_alert_rules_owner")
+}
+model PrivateAlertNotice {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ ruleId String @db.Uuid
+ sourceId String @db.Uuid
+ fingerprint String
+ episode Int
+ observation Json
+ observedAt DateTime @db.Timestamptz(3)
+ lastMatchedAt DateTime @db.Timestamptz(3)
+ lastEvaluationMatched Boolean
+ acknowledgedAt DateTime? @db.Timestamptz(3)
+ rule PrivateAlertRule @relation(fields:[ruleId],references:[id],onDelete:Restrict)
+ @@unique([ruleId,sourceId,episode])
+ @@index([ruleId,observedAt,id],map:"private_alert_notice_page")
+}
+model PrivateAlertRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ actorId String @db.Uuid
+ ruleId String @db.Uuid
+ action String
+ expectedVersion Int
+ request Json
+ outcome String
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ @@index([tenantId,companyId,actorId,ruleId],map:"private_alert_request_owner")
+}
+
+model ProjectTimeInvoiceSource {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ customerId String @db.Uuid
+ customerName String
+ currency String @db.VarChar(3)
+ entries Json
+ lines Json
+ subtotal Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ vatProfileRevision Int?
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ replacesSourceId String? @unique @db.Uuid
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ invoice Invoice?
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,projectId,createdAt,id])
+}
+model ProjectTimeInvoiceClaim {
+ entryId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ projectId String @db.Uuid
+ sourceId String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@index([sourceId])
+}
+model ProjectTimeInvoiceRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+}
+
+model ProjectMilestone {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ customerId String @db.Uuid
+ description String
+ currency String @db.VarChar(3)
+ agreedPrice Decimal @db.Decimal(18,3)
+ treatment String
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ status String @default("DRAFT")
+ sequence Int @default(0)
+ createdBy String @db.Uuid
+ requestId String @unique @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+ @@unique([tenantId,companyId,projectId,id])
+ @@index([tenantId,companyId,projectId,createdAt,id])
+}
+model ProjectMilestoneAction {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ milestoneId String @db.Uuid
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,milestoneId,createdAt,id])
+}
+model ProjectMilestoneInvoiceSource {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ milestoneId String @db.Uuid
+ customerId String @db.Uuid
+ customerName String
+ currency String @db.VarChar(3)
+ description String
+ agreedPrice Decimal @db.Decimal(18,3)
+ treatment String
+ lines Json
+ subtotal Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ vatProfileRevision Int?
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ replacesSourceId String? @unique @db.Uuid
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ invoice Invoice?
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,projectId,createdAt,id])
+}
+model ProjectMilestoneInvoiceClaim {
+ milestoneId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ projectId String @db.Uuid
+ sourceId String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@index([sourceId])
+}
+model ProjectMilestoneInvoiceRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
+}
+
+model AutomationJob {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ actorId String @db.Uuid
+ kind String
+ sourceId String @db.Uuid
+ config Json
+ authorizedFingerprint String
+ state String
+ version Int
+ nextDueAt DateTime @db.Timestamptz(3)
+ runsUsed Int @default(0)
+ cursor Int?
+ lastCode String @default("CONFIGURED")
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ branch Branch? @relation(fields:[tenantId,companyId,branchId],references:[tenantId,companyId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ runs AutomationRun[]
+ @@index([state,nextDueAt,id],map:"automation_due")
+ @@index([actorId,tenantId,companyId,branchId,id],map:"automation_owner")
+}
+model AutomationRun {
+ id String @id @db.Uuid
+ jobId String @db.Uuid
+ sequence Int
+ state String
+ downstreamId String @unique @db.Uuid
+ payload Json?
+ scheduledAt DateTime @db.Timestamptz(3)
+ attempts Int @default(0)
+ fence Int @default(0)
+ leaseToken String? @db.Uuid
+ leaseUntil DateTime? @db.Timestamptz(3)
+ nextAttemptAt DateTime @db.Timestamptz(3)
+ code String @default("QUEUED")
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ finishedAt DateTime? @db.Timestamptz(3)
+ job AutomationJob @relation(fields:[jobId],references:[id],onDelete:Restrict)
+ @@unique([jobId,sequence])
+}
+model AutomationEvent {
+ id String @id @db.Uuid
+ jobId String @db.Uuid
+ actorId String @db.Uuid
+ operation String
+ data Json
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@index([jobId,createdAt,id],map:"automation_events")
 }

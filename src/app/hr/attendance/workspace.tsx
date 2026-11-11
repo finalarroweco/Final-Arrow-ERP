@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 import { AttendanceReport } from "./report";
 
@@ -33,7 +33,7 @@ export function AttendanceWorkspace({ options, locale }: { options: Option[]; lo
       const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number), ...filters });
       const response = await fetch(`/api/attendance?${query}`);
       const data = await response.json();
-      if (!response.ok) { setMessage(data.error ?? t("Could not load attendance", "تعذر تحميل الحضور")); return; }
+      if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
       setRecords(data.records); setPage(number); setNextPage(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t, filters]);
@@ -55,7 +55,7 @@ export function AttendanceWorkspace({ options, locale }: { options: Option[]; lo
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json();
-      setMessage(response.ok ? success : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? success : presentApiError(t, data, response.status));
       if (response.ok) await load(selected, number);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }

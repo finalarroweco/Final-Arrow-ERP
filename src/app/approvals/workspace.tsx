@@ -1,6 +1,7 @@
 "use client";
+import {sourceLink} from "./workflows/read-input";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Option = { tenantId: string; companyId: string; label: string;
@@ -27,7 +28,7 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
     const response = await fetch(`/api/approvals?${query}`);
     const data = await response.json();
     if (currentRequest !== requestNumber.current) return;
-    if (!response.ok) { setMessage(data.error ?? t("Could not load approvals", "تعذر تحميل الموافقات")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setItems(data.items); setCounts(data.counts); setHasMore(data.hasMore);
   }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
@@ -41,7 +42,7 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
       const response = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, action, ...(note ? { [item.type === "LEAVE" ? "note" : "reason"]: note } : {}) }) });
       const data = await response.json();
-      setMessage(response.ok ? t("Decision saved", "تم حفظ القرار") : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? t("Decision saved", "تم حفظ القرار") : presentApiError(t, data, response.status));
       if (response.ok) await load(selected);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -56,6 +57,7 @@ export function ApprovalsWorkspace({ options, locale }: { options: Option[]; loc
     {items.map((item) => <article key={`${item.type}:${item.id}`} className="card">
       <small>{t(item.type, ({ LEAVE: "إجازة", EXPENSE: "مصروف", PURCHASE: "شراء", PAYROLL: "راتب" })[item.type])} · {item.branchId ? scope.branches.find((branch) => branch.id === item.branchId)?.name : t("Company wide", "على مستوى الشركة")}</small>
       <h3>{item.title}</h3><p>{item.detail}</p>
+      {item.type !== "PAYROLL" && <p><a href={sourceLink({tenantId:scope.tenantId,companyId:scope.companyId,branchId:item.branchId},item.type,item.id)}>{t("Approval workflow / submit / current state", "مسار الموافقة / تقديم / الحالة الحالية")}</a></p>}
       {item.type === "LEAVE" && <button disabled={busy} onClick={() => void act(item, "approve")}>{t("Approve leave", "الموافقة على الإجازة")}</button>}
       {item.type === "EXPENSE" && <button disabled={busy} onClick={() => void act(item, "post")}>{t("Post expense", "ترحيل المصروف")}</button>}
       {item.type === "PAYROLL" && <button disabled={busy} onClick={() => void act(item, "approve")}>{t("Approve payroll", "اعتماد الراتب")}</button>}

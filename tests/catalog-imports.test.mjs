@@ -6,7 +6,7 @@ import {PrismaClient} from "@prisma/client";
 const origin="http://127.0.0.1:3238";
 async function call(path,method="GET",body,cookie){const r=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cookie:r.headers.get("set-cookie")?.split(";")[0]};}
 test("catalog imports are scoped, atomic, audited and exact under retries and races",{timeout:90000},async()=>{
- const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-p","3238"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+ const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-H", "127.0.0.1", "-p","3238"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
  let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
  const s=randomUUID().slice(0,8),actor=await call("/api/auth/register","POST",{name:"Import owner",email:`imports-${s}@example.invalid`,password:"Imports-password-2026",organization:"Import QA",slug:`imports-${s}`});assert.equal(actor.status,201);const tenantId=actor.data.tenantId,cookie=actor.cookie;

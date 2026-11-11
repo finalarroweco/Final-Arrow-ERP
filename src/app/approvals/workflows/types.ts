@@ -1,0 +1,12 @@
+import type {z} from 'zod';
+import type {approvalConfiguration,ApprovalPolicyCommand,ApprovalSubmit,ApprovalVote,ApprovalResource} from '@/lib/approval-workflow-input';
+export type Configuration=z.infer<typeof approvalConfiguration>;
+export type Scope={tenantId:string;companyId:string;branchId:string|null};
+export type Option=Scope&{label:string};
+export type Command=ApprovalPolicyCommand|ApprovalSubmit|ApprovalVote;
+export type Policy=Scope&{id:string;version:number;configuration:Configuration};
+export type Approval=Scope&{id:string;resource:ApprovalResource;sourceId:string;policyId:string;policyVersion:number;policySnapshot:Configuration;sourceSnapshot:Record<string,unknown>;sourceFingerprint:string;requesterId:string;status:'PENDING'|'APPROVED'|'REJECTED'|'CANCELLED';stage:number;version:number;createdAt:string};
+export type Decision={id:string;approvalId:string;actorId:string;stage:number;action:'APPROVE'|'REJECT'|'CANCEL';reason:string;createdAt:string};
+export type Detail={sourceCurrent?:boolean|null;approval:Approval;decisions:Decision[];page:number;nextPage:number|null;eligible:boolean;blockedReason?:'TERMINAL'|'POLICY_CHANGED'|'SOURCE_CHANGED'|'SELF_APPROVAL'|'PRIOR_APPROVER_CHANGED'|'NOT_ELIGIBLE'|null;canCancel:boolean};
+export type Preview={sourceCurrent?:boolean|null;sourceReady:boolean;resource:ApprovalResource;sourceId:string;source:Record<string,unknown>;sourceFingerprint:string;policy:Policy|null;approval:Approval|null};
+export type PolicyList={policies:Policy[];revisions:{id:string;policyId:string;version:number;configuration:Configuration;actorId:string;createdAt:string}[];members:{id:string;name:string}[];roles:{id:string;name:string}[];page:number;nextPage:number|null};

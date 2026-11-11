@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { createSession, hashPassword } from "@/lib/auth";
@@ -13,9 +13,9 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_REGISTRATION !== "true")
-    return NextResponse.json({ error: "Registration is closed" }, { status: 403 });
+    return apiJson({ error: "Registration is closed" }, { status: 403 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid registration details" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid registration details" }, { status: 400 });
   const { name, email, password, organization, slug } = parsed.data;
   const passwordHash = await hashPassword(password);
   try {
@@ -28,14 +28,14 @@ export async function POST(request: Request) {
       const owner = await tx.role.create({ data: { tenantId: tenant.id, name: "Owner" } });
       const manager = await tx.role.create({ data: { tenantId: tenant.id, name: "Manager" } });
       const viewer = await tx.role.create({ data: { tenantId: tenant.id, name: "Viewer" } });
-      const permissions = ["payment-term:read", "payment-term:manage", "company:read", "company:create", "company:update", "branch:read", "branch:create", "department:read", "department:create", "customer:read", "customer:create", "customer:update", "customer:archive", "supplier:read", "supplier:create", "supplier:update", "supplier:archive", "purchase-order:read", "purchase-order:create", "purchase-order:manage", "inventory-item:read", "inventory-item:create", "inventory-item:update", "inventory-item:archive", "inventory-stock:read", "inventory-stock:adjust", "lead:read", "lead:create", "lead:update", "lead:convert", "quote:read", "quote:create", "quote:update", "quote:send", "quote:decide", "order:read", "order:create", "order:manage", "invoice:read", "invoice:create", "invoice:issue", "invoice:void", "project:read", "project:create", "project:manage", "project-task:read", "project-task:create", "project-task:manage", "project-time:read", "project-time:manage", "project-time:approve", "project-budget:read", "project-budget:manage", "project-billing:read", "project-billing:manage", "employee:read", "employee:create", "employee:manage", "attendance:read", "attendance:manage", "payroll:read", "payroll:create", "payroll:approve", "payroll:pay", "payroll:void", "pos:read", "pos:manage", "ledger:read", "ledger:post", "ledger-account:manage", "ledger-period:manage", "expense:read", "expense:create", "expense:post", "expense:void", "leave:read", "leave:create", "leave:decide", "ticket:read", "ticket:create", "ticket:manage", "user:invite", "user:manage"];
+      const permissions = ["automation:manage", "project-milestone:read", "project-milestone:manage", "project-milestone:approve", "project-milestone:generate", "project-time-invoice:read", "project-time-invoice:generate", "billing-subscription:read", "billing-subscription:manage", "billing-subscription:generate", "rfq:read", "rfq:manage", "inventory-reorder:manage", "subscription:read", "subscription:manage", "document:read", "document:manage", "document:approve", "order-delivery:manage", "order-reservation:manage", "inventory-transfer:manage", "bank-reconciliation:create", "bank-reconciliation:manage", "invoice-payment-term:manage", "receipt-payment-term:manage", "payment-term:read", "payment-term:manage", "company:read", "company:create", "company:update", "branch:read", "branch:create", "department:read", "department:create", "customer:read", "customer:create", "customer:update", "customer:archive", "supplier:read", "supplier:create", "supplier:update", "supplier:archive", "purchase-order:read", "purchase-order:create", "purchase-order:manage", "inventory-item:read", "inventory-item:create", "inventory-item:update", "inventory-item:archive", "inventory-stock:read", "inventory-stock:adjust", "lead:read", "lead:create", "lead:update", "lead:convert", "quote:read", "quote:create", "quote:update", "quote:send", "quote:decide", "order:read", "order:create", "order:manage", "invoice:read", "invoice:create", "invoice:issue", "invoice:void", "project:read", "project:create", "project:manage", "project-task:read", "project-task:create", "project-task:manage", "project-time:read", "project-time:manage", "project-time:approve", "project-budget:read", "project-budget:manage", "project-billing:read", "project-billing:manage", "employee:read", "employee:create", "employee:manage", "attendance:read", "attendance:manage", "payroll:read", "payroll:create", "payroll:approve", "payroll:pay", "payroll:void", "pos:read", "pos:manage", "ledger:read", "ledger:post", "ledger-account:manage", "ledger-period:manage", "expense:read", "expense:create", "expense:post", "expense:void", "leave:read", "leave:create", "leave:decide", "ticket:read", "ticket:create", "ticket:manage", "user:invite", "user:manage"];
       const managerActions: string[] = ["branch:create", "department:create", "customer:create", "customer:update", "customer:archive", "supplier:create", "supplier:update", "supplier:archive", "purchase-order:create", "purchase-order:manage", "inventory-item:create", "inventory-item:update", "inventory-item:archive", "inventory-stock:adjust", "lead:create", "lead:update", "lead:convert", "quote:create", "quote:update", "quote:send", "quote:decide", "order:create", "order:manage", "invoice:create", "invoice:issue", "invoice:void", "project:create", "project:manage", "project-task:create", "project-task:manage", "project-time:manage", "employee:create", "employee:manage", "attendance:manage", "payroll:create", "pos:manage", "ledger:post", "expense:create", "expense:post", "expense:void", "leave:create", "leave:decide", "ticket:create", "ticket:manage"];
-      const viewerExcluded: string[] = ["project-billing:read","project-budget:read","ledger:read", "payroll:read", "project-time:read", "employee:read", "attendance:read", "leave:read"];
+      const viewerExcluded: string[] = ["project-milestone:read","project-time-invoice:read","billing-subscription:read","rfq:read","subscription:read","document:read","project-billing:read","project-budget:read","ledger:read", "payroll:read", "project-time:read", "employee:read", "attendance:read", "leave:read"];
       await tx.permission.createMany({ data: permissions.map(key => ({ key })), skipDuplicates: true });
       await tx.rolePermission.createMany({ data: [
         ...permissions.map(permissionKey => ({ tenantId: tenant.id, roleId: owner.id, permissionKey })),
-        ...permissions.filter(key => (key.endsWith(":read") && key!=="project-budget:read" && key!=="project-billing:read") || managerActions.includes(key)).map(permissionKey => ({ tenantId: tenant.id, roleId: manager.id, permissionKey })),
-        ...permissions.filter(key => key.endsWith(":read") && !viewerExcluded.includes(key)).map(permissionKey => ({ tenantId: tenant.id, roleId: viewer.id, permissionKey })),
+        ...permissions.filter(key => (key.endsWith(":read") && key!=="project-milestone:read" && key!=="project-time-invoice:read" && key!=="billing-subscription:read" && key!=="rfq:read" && key!=="subscription:read" && key!=="document:read" && key!=="project-budget:read" && key!=="project-billing:read") || managerActions.includes(key)).map(permissionKey => ({ tenantId: tenant.id, roleId: manager.id, permissionKey })),
+        ...permissions.filter(key => key.endsWith(":read") && key!=="project-milestone:read" && !viewerExcluded.includes(key)).map(permissionKey => ({ tenantId: tenant.id, roleId: viewer.id, permissionKey })),
       ] });
       const grant = await tx.roleGrant.create({
         data: { tenantId: tenant.id, roleId: owner.id, membershipId: membership.id },
@@ -47,10 +47,10 @@ export async function POST(request: Request) {
       return { userId: user.id, tenantId: tenant.id };
     });
     await createSession(result.userId);
-    return NextResponse.json({ tenantId: result.tenantId }, { status: 201 });
+    return apiJson({ tenantId: result.tenantId }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Email or workspace name already in use" }, { status: 409 });
+      return apiJson({ error: "Email or workspace name already in use" }, { status: 409 });
     throw error;
   }
 }

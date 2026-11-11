@@ -1,7 +1,7 @@
 "use client";
 
 import {FinancialReport} from "@/app/accounting/financial-report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Option = { tenantId: string; companyId: string; label: string; canManageCompanyWide: boolean;
@@ -29,7 +29,7 @@ export function OrdersWorkspace({ options, locale }: { options: Option[]; locale
     const response = await fetch(`/api/orders?${query}`);
     const data = await response.json();
     if(generation!==requestVersion.current)return;
-    if (!response.ok) { setError(data.error ?? t("Could not load orders", "تعذر تحميل الطلبات")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setOrders(data.orders); setPage(pageNumber); setNextPage(data.nextPage); setError("");
   }, [options, t]);
   useEffect(() => { void load(selected); }, [load, selected]);
@@ -42,7 +42,7 @@ export function OrdersWorkspace({ options, locale }: { options: Option[]; locale
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, action }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not update order", "تعذر تحديث الطلب"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else {setReportVersion(value=>value+1); await load(selected, page);}
     } finally { setBusy(false); }
   }
@@ -56,7 +56,7 @@ export function OrdersWorkspace({ options, locale }: { options: Option[]; locale
       const canManage = order.branchId ? scope.branches.find((branch) => branch.id === order.branchId)?.canManage
         : scope.canManageCompanyWide;
       return <article key={order.id}><div>
-      <h3>{order.number} · {order.customerName}</h3><a href={`/sales/orders/${order.id}`}>{t("View / print order","عرض / طباعة طلب البيع")}</a><p>{t(order.status.replace("_", " "), ({ NEW: "جديد", IN_PROGRESS: "قيد التنفيذ", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
+      <h3>{order.number} · {order.customerName}</h3><a href={`/sales/orders/${order.id}`}>{t("View / print order","عرض / طباعة طلب البيع")}</a><a href={`/sales/orders/${order.id}/inventory`}>{t("Manual stock holds", "حجوزات المخزون اليدوية")}</a><p>{t(order.status.replace("_", " "), ({ NEW: "جديد", IN_PROGRESS: "قيد التنفيذ", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
       <ul>{order.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
       {canManage && <div className="quote-actions">
         {order.status === "NEW" && <button disabled={busy} onClick={() => void change(order, "start")}>{t("Start work", "بدء العمل")}</button>}

@@ -1,6 +1,8 @@
+import {paymentTermAmendmentsAt} from "./payment-term-amendments";
+import {paymentTermsCutoff,recordedPaymentTerms} from "./payment-term-amendment-input";
 import {sourceAging,type AgingDocument} from "./source-aging";
 import {settlementNumber} from "./supplier-settlement";
-import {Prisma} from "@prisma/client";
+import {moneyMillis,moneyText} from "./exact-money";
 import {z} from "zod";
 import {db} from "./db";
 import {readableCompanyPermissions} from "./access";
@@ -12,6 +14,7 @@ export class SupplierBalanceError extends Error{constructor(message:string,publi
 export async function supplierBalances(userId:string,raw:unknown,includeAging=false,basis:"SOURCE_POSTING_DATE"|"PAYMENT_DUE_DATE"="SOURCE_POSTING_DATE"){
  const parsed=filters.safeParse(raw);if(!parsed.success)throw new SupplierBalanceError("Invalid balance filters",400);
  const {tenantId,companyId,branchId,asOf,q,format}=parsed.data;
+ const termsCutoff=paymentTermsCutoff(asOf);
  const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["supplier:read","purchase-order:read","inventory-stock:read","ledger:read"]});
  const purchase=rights["purchase-order:read"],stock=rights["inventory-stock:read"],ledger=rights["ledger:read"];
  const supplierRights=rights["supplier:read"];
@@ -27,27 +30,28 @@ export async function supplierBalances(userId:string,raw:unknown,includeAging=fa
   const returns=await tx.goodsReturn.findMany({where:{tenantId,receipt:sourceWhere},select:{id:true,receiptId:true,receipt:{select:{branchId:true,order:{select:{number:true,supplier:{select:{id:true,code:true,displayName:true,archivedAt:true}}}}}}},take:20001});
   const settlements=await tx.supplierSettlement.findMany({where:{tenantId,receipt:sourceWhere},select:{id:true,kind:true,receiptId:true,receipt:{select:{branchId:true,order:{select:{number:true,supplier:{select:{id:true,code:true,displayName:true,archivedAt:true}}}}}}},take:20001});
   if(receipts.length+returns.length+settlements.length>20000)throw new SupplierBalanceError("Statement exceeds 20000 source documents. Select a receiving branch.",413);
+  const termAmendments=includeAging?await paymentTermAmendmentsAt(tx,tenantId,"receipt",receipts.map(row=>row.id),termsCutoff):new Map();
   const sources=new Map<string,{kind:"receipt"|"return"|"payment"|"refund";documentId:string;branchId:string;supplier:{id:string;code:string;displayName:string;archivedAt:Date|null}}>([...receipts.map(r=>[documentJournalNumber("purchase-receipt",r.id),{kind:"receipt",documentId:r.id,branchId:r.branchId,supplier:r.order.supplier}] as const),...returns.map(r=>[documentJournalNumber("purchase-return",r.id),{kind:"return",documentId:r.receiptId,branchId:r.receipt.branchId,supplier:r.receipt.order.supplier}] as const),...settlements.map(s=>[settlementNumber(s.kind as "PAYMENT"|"REFUND",s.id),{kind:s.kind==="PAYMENT"?"payment" as const:"refund" as const,documentId:s.receiptId,branchId:s.receipt.branchId,supplier:s.receipt.order.supplier}] as const)]);
   const end=new Date(`${asOf}T00:00:00Z`);
   const entries=sources.size?await tx.journalEntry.findMany({where:{tenantId,companyId,entryDate:{lte:end},OR:[{number:{in:[...sources.keys()]}},{original:{number:{in:[...sources.keys()]}}}]},select:{id:true,number:true,entryDate:true,createdAt:true,currency:true,branchId:true,original:{select:{number:true}},lines:{select:{debit:true,credit:true,account:{select:{type:true}}}}},take:20001}):[];
   if(entries.length>20000)throw new SupplierBalanceError("Statement exceeds 20000 historical journals.",413);
   const documents=new Map<string,AgingDocument>(),receiptMap=new Map(receipts.map(r=>[r.id,r]));
-  if(includeAging)for(const e of entries){const source=sources.get(e.number);if(source?.kind!=="receipt"||e.original)continue;const receipt=receiptMap.get(source.documentId)!;documents.set(receipt.id+":"+e.currency,{id:receipt.id,reference:receipt.order.number+" / "+receipt.id,branchId:receipt.branchId,party:receipt.order.supplier,currency:e.currency,postedDate:e.entryDate.toISOString().slice(0,10),paymentTerms:receipt.paymentTerms,paymentDueDate:receipt.paymentDueDate?.toISOString().slice(0,10)??null,balance:"0.000"});}
-  const groups=new Map<string,{supplier:{id:string;code:string;displayName:string;archivedAt:Date|null};currency:string;balance:Prisma.Decimal;journals:number;corrections:number}>();
+  if(includeAging)for(const e of entries){const source=sources.get(e.number);if(source?.kind!=="receipt"||e.original)continue;const receipt=receiptMap.get(source.documentId)!;documents.set(receipt.id+":"+e.currency,{id:receipt.id,reference:receipt.order.number+" / "+receipt.id,branchId:receipt.branchId,party:receipt.order.supplier,currency:e.currency,postedDate:e.entryDate.toISOString().slice(0,10),...recordedPaymentTerms(receipt,termAmendments.get(receipt.id)),balance:"0.000"});}
+  const groups=new Map<string,{supplier:{id:string;code:string;displayName:string;archivedAt:Date|null};currency:string;balance:bigint;journals:number;corrections:number}>();
   for(const e of entries){
    const source=sources.get(e.original?.number??e.number);if(!source||source.branchId!==e.branchId)continue;
    const key=source.supplier.id+":"+e.currency;
-   let g=groups.get(key);if(!g){g={supplier:source.supplier,currency:e.currency,balance:new Prisma.Decimal(0),journals:0,corrections:0};groups.set(key,g);}
-   const delta=e.lines.filter(l=>l.account.type==="LIABILITY").reduce((n,l)=>n.plus(l.credit).minus(l.debit),new Prisma.Decimal(0));g.balance=g.balance.plus(delta);if(includeAging){const document=documents.get(source.documentId+":"+e.currency);if(!document)throw new SupplierBalanceError("Original posting is unavailable for aging.",409);document.balance=new Prisma.Decimal(document.balance).plus(delta).toFixed(3);}g.journals++;if(e.original)g.corrections++;
+   let g=groups.get(key);if(!g){g={supplier:source.supplier,currency:e.currency,balance:BigInt(0),journals:0,corrections:0};groups.set(key,g);}
+   const delta=e.lines.filter(l=>l.account.type==="LIABILITY").reduce((n,l)=>n+moneyMillis(l.credit.toFixed(3))-moneyMillis(l.debit.toFixed(3)),BigInt(0));g.balance+=delta;if(includeAging){const document=documents.get(source.documentId+":"+e.currency);if(!document)throw new SupplierBalanceError("Original posting is unavailable for aging.",409);document.balance=moneyText(moneyMillis(document.balance)+delta);}g.journals++;if(e.original)g.corrections++;
   }
   if(groups.size>5000)throw new SupplierBalanceError("Report exceeds 5000 supplier/currency rows. Narrow the supplier search or receiving branch.",413);
-  const totals=new Map<string,{currency:string;balance:Prisma.Decimal;positive:Prisma.Decimal;negative:Prisma.Decimal;suppliers:number}>();
+  const totals=new Map<string,{currency:string;balance:bigint;positive:bigint;negative:bigint;suppliers:number}>();
   const rows=[...groups.values()].sort((a,b)=>a.supplier.displayName.localeCompare(b.supplier.displayName)||a.supplier.id.localeCompare(b.supplier.id)||a.currency.localeCompare(b.currency)).map(g=>{
-   let t=totals.get(g.currency);if(!t){t={currency:g.currency,balance:new Prisma.Decimal(0),positive:new Prisma.Decimal(0),negative:new Prisma.Decimal(0),suppliers:0};totals.set(g.currency,t);}
-   t.balance=t.balance.plus(g.balance);if(g.balance.gt(0))t.positive=t.positive.plus(g.balance);if(g.balance.lt(0))t.negative=t.negative.plus(g.balance);t.suppliers++;
-   return {...g,balance:g.balance.toFixed(3)};
+   let t=totals.get(g.currency);if(!t){t={currency:g.currency,balance:BigInt(0),positive:BigInt(0),negative:BigInt(0),suppliers:0};totals.set(g.currency,t);}
+   t.balance+=g.balance;if(g.balance>BigInt(0))t.positive+=g.balance;if(g.balance<BigInt(0))t.negative+=g.balance;t.suppliers++;
+   return {...g,balance:moneyText(g.balance)};
   });
-  return {aging:includeAging?{...sourceAging(asOf,[...documents.values()],basis),tenantId,companyId,branchId:branchId??null,q}:null,asOf,q,branchId:branchId??null,format,rows,summary:[...totals.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(t=>({...t,balance:t.balance.toFixed(3),positive:t.positive.toFixed(3),negative:t.negative.toFixed(3)}))};
+  return {aging:includeAging?{...sourceAging(asOf,[...documents.values()],basis),tenantId,companyId,branchId:branchId??null,q}:null,asOf,q,branchId:branchId??null,format,rows,summary:[...totals.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(t=>({...t,balance:moneyText(t.balance),positive:moneyText(t.positive),negative:moneyText(t.negative)}))};
  },{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
 }
 const cell=(v:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(v)?`'${v}`:v).replaceAll('"','""')}"`;

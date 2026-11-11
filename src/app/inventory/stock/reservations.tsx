@@ -1,6 +1,6 @@
 "use client";
 import {useCallback,useEffect,useRef,useState,type FormEvent} from "react";
-import {translate,type Locale} from "@/lib/locale";
+import {presentApiError,translate,type Locale} from "@/lib/locale";
 import {pendingReservation,reservationRequest,type ReservationRequest} from "@/lib/stock-reservation-input";
 type Scope={tenantId:string;companyId:string;branchId:string};
 type Row={id:string;quantity:string;reference:string;createdAt:string;releasedAt:string|null;releaseReason:string|null;balance:{itemId:string;item:{sku:string;name:string;unit:string}}};
@@ -14,10 +14,10 @@ export function StockReservations({actorId,scope,canAdjust,items,locale,onSaved}
  const load=useCallback(async(selectedState:string,index=0)=>{
   const n=++generation.current;
   try{const r=await fetch(`/api/inventory/reservations?${new URLSearchParams({tenantId,companyId,branchId,state:selectedState,page:String(index)})}`),data=await r.json();if(!mounted.current||n!==generation.current)return;
-   if(!r.ok){setRows([]);setMessage(data.error??t("Could not load reservations","تعذر تحميل الحجوزات"));return;}setRows(data.reservations);setPage(index);setNextPage(data.nextPage);
+   if(!r.ok){setRows([]);setMessage(presentApiError(t, data, r.status));return;}setRows(data.reservations);setPage(index);setNextPage(data.nextPage);
   }catch{if(mounted.current&&n===generation.current)setMessage(t("Connection failed","فشل الاتصال"));}
  },[tenantId,companyId,branchId,t]);
- useEffect(()=>{mounted.current=true;try{const raw=sessionStorage.getItem(key);if(raw){const restored=pendingReservation(JSON.parse(raw),actorId,{tenantId,companyId,branchId});if(restored)setPending(restored);else sessionStorage.removeItem(key);}}catch{setMessage(t("Pending requests can only be retained while this page stays open.","يمكن الاحتفاظ بالطلب المعلق ما دامت الصفحة مفتوحة فقط."));}return()=>{mounted.current=false;++generation.current;};},[key,actorId,tenantId,companyId,branchId,t]);
+ useEffect(()=>{ const generationRef = generation; mounted.current=true;try{const raw=sessionStorage.getItem(key);if(raw){const restored=pendingReservation(JSON.parse(raw),actorId,{tenantId,companyId,branchId});if(restored)setPending(restored);else sessionStorage.removeItem(key);}}catch{setMessage(t("Pending requests can only be retained while this page stays open.","يمكن الاحتفاظ بالطلب المعلق ما دامت الصفحة مفتوحة فقط."));}return()=>{mounted.current=false;++generationRef.current;};},[key,actorId,tenantId,companyId,branchId,t]);
  useEffect(()=>{void load(state);},[load,state]);
  async function save(candidate:unknown){
   if(inFlight.current)return;const p=reservationRequest.safeParse(pending??candidate);if(!p.success){setMessage(t("Check the reservation fields","راجع حقول الحجز"));return;}
@@ -26,13 +26,13 @@ export function StockReservations({actorId,scope,canAdjust,items,locale,onSaved}
   try{const r=await fetch("/api/inventory/reservations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),data=await r.json();
    if(r.ok||r.status<500){try{sessionStorage.removeItem(key);}catch{}if(mounted.current)setPending(null);}
    if(!mounted.current){if(r.ok)onSaved();return;}
-   if(!r.ok){setMessage(data.error??t("Reservation could not be saved","تعذر حفظ الحجز"));return;}
+   if(!r.ok){setMessage(presentApiError(t, data, r.status));return;}
    setMessage(t("Reservation change saved","تم حفظ تغيير الحجز"));onSaved();await load(state,page);
   }catch{if(mounted.current)setMessage(t("Result unconfirmed. Retry the retained request with the same details.","نتيجة الحفظ غير مؤكدة. أعد محاولة الطلب المحفوظ بنفس التفاصيل."));}
   finally{inFlight.current=false;if(mounted.current)setBusy(false);}
  }
  function reserve(event:FormEvent<HTMLFormElement>){event.preventDefault();const v=new FormData(event.currentTarget);void save({...scope,action:"reserve",requestId:crypto.randomUUID(),itemId:v.get("itemId"),quantity:v.get("quantity"),reference:v.get("reference")});}
- return <section className="panel"><h2>{t("Stock reservations","حجوزات المخزون")}</h2><p>{t("A manual hold reduces available stock without moving goods or creating accounting entries. Release the hold before physically issuing or returning its quantity. Reservations do not expire automatically and are not sales-order allocations. Quantity changes require releasing the original and recording a new hold.","الحجز اليدوي يقلل المتاح دون حركة بضاعة أو قيد محاسبي. فك الحجز قبل صرف كميته أو إرجاعها فعليًا. لا تنتهي الحجوزات تلقائيًا وليست تخصيصًا لأمر بيع. لتغيير الكمية فك الحجز الأصلي ثم سجّل حجزًا جديدًا.")}</p>
+ return <section className="panel"><h2>{t("Stock reservations","حجوزات المخزون")}</h2><p>{t("A manual hold reduces available stock without moving goods or creating accounting entries. Release the hold before physically issuing or returning its quantity. This list contains stock-only holds. Order-linked manual holds are managed in Sales Orders and are excluded here. Holds never expire automatically and are not physical fulfilment. Quantity changes require releasing the original and recording a new hold.","الحجز اليدوي يقلل المتاح دون حركة بضاعة أو قيد محاسبي. فك الحجز قبل صرف كميته أو إرجاعها فعليًا. هذه القائمة للحجوزات المستقلة فقط. تُدار الحجوزات المرتبطة بطلب بيع ضمن طلبات البيع ولا تظهر هنا. لا تنتهي الحجوزات تلقائيًا وليست تنفيذًا ماديًا. لتغيير الكمية فك الحجز الأصلي ثم سجّل حجزًا جديدًا.")}</p>
  {message&&<p role="status">{message}</p>}
  {pending&&<div role="status"><p>{t("Retained unconfirmed request","طلب محفوظ لم تتأكد نتيجته")}: {pending.action==="reserve"?`${pending.reference} · ${pending.quantity}`:pending.reason} · {pending.requestId}</p><button type="button" disabled={busy||!canAdjust} onClick={()=>void save(pending)}>{t("Retry same request","إعادة محاولة نفس الطلب")}</button></div>}
  {canAdjust&&!pending&&<form onSubmit={reserve}><fieldset disabled={busy}><legend>{t("New reservation","حجز جديد")}</legend><label>{t("Item","الصنف")}<select name="itemId" required defaultValue=""><option value="">{t("Choose item","اختر الصنف")}</option>{items.map(i=><option key={i.id} value={i.id}>{i.sku} · {i.name} ({i.unit})</option>)}</select></label><label>{t("Quantity","الكمية")}<input name="quantity" required inputMode="decimal" pattern="(0|[1-9][0-9]{0,8})(\.[0-9]{1,3})?"/></label><label>{t("Reservation reference","مرجع الحجز")}<input name="reference" required minLength={3} maxLength={120}/></label><button disabled={!items.length}>{t("Reserve available stock","حجز الكمية المتاحة")}</button></fieldset></form>}

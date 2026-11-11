@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess, readableCompanyBranches } from "@/lib/access";
@@ -14,36 +14,36 @@ const schema = z.object({ tenantId: uuid, companyId: uuid, branchId: uuid.nullis
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permission: "project:read" });
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false) return apiJson({ error: "Forbidden" }, { status: 403 });
   const projects = await db.project.findMany({ where: { tenantId: tenantId.data, companyId: companyId.data,
     ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, code: true, name: true, description: true, status: true,
       dueDate: true, branchId: true, createdAt: true, _count: { select: { tasks: true } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ projects: projects.slice(0, 50), nextPage: projects.length > 50 ? page.data + 1 : null });
+  return apiJson({ projects: projects.slice(0, 50), nextPage: projects.length > 50 ? page.data + 1 : null });
 }
 
 export async function POST(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid project" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid project" }, { status: 400 });
   const { tenantId, companyId, branchId, dueDate: date, ...data } = parsed.data;
   if (!(await canAccess({ userId: actor.id, tenantId, companyId, branchId: branchId ?? undefined,
-    permission: "project:create" }))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    permission: "project:create" }))) return apiJson({ error: "Forbidden" }, { status: 403 });
   const company = await db.company.findUnique({ where: { tenantId_id: { tenantId, id: companyId } }, select: { id: true } });
-  if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+  if (!company) return apiJson({ error: "Company not found" }, { status: 404 });
   if (branchId && !(await db.branch.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: branchId } }, select: { id: true } })))
-    return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+    return apiJson({ error: "Branch not found" }, { status: 404 });
   try {
     const project = await db.$transaction(async (tx) => {
       const project = await tx.project.create({ data: { tenantId, companyId, branchId: branchId ?? null,
@@ -52,10 +52,10 @@ export async function POST(request: Request) {
         entity: "Project", entityId: project.id } });
       return project;
     });
-    return NextResponse.json({ project }, { status: 201 });
+    return apiJson({ project }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Project code already in use" }, { status: 409 });
+      return apiJson({ error: "Project code already in use" }, { status: 409 });
     throw error;
   }
 }

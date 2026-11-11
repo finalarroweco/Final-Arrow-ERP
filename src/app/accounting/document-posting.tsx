@@ -2,7 +2,7 @@
 import {ExpenseVatFields,ExpenseVatSummary,type ExpenseVatSetup} from "./expense-vat-fields";
 import {PurchaseVatFields,PurchaseVatSummary,type PurchaseVatSetup} from "./purchase-vat-fields";
 import { useState, type FormEvent } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import {presentApiError, translate, type Locale } from "@/lib/locale";
 type Account = {id:string;code:string;name:string;type:string};
 type Entry = {id:string;number:string;reversal?:{id:string;number:string}|null};
 export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,deductions,canPost=true,onPosted}: {
@@ -44,7 +44,7 @@ export function DocumentPosting({kind,id,scope,locale,amount,currency,eligible,d
         ...(kind==="expense"&&expenseVatSetup?.required?{expenseVat:{supplierName:form.get("expenseSupplierName"),supplierTaxNumber:String(form.get("expenseSupplierTaxNumber")??"").trim()||null,reference:form.get("expenseReference"),treatment:String(form.get("expenseTreatment")).split("-")[0],recoverable:String(form.get("expenseTreatment")).endsWith("-R")}}:{}),
         ...(kind === "payroll" && hasDeductions ? {deductionAccountId:form.get("deductionAccountId")} : {}),
       })});const data=await response.json();
-      if (!response.ok) {setMessage(data.error??t("Posting failed","تعذر الترحيل"));return;}
+      if (!response.ok) {setMessage(presentApiError(t, data, response.status));return;}
       setEntry(data.entry);if(data.expenseVat&&expenseVatSetup)setExpenseVatSetup({...expenseVatSetup,snapshot:data.expenseVat,amount:data.gross});if(data.purchaseVat&&purchaseVatSetup)setPurchaseVatSetup({...purchaseVatSetup,recorded:true,snapshot:data.purchaseVat,amount:data.gross});setMessage(t("Ledger journal posted","تم ترحيل القيد إلى دفتر الأستاذ"));onPosted?.();
     } catch {setMessage(t("Connection failed. Recheck the journal before retrying.","فشل الاتصال. تحقق من القيد قبل إعادة المحاولة."));setLoaded(false);}
     finally {setBusy(false);}

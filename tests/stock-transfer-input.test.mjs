@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {randomUUID} from "node:crypto";
+import {readFileSync} from "node:fs";
+import ts from "typescript";
+const src=ts.transpileModule(readFileSync("src/lib/stock-transfer-input.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+const m={exports:{}};new Function("require","module","exports",src)((id)=>{if(id==="zod")return requireZod;throw new Error(id);},m,m.exports);
+import * as requireZod from "zod";
+const {stockTransferRequest,pendingStockTransfer,stockTransferResponseMatches,stockTransferCancellationMatches}=m.exports;
+const actorId=randomUUID();
+const input={expectedActorId:actorId,action:"transfer",requestId:randomUUID(),tenantId:randomUUID(),companyId:randomUUID(),sourceBranchId:randomUUID(),destinationBranchId:randomUUID(),itemId:randomUUID(),expectedUnit:"kg",quantity:"1.250",reference:"Transfer reference",reason:"Completed transfer"};
+test("strict stock unit input and normalized identities",()=>{assert.ok(stockTransferRequest.safeParse(input).success);for(const quantity of ["0","-1","1e2","01","1.0001","1000000000","NaN"])assert.equal(stockTransferRequest.safeParse({...input,quantity}).success,false);assert.ok(stockTransferRequest.safeParse({...input,quantity:"999999999.999"}).success);assert.equal(stockTransferRequest.safeParse({...input,destinationBranchId:input.sourceBranchId}).success,false);assert.equal(stockTransferRequest.parse({...input,requestId:input.requestId.toUpperCase()}).requestId,input.requestId);});
+test("durable pending is actor and scope bound",()=>{const raw={version:1,actorId,request:input};assert.deepEqual(pendingStockTransfer(raw,actorId,input),input);assert.equal(pendingStockTransfer(raw,randomUUID(),input),null);assert.equal(pendingStockTransfer({...raw,extra:1},actorId,input),null);});
+test("only exact complete save or cancellation receipts resolve a pending request",()=>{const saved={...input,id:input.requestId,correctsId:null,createdBy:actorId,createdAt:new Date().toISOString(),unit:"kg",itemName:"Item",itemSku:"SKU",companyName:"Company",sourceBranchName:"A",destinationBranchName:"B",actorName:"Actor"};delete saved.expectedUnit;assert.ok(stockTransferResponseMatches(input,saved));for(const v of [{},{...saved,id:randomUUID()},{...saved,quantity:"1.251"},{...saved,correctsId:randomUUID()},{...saved,unit:""}])assert.equal(stockTransferResponseMatches(input,v),false);const c={id:input.requestId,tenantId:input.tenantId,companyId:input.companyId,createdBy:actorId,createdAt:new Date().toISOString(),request:input};assert.ok(stockTransferCancellationMatches(input,c,actorId));assert.equal(stockTransferCancellationMatches(input,{...c,request:{...input,reason:"Changed"}},actorId),false);});

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { createSession, verifyPassword } from "@/lib/auth";
@@ -9,14 +9,14 @@ const schema = z.object({ email: z.string().trim().email().max(254), password: z
 
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  if (!parsed.success) return apiJson({ error: "Invalid credentials" }, { status: 401 });
   const email=parsed.data.email.toLowerCase();
   const attempt=await reserveLoginAttempt(email);
-  if(!attempt.allowed)return NextResponse.json({error:"Too many login attempts. Try again later."},{status:429,headers:{"Retry-After":String(attempt.retryAfter),"Cache-Control":"no-store"}});
+  if(!attempt.allowed)return apiJson({error:"Too many login attempts. Try again later."},{status:429,headers:{"Retry-After":String(attempt.retryAfter),"Cache-Control":"no-store"}});
   const user = await db.user.findUnique({ where: { email } });
   const valid=await verifyPassword(parsed.data.password,user?.passwordHash??dummyHash);
   if (!user || !valid)
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-  if(!(await createSession(user.id,user.passwordHash)))return NextResponse.json({error:"Invalid credentials"},{status:401});
-  return NextResponse.json({ ok: true });
+    return apiJson({ error: "Invalid credentials" }, { status: 401 });
+  if(!(await createSession(user.id,user.passwordHash)))return apiJson({error:"Invalid credentials"},{status:401});
+  return apiJson({ ok: true });
 }

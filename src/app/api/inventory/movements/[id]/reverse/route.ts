@@ -1,6 +1,6 @@
+import { apiJson } from "@/lib/api-response";
 import {documentJournal,lockDocument} from "@/lib/document-journal";
 import { createHash } from "node:crypto";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -10,17 +10,17 @@ const uuid=z.string().uuid();
 const schema=z.object({tenantId:uuid,reason:z.string().trim().min(3).max(150)}).strict();
 class StockConflict extends Error {}
 export async function POST(request:Request,context:{params:Promise<{id:string}>}){
-  const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
+  const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
   const {id}=await context.params;const parsed=schema.safeParse(await request.json().catch(()=>null));
-  if(!uuid.safeParse(id).success||!parsed.success)return NextResponse.json({error:"Invalid movement reversal"},{status:400});
+  if(!uuid.safeParse(id).success||!parsed.success)return apiJson({error:"Invalid movement reversal"},{status:400});
   const {tenantId,reason}=parsed.data;
   const original=await db.stockMovement.findFirst({where:{tenantId,id},include:{balance:true,receiptLine:{select:{receipt:{select:{id:true,order:{select:{branchId:true}}}}}}}});
-  if(!original)return NextResponse.json({error:"Movement not found"},{status:404});
+  if(!original)return apiJson({error:"Movement not found"},{status:404});
   const {companyId,branchId,itemId}=original.balance;
   const scope={userId:actor.id,tenantId,companyId,branchId};
   const checks=await Promise.all([canAccess({...scope,permission:"inventory-stock:read"}),canAccess({...scope,permission:"inventory-stock:adjust"}),
     ...(original.receiptLine?[canAccess({...scope,branchId:original.receiptLine.receipt.order.branchId??undefined,permission:"purchase-order:read"})]:[])]);
-  if(!checks.every(Boolean))return NextResponse.json({error:"Forbidden"},{status:403});
+  if(!checks.every(Boolean))return apiJson({error:"Forbidden"},{status:403});
   try{
     const result=await db.$transaction(async tx=>{
       if(original.receiptLine){
@@ -30,6 +30,8 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
       }
       // Serialize corrections of this exact immutable source movement.
       await tx.$queryRaw`SELECT id FROM "StockMovement" WHERE "tenantId"=${tenantId}::uuid AND id=${id}::uuid FOR UPDATE`;
+      if(original.salesDocumentId)throw new StockConflict("Sales stock movements require a source document correction");
+      if(original.transferId)throw new StockConflict("Transfer legs require a full paired transfer correction");
       if(original.type === "PURCHASE_RETURN")throw new StockConflict("Saved stock returns cannot be reversed");
       if(original.receiptLineId){
         const source=await tx.goodsReceiptLine.findUnique({where:{id:original.receiptLineId},select:{returnedQuantity:true}});
@@ -55,7 +57,7 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
       ]});
       return {movement,balance:await tx.stockBalance.findUnique({where:{id:original.balanceId},select:{itemId:true,quantity:true}})};
     },{timeout:15000,maxWait:10000});
-    return NextResponse.json(result,{status:201});
-  }catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError && ["P2004","P2010","P2034"].includes(error.code))return NextResponse.json({error:"Stock is reserved or insufficient. Release reservations before reversing this movement."},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")return NextResponse.json({error:"Movement already reversed"},{status:409});if(error instanceof StockConflict)return NextResponse.json({error:error.message},{status:409});throw error;}
+    return apiJson(result,{status:201});
+  }catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError && ["P2004","P2010","P2034"].includes(error.code))return apiJson({error:"Stock is reserved or insufficient. Release reservations before reversing this movement."},{status:409});if(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")return apiJson({error:"Movement already reversed"},{status:409});if(error instanceof StockConflict)return apiJson({error:error.message},{status:409});throw error;}
 }
 

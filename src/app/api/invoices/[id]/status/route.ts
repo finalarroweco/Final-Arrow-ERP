@@ -1,5 +1,7 @@
+import {invoiceSessionAllowed} from "@/lib/invoice-session";
+import {invoiceDocumentSourceAllowed,invoiceSourceSelect} from "@/lib/invoice-source";
 import { documentJournal, lockDocument } from "@/lib/document-journal";
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -13,20 +15,29 @@ const schema = z.discriminatedUnion("action", [
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid invoice action" }, { status: 400 });
+    return apiJson({ error: "Invalid invoice action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const invoice = await db.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },
-    select: { companyId: true, branchId: true } });
-  if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-  if (!(await canAccess({ userId: actor.id, tenantId, companyId: invoice.companyId,
+    select: { tenantId:true,companyId: true, branchId: true,...invoiceSourceSelect } });
+  if (!invoice) return apiJson({ error: "Invoice not found" }, { status: 404 });
+  if (!(await invoiceDocumentSourceAllowed(actor.id,invoice)) || !(await canAccess({ userId: actor.id, tenantId, companyId: invoice.companyId,
     branchId: invoice.branchId ?? undefined, permission: action === "issue" ? "invoice:issue" : "invoice:void" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
+    // Generated invoice status triggers lock the source project. Acquire that
+    // lock before the invoice, matching generation/correction lock order, then
+    // revalidate the exact session and all current grants after either wait.
+    const projectId=invoice.projectMilestoneSource?.projectId??invoice.projectTimeSource?.projectId;
+    if(projectId)await tx.$queryRaw`SELECT id FROM "Project" WHERE "tenantId"=${tenantId}::uuid AND id=${projectId}::uuid FOR UPDATE`;
     await lockDocument(tx, "invoice", tenantId, id);
+    if(!(await invoiceSessionAllowed(tx,actor.id)))return {unauthenticated:true as const};
+    const current=await tx.invoice.findUnique({where:{id},select:{tenantId:true,companyId:true,branchId:true,...invoiceSourceSelect}});
+    if(!current||!(await invoiceDocumentSourceAllowed(actor.id,current,tx))||!(await canAccess({userId:actor.id,tenantId,companyId:current.companyId,branchId:current.branchId??undefined,permission:action==="issue"?"invoice:issue":"invoice:void"},tx)))return {forbidden:true as const};
     if (action === "void") {
       const journal = await documentJournal(tx, "invoice", tenantId, invoice.companyId, id);
       if (journal && !journal.reversal) return { ledgerBlocked: true as const };
@@ -43,7 +54,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.invoice.findUnique({ where: { id }, select: { id: true, status: true,
       issuedAt: true, voidedAt: true, voidReason: true } });
   });
-  if (result && "ledgerBlocked" in result) return NextResponse.json({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
-  if (!result) return NextResponse.json({ error: "Invoice status has changed or transition is invalid" }, { status: 409 });
-  return NextResponse.json({ invoice: result });
+  if(result && "unauthenticated" in result)return apiJson({error:"Unauthenticated"},{status:401});
+  if(result && "forbidden" in result)return apiJson({error:"Forbidden"},{status:403});
+  if (result && "ledgerBlocked" in result) return apiJson({ error: "Reverse the linked ledger journal before voiding this document" }, { status: 409 });
+  if (!result) return apiJson({ error: "Invoice status has changed or transition is invalid" }, { status: 409 });
+  return apiJson({ invoice: result });
 }

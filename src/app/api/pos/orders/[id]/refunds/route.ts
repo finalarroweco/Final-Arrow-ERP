@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import {drawerConflictMessage} from "@/lib/pos-drawer-conflict";
-import {NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {currentUser} from "@/lib/auth";
@@ -11,25 +11,25 @@ import {calculatePosPartial,posRefundOrder,posRefundAllowed,posRefundState,posRe
 const uuid=z.string().uuid();
 const schema=z.object({tenantId:uuid,requestId:uuid,entryDate:dueDate,reference:z.string().trim().min(3).max(120),reason:z.string().trim().min(3).max(500),lines:z.array(z.object({orderLineId:uuid,quantity:z.number().int().min(1).max(999)}).strict()).min(1).max(100).optional()}).strict();
 type Context={params:Promise<{id:string}>};
-function failure(error:unknown){const drawer=drawerConflictMessage(error);if(drawer)return NextResponse.json({error:drawer},{status:409});
- if(error instanceof PosRefundConflict||error instanceof LedgerPeriodClosed)return NextResponse.json({error:error.message},{status:409});
- if(error instanceof LedgerCompanyMissing)return NextResponse.json({error:"Company not found"},{status:404});
- if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return NextResponse.json({error:"Check refund history, the open branch shift and available drawer cash"},{status:409});
+function failure(error:unknown){const drawer=drawerConflictMessage(error);if(drawer)return apiJson({error:drawer},{status:409});
+ if(error instanceof PosRefundConflict||error instanceof LedgerPeriodClosed)return apiJson({error:error.message},{status:409});
+ if(error instanceof LedgerCompanyMissing)return apiJson({error:"Company not found"},{status:404});
+ if(error instanceof Prisma.PrismaClientKnownRequestError&&["P2002","P2004"].includes(error.code))return apiJson({error:"Check refund history, the open branch shift and available drawer cash"},{status:409});
  throw error;
 }
 export async function GET(request:Request,context:Context){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
  const {id}=await context.params,params=new URL(request.url).searchParams,parsed=z.object({tenantId:uuid}).strict().safeParse(Object.fromEntries(params));
- if(!uuid.safeParse(id).success||!parsed.success||params.getAll("tenantId").length!==1)return NextResponse.json({error:"Invalid order"},{status:400});
- const order=await posRefundOrder(db,parsed.data.tenantId,id);if(!order)return NextResponse.json({error:"Order not found"},{status:404});
- if(!(await posRefundAllowed(actor.id,order)))return NextResponse.json({error:"Forbidden"},{status:403});
- try{const state=await db.$transaction(tx=>posRefundState(tx,order),{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});return NextResponse.json({remainingLines:state.remainingLines,partialEligible:state.partialEligible,eligible:state.eligible,latest:state.latest,amount:order.total.toFixed(3),netAmount:state.net.toFixed(3),taxAmount:state.tax.toFixed(3),currency:order.currency,original:state.original?{id:state.original.id,number:state.original.number,reversed:!!state.original.reversal}:null,activeId:state.active?.id??null,count:state.refunds.length,refunds:state.refunds.slice(0,50)},{headers:{"Cache-Control":"private, no-store"}});}catch(error){return failure(error);}
+ if(!uuid.safeParse(id).success||!parsed.success||params.getAll("tenantId").length!==1)return apiJson({error:"Invalid order"},{status:400});
+ const order=await posRefundOrder(db,parsed.data.tenantId,id);if(!order)return apiJson({error:"Order not found"},{status:404});
+ if(!(await posRefundAllowed(actor.id,order)))return apiJson({error:"Forbidden"},{status:403});
+ try{const state=await db.$transaction(tx=>posRefundState(tx,order),{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});return apiJson({remainingLines:state.remainingLines,partialEligible:state.partialEligible,eligible:state.eligible,latest:state.latest,amount:order.total.toFixed(3),netAmount:state.net.toFixed(3),taxAmount:state.tax.toFixed(3),currency:order.currency,original:state.original?{id:state.original.id,number:state.original.number,reversed:!!state.original.reversal}:null,activeId:state.active?.id??null,count:state.refunds.length,refunds:state.refunds.slice(0,50)},{headers:{"Cache-Control":"private, no-store"}});}catch(error){return failure(error);}
 }
 export async function POST(request:Request,context:Context){
- const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
- const {id}=await context.params,parsed=schema.safeParse(await request.json().catch(()=>null));if(!uuid.safeParse(id).success||!parsed.success)return NextResponse.json({error:"Invalid refund"},{status:400});
- const {tenantId,requestId,entryDate,reference,reason,lines:choices}=parsed.data,order=await posRefundOrder(db,tenantId,id);if(!order)return NextResponse.json({error:"Order not found"},{status:404});
- if(!(await posRefundAllowed(actor.id,order,true)))return NextResponse.json({error:"Forbidden"},{status:403});
+ const actor=await currentUser();if(!actor)return apiJson({error:"Unauthenticated"},{status:401});
+ const {id}=await context.params,parsed=schema.safeParse(await request.json().catch(()=>null));if(!uuid.safeParse(id).success||!parsed.success)return apiJson({error:"Invalid refund"},{status:400});
+ const {tenantId,requestId,entryDate,reference,reason,lines:choices}=parsed.data,order=await posRefundOrder(db,tenantId,id);if(!order)return apiJson({error:"Order not found"},{status:404});
+ if(!(await posRefundAllowed(actor.id,order,true)))return apiJson({error:"Forbidden"},{status:403});
  try{const result=await db.$transaction(async tx=>{
   await lockDocument(tx,"pos",tenantId,id);
   const saved=await tx.posRefund.findUnique({where:{id:requestId},include:{lines:true,entry:{select:{id:true,number:true,entryDate:true}}}});
@@ -46,5 +46,5 @@ export async function POST(request:Request,context:Context){
   const entry=await tx.journalEntry.create({data:{tenantId,companyId:source.companyId,branchId:source.branchId,number:posRefundNumber(requestId),entryDate:new Date(`${entryDate}T00:00:00Z`),currency:source.currency,total:amount,description:`POS ${partial?"partial":"full"} refund ${source.number} ${reference}`,createdBy:actor.id,lines:{create:journalLines}},select:{id:true,number:true,entryDate:true}});
   const refund=await tx.posRefund.create({data:{id:requestId,tenantId,companyId:source.companyId,orderId:id,entryId:entry.id,originalEntryId:state.original.id,kind:partial?"PARTIAL":"FULL",...(partial?{lines:{create:partial.snapshots}}:{}),amount,netAmount,taxAmount,reference,reason,createdBy:actor.id},include:{lines:true,entry:{select:{id:true,number:true,entryDate:true}}}});
   await tx.auditLog.create({data:{tenantId,actorId:actor.id,entity:"PosRefund",entityId:requestId,action:"pos-refund.recorded",metadata:{orderId:id,journalId:entry.id,originalEntryId:state.original.id,amount:amount.toFixed(3),kind:partial?"PARTIAL":"FULL"}}});return{refund,replayed:false};
- },{timeout:15000,maxWait:10000});return NextResponse.json(result,{status:201});}catch(error){return failure(error);}
+ },{timeout:15000,maxWait:10000});return apiJson(result,{status:201});}catch(error){return failure(error);}
 }

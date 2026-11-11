@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import {TimeReview} from "./review";
 import {TimeReport} from "./report";
 type Project = { id: string; tenantId: string; companyId: string; branchId: string | null; status: string };
@@ -21,7 +21,7 @@ export function TimeWorkspace({ project, canManage, canApprove, locale }: { proj
     const sequence=++loadSequence.current;
     try {
       const response = await fetch(`/api/projects/${project.id}/time?${new URLSearchParams({ tenantId: project.tenantId, page: String(number),...(reviewState?{reviewState}:{}) })}`);
-      const data = await response.json(); if(sequence!==loadSequence.current)return; if (!response.ok) { setMessage(data.error); return; }
+      const data = await response.json(); if(sequence!==loadSequence.current)return; if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
       setEntries(data.entries); setMinutes(data.totalMinutes); setCount(data.count); setPage(number); setNext(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [project, t,reviewState]);
@@ -29,18 +29,18 @@ export function TimeWorkspace({ project, canManage, canApprove, locale }: { proj
     if (!canManage) return;
     try {
       const response = await fetch(`/api/employees?${new URLSearchParams({ tenantId: project.tenantId, companyId: project.companyId, page: String(number) })}`);
-      const data = await response.json(); if (!response.ok) { setMessage(data.error); return; }
+      const data = await response.json(); if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
       setEmployees((old) => number === 0 ? data.employees : [...old, ...data.employees]); setEmployeePage(data.nextPage);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [project, canManage, t]);
-  useEffect(() => { void load(); void loadEmployees();return()=>{loadSequence.current++;}; }, [load, loadEmployees]);
+  useEffect(() => { const loadSequenceRef = loadSequence; void load(); void loadEmployees();return()=>{loadSequenceRef.current++;}; }, [load, loadEmployees]);
   async function save(form: FormData) {
     setBusy(true); setMessage("");
     try {
       const response = await fetch(`/api/projects/${project.id}/time`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: project.tenantId, employeeId: form.get("employeeId"), workDate: form.get("workDate"),
           minutes: Number(form.get("minutes")), description: form.get("description") }) });
-      const data = await response.json(); setMessage(response.ok ? t("Time recorded", "تم تسجيل الوقت") : data.error);
+      const data = await response.json(); setMessage(response.ok ? t("Time recorded", "تم تسجيل الوقت") : presentApiError(t, data, response.status));
       if (response.ok) {setReportVersion(value=>value+1);await load();}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -49,7 +49,7 @@ export function TimeWorkspace({ project, canManage, canApprove, locale }: { proj
     try {
       const response = await fetch(`/api/projects/${project.id}/time`, { method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: project.tenantId, entryId, reason: form.get("reason") }) });
-      const data = await response.json(); setMessage(response.ok ? t("Entry voided", "تم إلغاء السجل") : data.error);
+      const data = await response.json(); setMessage(response.ok ? t("Entry voided", "تم إلغاء السجل") : presentApiError(t, data, response.status));
       if (response.ok) {setReportVersion(value=>value+1);await load(page);}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }

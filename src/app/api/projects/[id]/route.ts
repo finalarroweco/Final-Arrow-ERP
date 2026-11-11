@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -16,18 +16,18 @@ const schema = z.union([updateSchema, transitionSchema]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid project update" }, { status: 400 });
+    return apiJson({ error: "Invalid project update" }, { status: 400 });
   const { tenantId } = parsed.data;
   const project = await db.project.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  if (!project) return apiJson({ error: "Project not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: project.companyId,
     branchId: project.branchId ?? undefined, permission: "project:manage" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const action = parsed.data.action;
   const transitions = { activate: { from: ["PLANNED", "ON_HOLD"], to: "ACTIVE" },
     pause: { from: ["ACTIVE"], to: "ON_HOLD" },
@@ -50,6 +50,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.project.findUnique({ where: { id }, select: { id: true, name: true, description: true,
       dueDate: true, status: true } });
   });
-  if (!result) return NextResponse.json({ error: "Project status changed or open tasks remain" }, { status: 409 });
-  return NextResponse.json({ project: result });
+  if (!result) return apiJson({ error: "Project status changed or open tasks remain" }, { status: 409 });
+  return apiJson({ project: result });
 }

@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -16,26 +16,26 @@ class ReceiptConflict extends Error { constructor(message:string,public status=4
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid receipt: partial quantities require a request ID and whole units" }, { status: 400 });
+    return apiJson({ error: "Invalid receipt: partial quantities require a request ID and whole units" }, { status: 400 });
   const { tenantId, branchId, lines, requestId,paymentTerms } = parsed.data;
   const order = await db.purchaseOrder.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!order) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
+  if (!order) return apiJson({ error: "Purchase order not found" }, { status: 404 });
   const companyId = order.companyId;
   if (!(await canAccess({ userId: actor.id, tenantId, companyId,
     branchId: order.branchId ?? undefined, permission: "purchase-order:manage" })) ||
     !(await canAccess({ userId: actor.id, tenantId, companyId, branchId, permission: "inventory-stock:adjust" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (order.branchId && order.branchId !== branchId)
-    return NextResponse.json({ error: "Receiving branch does not match the order" }, { status: 409 });
+    return apiJson({ error: "Receiving branch does not match the order" }, { status: 409 });
   if (new Set(lines.map(line => line.orderLineId)).size !== lines.length)
-    return NextResponse.json({ error: "Map each submitted order line exactly once" }, { status: 400 });
+    return apiJson({ error: "Map each submitted order line exactly once" }, { status: 400 });
   const branch = await db.branch.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: branchId } }, select: { id: true } });
-  if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+  if (!branch) return apiJson({ error: "Branch not found" }, { status: 404 });
   const max = new Prisma.Decimal("999999999999999.999");
   try {
     const result = await db.$transaction(async tx => {
@@ -84,11 +84,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await tx.auditLog.create({data:{tenantId,actorId:actor.id,action:complete?"purchase-order.received":"purchase-order.partially_received",entity:"PurchaseOrder",entityId:id,metadata:{paymentTerms:paymentTerms??null,receiptId:receipt.id,branchId,complete}}});
       return {receipt:await tx.goodsReceipt.findUniqueOrThrow({where:{id:receipt.id},include:{lines:true}}),orderStatus:complete?"RECEIVED":"ISSUED",replayed:false};
     },{timeout:20000,maxWait:10000});
-    return NextResponse.json(result,{status:201});
+    return apiJson(result,{status:201});
   } catch(error) {
-    if (error instanceof ReceiptConflict) return NextResponse.json({error:error.message},{status:error.status});
+    if (error instanceof ReceiptConflict) return apiJson({error:error.message},{status:error.status});
     if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002","P2004","P2034"].includes(error.code))
-      return NextResponse.json({error:"Receipt conflict or stock limit reached. Reload and retry."},{status:409});
+      return apiJson({error:"Receipt conflict or stock limit reached. Reload and retry."},{status:409});
     throw error;
   }
 }

@@ -38,7 +38,7 @@ async function patch(path, body, cookie) {
 }
 
 test("invitation is single-use and a branch viewer sees only their company and branch", { timeout: 90000 }, async () => {
-  const server = spawn("./node_modules/.bin/next", ["start", "-p", "3217"], {
+  const server = spawn("./node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", "3217"], {
     env: { ...process.env, ALLOW_REGISTRATION: "true" },
     stdio: ["ignore", "ignore", "inherit"],
   });

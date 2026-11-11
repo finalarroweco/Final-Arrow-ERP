@@ -1,3 +1,4 @@
+import {moneyMillis,moneyText,roundRatio} from "./exact-money";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {VatConflict} from "./invoice-vat";
@@ -14,6 +15,6 @@ export async function returnPurchaseVat(tx:Prisma.TransactionClient,receiptId:st
  const saved=await tx.purchaseVat.findUnique({where:{returnId}});if(saved)return saved;
  const original=await tx.purchaseVat.findFirst({where:{receiptId,returnId:null}});if(!original)return null;
  const prior=await tx.purchaseVat.findMany({where:{receiptId,returnId:{not:null}},select:{details:true}}),originalLines=purchaseTaxDetails(original.details);
- const details=lines.map(l=>{const o=originalLines.find(d=>d.receiptLineId===l.receiptLineId);if(!o)throw new VatConflict("Original receipt VAT line is unavailable");const qty=new Prisma.Decimal(l.quantity),before=prior.flatMap(p=>purchaseTaxDetails(p.details)).filter(d=>d.receiptLineId===l.receiptLineId).reduce((n,d)=>n.plus(d.quantity),new Prisma.Decimal(0)),received=new Prisma.Decimal(o.quantity);if(before.plus(qty).gt(received))throw new VatConflict("Return exceeds original VAT quantity");const cumulative=(q:Prisma.Decimal)=>new Prisma.Decimal(o.tax).mul(q).div(received).toDecimalPlaces(3,Prisma.Decimal.ROUND_HALF_UP);return{...o,quantity:qty.toFixed(3),net:qty.mul(l.unitPrice).toFixed(3),tax:cumulative(before.plus(qty)).minus(cumulative(before)).toFixed(3)};});
+ const details=lines.map(l=>{const o=originalLines.find(d=>d.receiptLineId===l.receiptLineId);if(!o)throw new VatConflict("Original receipt VAT line is unavailable");const qty=new Prisma.Decimal(l.quantity),before=prior.flatMap(p=>purchaseTaxDetails(p.details)).filter(d=>d.receiptLineId===l.receiptLineId).reduce((n,d)=>n.plus(d.quantity),new Prisma.Decimal(0)),received=new Prisma.Decimal(o.quantity);if(before.plus(qty).gt(received))throw new VatConflict("Return exceeds original VAT quantity");const cumulative=(q:Prisma.Decimal)=>roundRatio(moneyMillis(o.tax)*moneyMillis(q.toFixed(3)),moneyMillis(received.toFixed(3)));return{...o,quantity:qty.toFixed(3),net:qty.mul(l.unitPrice).toFixed(3),tax:moneyText(cumulative(before.plus(qty))-cumulative(before))};});
  return{...sumPurchaseTax(details),details:details as unknown as Prisma.JsonValue,inputAccountId:original.inputAccountId,supplierName:original.supplierName,supplierTaxNumber:original.supplierTaxNumber,reference:original.reference};
 }

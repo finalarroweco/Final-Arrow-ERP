@@ -1,5 +1,5 @@
 import {settlementNumber} from "./supplier-settlement";
-import {Prisma} from "@prisma/client";
+import {moneyMillis,moneyText} from "./exact-money";
 import {z} from "zod";
 import {db} from "./db";
 import {canAccess,readableCompanyPermissions} from "./access";
@@ -32,20 +32,20 @@ export async function supplierStatement(userId:string,raw:unknown){
   const entries=sources.size?await tx.journalEntry.findMany({where:{tenantId,companyId,entryDate:{lte:end},OR:[{number:{in:[...sources.keys()]}},{original:{number:{in:[...sources.keys()]}}}]},select:{id:true,number:true,entryDate:true,createdAt:true,currency:true,branchId:true,original:{select:{number:true}},lines:{select:{debit:true,credit:true,account:{select:{type:true}}}}},take:20001}):[];
   if(entries.length>20000)throw new SupplierStatementError("Statement exceeds 20000 historical journals.",413);
   entries.sort((a,b)=>a.entryDate.getTime()-b.entryDate.getTime()||a.createdAt.getTime()-b.createdAt.getTime()||a.id.localeCompare(b.id));
-  const groups=new Map<string,{currency:string;opening:Prisma.Decimal;increase:Prisma.Decimal;decrease:Prisma.Decimal;closing:Prisma.Decimal}>();
-  const group=(currency:string)=>{let g=groups.get(currency);if(!g){g={currency,opening:new Prisma.Decimal(0),increase:new Prisma.Decimal(0),decrease:new Prisma.Decimal(0),closing:new Prisma.Decimal(0)};groups.set(currency,g);}return g;};
+  const groups=new Map<string,{currency:string;opening:bigint;increase:bigint;decrease:bigint;closing:bigint}>();
+  const group=(currency:string)=>{let g=groups.get(currency);if(!g){g={currency,opening:BigInt(0),increase:BigInt(0),decrease:BigInt(0),closing:BigInt(0)};groups.set(currency,g);}return g;};
   const rows=[];
   for(const e of entries){
    const source=sources.get(e.original?.number??e.number);if(!source||source.branchId!==e.branchId)continue;
-   const change=e.lines.filter(l=>l.account.type==="LIABILITY").reduce((n,l)=>n.plus(l.credit).minus(l.debit),new Prisma.Decimal(0));
-   const g=group(e.currency);g.closing=g.closing.plus(change);
-   if(e.entryDate<start){g.opening=g.opening.plus(change);continue;}
-   const increase=change.gt(0)?change:new Prisma.Decimal(0),decrease=change.lt(0)?change.negated():new Prisma.Decimal(0);
-   g.increase=g.increase.plus(increase);g.decrease=g.decrease.plus(decrease);
-   rows.push({id:e.id,number:e.number,date:e.entryDate.toISOString().slice(0,10),currency:e.currency,...source,reversal:!!e.original,increase:increase.toFixed(3),decrease:decrease.toFixed(3),balance:g.closing.toFixed(3)});
+   const change=e.lines.filter(l=>l.account.type==="LIABILITY").reduce((n,l)=>n+moneyMillis(l.credit.toFixed(3))-moneyMillis(l.debit.toFixed(3)),BigInt(0));
+   const g=group(e.currency);g.closing+=change;
+   if(e.entryDate<start){g.opening+=change;continue;}
+   const increase=change>BigInt(0)?change:BigInt(0),decrease=change<BigInt(0)?-change:BigInt(0);
+   g.increase+=increase;g.decrease+=decrease;
+   rows.push({id:e.id,number:e.number,date:e.entryDate.toISOString().slice(0,10),currency:e.currency,...source,reversal:!!e.original,increase:moneyText(increase),decrease:moneyText(decrease),balance:moneyText(g.closing)});
    if(rows.length>5000)throw new SupplierStatementError("Statement exceeds 5000 period journals. Select a shorter period.",413);
   }
-  return {supplier,from,to,branchId:branchId??null,format,rows,summary:[...groups.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(g=>({currency:g.currency,opening:g.opening.toFixed(3),increase:g.increase.toFixed(3),decrease:g.decrease.toFixed(3),closing:g.closing.toFixed(3)}))};
+  return {supplier,from,to,branchId:branchId??null,format,rows,summary:[...groups.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(g=>({currency:g.currency,opening:moneyText(g.opening),increase:moneyText(g.increase),decrease:moneyText(g.decrease),closing:moneyText(g.closing)}))};
  },{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
 }
 const cell=(v:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(v)?`'${v}`:v).replaceAll('"','""')}"`;

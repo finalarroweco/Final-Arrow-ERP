@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import { createHash } from "node:crypto";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSession, currentUser, hashPassword } from "@/lib/auth";
 import {lockTenant} from "@/lib/role-management";
@@ -13,19 +13,19 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid invitation" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid invitation" }, { status: 400 });
   const actor = await currentUser();
   const tokenHash = createHash("sha256").update(parsed.data.token).digest("hex");
   const invitation = await db.invitation.findUnique({ where: { tokenHash } });
   if (!invitation || invitation.acceptedAt || invitation.revokedAt || invitation.expiresAt <= new Date())
-    return NextResponse.json({ error: "Invitation expired or used" }, { status: 410 });
+    return apiJson({ error: "Invitation expired or used" }, { status: 410 });
   if (actor && actor.email !== invitation.email)
-    return NextResponse.json({ error: "Sign in with the invited email" }, { status: 403 });
+    return apiJson({ error: "Sign in with the invited email" }, { status: 403 });
   if (!actor) {
     const existing = await db.user.findUnique({ where: { email: invitation.email }, select: { id: true } });
-    if (existing) return NextResponse.json({ error: "Sign in to accept this invitation" }, { status: 401 });
+    if (existing) return apiJson({ error: "Sign in to accept this invitation" }, { status: 401 });
     if (!parsed.data.name || !parsed.data.password)
-      return NextResponse.json({ error: "Name and password required" }, { status: 400 });
+      return apiJson({ error: "Name and password required" }, { status: 400 });
   }
   try {
     const userId = await db.$transaction(async (tx) => {
@@ -62,12 +62,12 @@ export async function POST(request: Request) {
       return user.id;
     });
     if (!actor) await createSession(userId);
-    return NextResponse.json({ ok: true });
+    return apiJson({ ok: true });
   } catch (error) {
     if (error instanceof Error && ["Invitation already used", "Membership suspended"].includes(error.message))
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return apiJson({ error: error.message }, { status: 409 });
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Account already exists; sign in first" }, { status: 409 });
+      return apiJson({ error: "Account already exists; sign in first" }, { status: 409 });
     throw error;
   }
 }

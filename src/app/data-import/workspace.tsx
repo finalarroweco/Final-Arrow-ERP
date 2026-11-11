@@ -1,14 +1,14 @@
 "use client";
 import styles from "./import.module.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { pendingCatalogImport as pendingSchema, type PendingCatalogImport as Pending } from "@/lib/catalog-import-input";
 import { catalogHeaders, catalogTemplate, type CatalogKind, type CatalogIssue, type CatalogRecord } from "@/lib/catalog-csv";
-import { translate, type Locale } from "@/lib/locale";
+import { LocalizedPresentationError, presentCaughtError, presentApiError, translate, type Locale } from "@/lib/locale";
 export type ImportOption = { tenantId: string; companyId: string; branchId: string | null; label: string; kinds: CatalogKind[] };
 type Preview = { records: CatalogRecord[]; errors: CatalogIssue[]; digest: string; rowCount: number; canCommit: boolean };
 type Batch = { id: string; kind: string; rowCount: number; createdAt: string; createdBy: string };
 export function ImportWorkspace({ options, locale, actorId }: { options: ImportOption[]; locale: Locale; actorId: string }) {
- const t = (en: string, ar: string) => translate(locale, en, ar);
+ const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
  const [scopeIndex, setScopeIndex] = useState(0), [kind, setKind] = useState<CatalogKind>(options[0]?.kinds[0] ?? "CUSTOMER"), [csv, setCsv] = useState("");
  const [preview, setPreview] = useState<Preview | null>(null), [pending, setPending] = useState<Pending | null>(null), [restored, setRestored] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
  const [batches, setBatches] = useState<Batch[]>([]), [page, setPage] = useState(0), [nextPage, setNextPage] = useState<number | null>(null), [historyError, setHistoryError] = useState("");
@@ -22,16 +22,16 @@ export function ImportWorkspace({ options, locale, actorId }: { options: ImportO
   if (!scope || !restored) return;
   const controller = new AbortController(); setHistoryError(""); setBatches([]); setNextPage(null);
   const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, kind, page: String(page), ...(scope.branchId ? { branchId: scope.branchId } : {}) });
-  fetch("/api/catalog-imports?" + query, { signal: controller.signal, cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); if (!controller.signal.aborted) { setBatches(data.batches); setNextPage(data.nextPage); } }).catch(error => { if (!controller.signal.aborted) setHistoryError(String(error)); });
+  fetch("/api/catalog-imports?" + query, { signal: controller.signal, cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new LocalizedPresentationError(presentApiError(t, data, response.status)); if (!controller.signal.aborted) { setBatches(data.batches); setNextPage(data.nextPage); } }).catch(error => { if (!controller.signal.aborted) setHistoryError(presentCaughtError(t, error)); });
   return () => controller.abort();
- }, [scope, kind, page, restored]);
+ }, [scope, kind, page, restored, t]);
  if (!scope) return <section className={`panel ${styles.panel}`}><p>{t("No scope allows both reading and creating these records.", "لا يوجد نطاق يسمح بقراءة هذه السجلات وإنشائها معًا.")}</p></section>;
  function changed() { generation.current++; setPreview(null); setMessage(""); setPage(0); }
  function remember(value: Pending | null) { setPending(value); try { if (value) sessionStorage.setItem(key, JSON.stringify(value)); else sessionStorage.removeItem(key); } catch { if (value) setMessage(t("Browser storage is unavailable; keep this tab open to retry the same request.", "التخزين في المتصفح غير متاح؛ أبقِ هذه الصفحة مفتوحة لإعادة الطلب نفسه.")); } }
  async function previewFile() {
   const current = ++generation.current; setBusy(true); setMessage(""); setPreview(null);
-  try { const response = await fetch("/api/catalog-imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenantId: scope.tenantId, companyId: scope.companyId, branchId: scope.branchId, kind, csv, mode: "preview" }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); if (current === generation.current) setPreview(data); }
-  catch (error) { if (current === generation.current) setMessage(String(error)); } finally { setBusy(false); }
+  try { const response = await fetch("/api/catalog-imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenantId: scope.tenantId, companyId: scope.companyId, branchId: scope.branchId, kind, csv, mode: "preview" }) }); const data = await response.json(); if (!response.ok) throw new LocalizedPresentationError(presentApiError(t, data, response.status)); if (current === generation.current) setPreview(data); }
+  catch (error) { if (current === generation.current) setMessage(presentCaughtError(t, error)); } finally { setBusy(false); }
  }
  async function commit() {
   if (!pending && !preview?.canCommit) return;
@@ -40,12 +40,12 @@ export function ImportWorkspace({ options, locale, actorId }: { options: ImportO
   try {
    const { version, ...body } = value; void version;
    const response = await fetch("/api/catalog-imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json();
-   if (!response.ok) { if (response.status < 500) { remember(null); setPreview(null); } throw new Error(data.error); }
+   if (!response.ok) { if (response.status < 500) { remember(null); setPreview(null); } throw new LocalizedPresentationError(presentApiError(t, data, response.status)); }
    remember(null); setPreview(null); setCsv(""); if (fileRef.current) fileRef.current.value = "";
    setMessage(t("Import saved", "تم حفظ الاستيراد") + `: ${data.batch.rowCount} · ${data.batch.id}`); setPage(0);
    const query = new URLSearchParams({ tenantId: value.tenantId, companyId: value.companyId, kind: value.kind, ...(value.branchId ? { branchId: value.branchId } : {}) });
-   try { const r = await fetch("/api/catalog-imports?" + query, { cache: "no-store" }); const history = await r.json(); if (r.ok) { setBatches(history.batches); setNextPage(history.nextPage); } else setHistoryError(history.error); } catch { setHistoryError(t("Reload to refresh history", "أعد تحميل الصفحة لتحديث السجل")); }
-  } catch (error) { setMessage(String(error)); } finally { setBusy(false); }
+   try { const r = await fetch("/api/catalog-imports?" + query, { cache: "no-store" }); const history = await r.json(); if (r.ok) { setBatches(history.batches); setNextPage(history.nextPage); } else setHistoryError(presentApiError(t,history,r.status)); } catch { setHistoryError(t("Reload to refresh history", "أعد تحميل الصفحة لتحديث السجل")); }
+  } catch (error) { setMessage(presentCaughtError(t, error)); } finally { setBusy(false); }
  }
  function template() { const url = URL.createObjectURL(new Blob(["\uFEFF" + catalogTemplate(kind)], { type: "text/csv;charset=utf-8" })); const a = document.createElement("a"); a.href = url; a.download = kind.toLowerCase() + "-template.csv"; a.click(); URL.revokeObjectURL(url); }
  return <>

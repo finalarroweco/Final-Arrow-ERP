@@ -2,14 +2,14 @@
 
 import {StockReservations} from "./reservations";
 import {StockReport} from "./report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 type Option = { tenantId: string; companyId: string; branchId: string; label: string; canAdjust: boolean };
 type Item = { id: string; sku: string; name: string; unit: string };
 type Balance = { itemId: string; quantity: string; reservedQuantity:string;availableQuantity:string;
   item: { sku: string; name: string; unit: string; archivedAt: string | null } };
-type Movement = { returnId:string|null; hasReturns:boolean; receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT" | "PURCHASE_RETURN"; delta: string;
+type Movement = { transferId:string|null; returnId:string|null; hasReturns:boolean; receiptId: string | null; reversed: boolean; isReversal: boolean; id: string; type: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "PURCHASE_RECEIPT" | "PURCHASE_RETURN" | "TRANSFER_IN" | "TRANSFER_OUT" | "SALES_DELIVERY" | "SALES_RETURN" | "SALES_CORRECTION_IN" | "SALES_CORRECTION_OUT"; delta: string;
   reason: string; createdAt: string; balance: { item: Item } };
 
 export function StockWorkspace({ options, locale,actorId }: { actorId:string;options: Option[]; locale: Locale }) {
@@ -33,7 +33,7 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
     const response = await fetch(`/api/inventory/stock?${query}`);
     const data = await response.json();
     if (request !== requestNumber.current) return;
-    if (!response.ok) { setError(data.error ?? t("Could not load stock", "تعذر تحميل المخزون")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setItems(data.items); setBalances(data.balances); setMovements(data.movements); setError("");
     } catch { if (request === requestNumber.current) setError(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
@@ -50,7 +50,7 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
           itemId: values.get("itemId"), action: values.get("action"), quantity: values.get("quantity"),
           reason: values.get("reason") }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not adjust stock", "تعذر تعديل المخزون"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else {setReportVersion(value=>value+1); form.reset(); await load(selected); }
     } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -61,7 +61,7 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
       const response = await fetch(`/api/inventory/movements/${id}/reverse`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, reason: values.get("reason") }) });
       const data = await response.json();
-      if (!response.ok) { setError(data.error ?? t("Could not reverse movement", "تعذر عكس الحركة")); return; }
+      if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
       setReportVersion(value => value + 1); await load(selected);
     } catch { setError(t("Connection failed. Reload stock before retrying.", "فشل الاتصال. أعد تحميل المخزون قبل إعادة المحاولة.")); }
     finally { setBusy(false); }
@@ -90,12 +90,13 @@ export function StockWorkspace({ options, locale,actorId }: { actorId:string;opt
     <h2>{t("Recent movements", "الحركات الأخيرة")}</h2><p>{t("A reversal records the full opposite quantity today, keeping the original movement. Receipt reversals affect stock only; supplier credits and refunds remain separate.", "يسجّل العكس كامل الكمية المقابلة بتاريخ اليوم مع الاحتفاظ بالحركة الأصلية. عكس الاستلام يؤثر على المخزون فقط؛ إشعارات المورد والمبالغ المستردة منفصلة.")}</p><div className="customer-list">{movements.map((movement) => <article key={movement.id}>
       <div><h3>{movement.balance.item.name}</h3><p>{movement.reason} · {new Date(movement.createdAt).toLocaleString()}</p></div>
       <strong>{movement.delta} {movement.balance.item.unit}</strong>
+      {movement.transferId && <a href={`/inventory/transfers/${movement.transferId}`}>{t("View stock transfer", "عرض تحويل المخزون")}</a>}
       {movement.receiptId && <a href={`/purchasing/receipts/${movement.receiptId}`}>{t("View goods receipt", "عرض مستند الاستلام")}</a>}
       {movement.returnId && <a href={`/purchasing/returns/${movement.returnId}`}>{t("View stock return", "عرض مرتجع المخزون")}</a>}
       {movement.hasReturns && <p>{t("Receipt has stock returns", "الاستلام مرتبط بمرتجعات مخزون")}</p>}
       {movement.reversed && <p>{t("Reversed", "تم عكسها")}</p>}
       {movement.isReversal && <p>{t("Correction movement", "حركة تصحيحية")}</p>}
-      {scope.canAdjust && !movement.reversed && !movement.isReversal && !movement.hasReturns && movement.type!=="PURCHASE_RETURN" && <details><summary>{t("Reverse full movement", "عكس كامل الحركة")}</summary>
+      {scope.canAdjust && !movement.type.startsWith("SALES_") && !movement.reversed && !movement.isReversal && !movement.hasReturns && movement.type!=="PURCHASE_RETURN" && movement.type!=="TRANSFER_IN" && movement.type!=="TRANSFER_OUT" && <details><summary>{t("Reverse full movement", "عكس كامل الحركة")}</summary>
         <form className="formrow" onSubmit={event => void reverse(event, movement.id)}>
           <label>{t("Reason", "السبب")} <input name="reason" required minLength={3} maxLength={150}/></label>
           <button disabled={busy}>{t("Record opposite movement", "تسجيل الحركة المقابلة")}</button>

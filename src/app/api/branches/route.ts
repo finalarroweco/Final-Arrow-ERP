@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -13,17 +13,17 @@ const schema = z.object({
 
 export async function GET(request: Request) {
   const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!user) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
-  if (!tenantId.success || !companyId.success) return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+  if (!tenantId.success || !companyId.success) return apiJson({ error: "Invalid scope" }, { status: 400 });
   const membership = await db.membership.findUnique({
     where: { tenantId_userId: { tenantId: tenantId.data, userId: user.id } },
     select: { status: true },
   });
   if (membership?.status !== "ACTIVE")
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const candidates = await db.branch.findMany({
     where: { tenantId: tenantId.data, companyId: companyId.data },
     select: { id: true, name: true, code: true },
@@ -33,19 +33,19 @@ export async function GET(request: Request) {
     await canAccess({ userId: user.id, tenantId: tenantId.data, companyId: companyId.data,
       branchId: branch.id, permission: "branch:read" }) ? branch : null
   ))).filter((branch) => branch !== null);
-  return NextResponse.json({ branches });
+  return apiJson({ branches });
 }
 
 export async function POST(request: Request) {
   const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!user) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid branch" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid branch" }, { status: 400 });
   const { tenantId, companyId, ...data } = parsed.data;
   if (!(await canAccess({ userId: user.id, tenantId, companyId, permission: "branch:create" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const company = await db.company.findUnique({ where: { tenantId_id: { tenantId, id: companyId } }, select: { id: true } });
-  if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+  if (!company) return apiJson({ error: "Company not found" }, { status: 404 });
   try {
     const branch = await db.$transaction(async (tx) => {
       const branch = await tx.branch.create({ data: { tenantId, companyId, ...data } });
@@ -54,10 +54,10 @@ export async function POST(request: Request) {
       });
       return branch;
     });
-    return NextResponse.json({ branch }, { status: 201 });
+    return apiJson({ branch }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Branch code already in use" }, { status: 409 });
+      return apiJson({ error: "Branch code already in use" }, { status: 409 });
     throw error;
   }
 }

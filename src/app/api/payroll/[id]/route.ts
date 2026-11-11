@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -11,14 +11,14 @@ const schema = z.union([
   z.object({ tenantId: uuid, action: z.literal("void"), reason: z.string().trim().min(3).max(500) }).strict(),
 ]);
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const actor = await currentUser(); if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params; const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!uuid.safeParse(id).success || !parsed.success) return NextResponse.json({ error: "Invalid payroll action" }, { status: 400 });
+  if (!uuid.safeParse(id).success || !parsed.success) return apiJson({ error: "Invalid payroll action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
   const entry = await db.payrollEntry.findUnique({ where: { tenantId_id: { tenantId, id } }, select: { companyId: true, branchId: true } });
-  if (!entry) return NextResponse.json({ error: "Payroll not found" }, { status: 404 });
+  if (!entry) return apiJson({ error: "Payroll not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: entry.companyId, branchId: entry.branchId ?? undefined, permission: `payroll:${action}` })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const data = parsed.data;
   const result = await db.$transaction(async (tx) => {
     await lockDocument(tx,"payroll",tenantId,id);
@@ -36,7 +36,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entity: "PayrollEntry", entityId: id } });
     return tx.payrollEntry.findUnique({ where: { id } });
   });
-  if (result && "ledgerBlocked" in result) return NextResponse.json({error:"Reverse the linked payroll accrual journal before voiding"},{status:409});
-  if (!result) return NextResponse.json({ error: "Payroll status changed or action unavailable" }, { status: 409 });
-  return NextResponse.json({ entry: result });
+  if (result && "ledgerBlocked" in result) return apiJson({error:"Reverse the linked payroll accrual journal before voiding"},{status:409});
+  if (!result) return apiJson({ error: "Payroll status changed or action unavailable" }, { status: 409 });
+  return apiJson({ entry: result });
 }

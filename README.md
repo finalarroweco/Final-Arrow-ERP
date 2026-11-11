@@ -1,6 +1,6 @@
 # Final Arrow ERP
 
-AI-powered modular ERP platform by Final Arrow.
+Modular ERP platform by Final Arrow, with AI and automation in the product roadmap.
 
 ## Vision
 Build a scalable business operating system with:
@@ -26,20 +26,32 @@ Build a scalable business operating system with:
 ## Initial Architecture
 Tenant → Company → Branch → Department → User
 
-## Proposed Stack
+## Stack and planned infrastructure
 - Next.js
 - TypeScript
 - PostgreSQL
 - Prisma
-- Redis / background jobs
-- Object storage
-- AI service layer
+- Redis / background jobs (planned)
+- Object storage (planned)
+- AI service layer (planned)
 
 ## Project Status
-The authenticated application is deployed at https://final-arrow-erp.vercel.app/dashboard with a dedicated PostgreSQL database. It includes scoped organization/team access, CRM and sales, internal invoices with optional Oman VAT, partial purchase receipts/stock returns, customer and supplier settlements, bank reconciliation, inventory, projects/time, HR/payroll, helpdesk, POS/kitchen, source-linked ledger posting, financial reports and period locks. Arabic/English interfaces and offline account recovery are available; public registration is closed.
+The documented hosted application is https://final-arrow-erp.vercel.app/dashboard. Its deployed revision and database migration state must be verified separately; features on this review branch are not evidence that they are live. The repository implements scoped organization/team access, CRM and sales, internal invoices and purchase/expense/POS accounting with optional Oman VAT, supplier RFQs with versioned offer comparison and explicit draft purchase-order conversion, partial purchase receipts/stock returns, completed branch stock transfers with paired corrections, manual sales deliveries and usable-stock returns with explicit full-hold delivery, customer and supplier settlements, explicit partial/split bank reconciliation with retained internal snapshots and safe request recovery, manual item/branch reorder policies and current available-stock shortage reports, inventory, projects/time, HR/payroll, helpdesk, POS/kitchen, source-linked ledger posting, financial reports and period locks. Arabic/English interfaces and offline account recovery are available; public registration is closed.
 
-`/erp-preview-v6.html` is a separate sample-data walkthrough and does not save records or receive application updates automatically. Purchase/expense/POS VAT, statutory tax documents, email verification/recovery, external payment/device integrations and operational acceptance remain unfinished. The product is a draft ERP foundation, not a completed regulatory accounting system.
+`/erp-preview-v6.html` is a separate sample-data walkthrough and does not save records or receive application updates automatically. CSV customer/supplier/item imports, private saved balance/aging and document-register report filters, internal plain-text documents with immutable revisions and archive/restore, a manual customer subscription register with explicit status/review dates, separately configured recurring price plans/calendars with explicit DRAFT-invoice generation and linked corrections, configured multi-stage purchase/expense/leave approval policies, company payment-term templates, audited invoice/receipt payment-term amendments, and explicit sales-order-linked manual stock holds are implemented. Statutory tax documents/filing, inclusive tax pricing, email verification/recovery, external payment/device integrations and operational acceptance remain unfinished. The product is a draft ERP foundation, not a completed regulatory accounting system.
 
 See [implementation notes](docs/IMPLEMENTATION.md) for local setup and current limits.
 See [release status](docs/RELEASE_STATUS.md) for the module inventory and production gates.
+See [review handoff](docs/REVIEW_HANDOFF.md) for remaining decisions and the controlled next step.
+See [release acceptance](docs/RELEASE_ACCEPTANCE.md) for evidence and sign-off required before live use.
 See [staging setup](docs/STAGING_SETUP.md) for database/hosting setup and live review limits.
+
+New bank-statement import clients must send `X-Expected-Actor-Id`. Current workspaces bind private reads to their mounted operator and verify pending import outcomes. Actorless legacy import storage remains quarantined; an `UNKNOWN` outcome is not safe abandonment. See [import recovery](docs/BANK_STATEMENT_IMPORT_RECOVERY.md) and [mounted read identity](docs/MOUNTED_WORKSPACE_READ_IDENTITY.md).
+
+Actor-bound pending bank imports support explicit permanent abandonment with immutable UUID fences and exact terminal receipts. It never reverses a saved statement or changes money. Keep migration79 guards and tombstones on application rollback; see [the recovery contract](docs/BANK_STATEMENT_IMPORT_ABANDONMENT.md).
+
+Private, explicitly configured [operational alerts](docs/PRIVATE_ALERTS.md) cover ticket deadlines, manual subscription review dates and configured stock shortages. They are evaluated only when requested in-app, with no background scheduler or external delivery.
+
+### Controlled automation
+
+The opt-in [durable automation engine](docs/AUTOMATION.md) supports finite, scoped recurring DRAFT billing and private alert evaluations at `/automation`. Jobs begin paused; the separately protected runner is disabled and unconfigured by default. No scheduler, credentials, provider or external messages are activated by this release.

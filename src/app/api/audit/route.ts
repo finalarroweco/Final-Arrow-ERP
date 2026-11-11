@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -9,12 +9,12 @@ const querySchema = z.object({ ...auditFilters, page: z.coerce.number().int().mi
   .refine(value => !value.from || !value.to || value.from <= value.to);
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = querySchema.safeParse(queryInput(new URL(request.url).searchParams, [...auditFilterKeys, "page"]));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid or duplicate audit filters" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid or duplicate audit filters" }, { status: 400 });
   if (!(await canAccess({ userId: actor.id, tenantId: parsed.data.tenantId, permission: "user:manage" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const entries = await auditRows(parsed.data, 51, parsed.data.page * 50);
-  return NextResponse.json({ entries: entries.slice(0, 50), timeZone: parsed.data.timeZone,
+  return apiJson({ entries: entries.slice(0, 50), timeZone: parsed.data.timeZone,
     nextPage: entries.length > 50 ? parsed.data.page + 1 : null }, { headers: { "Cache-Control": "private, no-store" } });
 }

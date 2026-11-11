@@ -18,6 +18,8 @@ export function auditWhere({ tenantId, action, entity, entityId, actorId, from, 
   const offset = timeZone === "Asia/Muscat" ? 14400000 : 0;
   return {
     tenantId,
+    // Source-private records and workflow actors/identifiers stay in reauthorized registers.
+    AND: [{ entity: { notIn: ["ApprovalCommand", "SalesStockDocument", "SalesStockCancellation", "InternalTextDocument", "InternalTextDocumentEvent", "InternalTextDocumentRequest", "ManualSubscription", "ManualSubscriptionRevision", "ManualSubscriptionRequest", "InventoryReorderPolicy", "InventoryReorderRevision", "InventoryReorderRequest", "BillingPlan", "BillingPlanRevision", "BillingSubscription", "BillingSubscriptionRevision", "BillingRequest", "ServiceInvoiceSource"] } }],
     ...(action ? { action: { contains: action, mode: "insensitive" } } : {}),
     ...(entity ? { entity: { contains: entity, mode: "insensitive" } } : {}),
     ...(entityId ? { entityId } : {}),

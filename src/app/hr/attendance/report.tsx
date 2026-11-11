@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 
 type Option = { tenantId: string; companyId: string; branches: { id: string; name: string }[] };
 type Employee = { id: string; code: string; fullName: string; branchId: string | null };
@@ -25,7 +25,7 @@ export function AttendanceReport({ scope, employees, locale }: { scope: Option; 
     setBusy(true); setMessage("");
     try {
       const response = await fetch(`/api/attendance/report?${query(format)}`, { cache: "no-store" });
-      if (!response.ok) { const data = await response.json(); setMessage(data.error ?? t("Report failed", "تعذر إعداد التقرير")); return; }
+      if (!response.ok) { const data = await response.json(); setMessage(presentApiError(t, data, response.status)); return; }
       if (format === "json") setResult(await response.json());
       else {
         const url = URL.createObjectURL(await response.blob());

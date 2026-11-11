@@ -1,6 +1,7 @@
 "use client";
+import {sourceLink} from "@/app/approvals/workflows/read-input";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useState } from "react";
 
 type Rights = { canCreate: boolean; canDecide: boolean };
@@ -28,7 +29,7 @@ export function LeaveWorkspace({ options, locale }: { options: Option[]; locale:
     const query = new URLSearchParams({ tenantId: option.tenantId, companyId: option.companyId, page: String(number) });
     const response = await fetch(`/api/leave-requests?${query}`);
     const data = await response.json();
-    if (!response.ok) { setMessage(data.error ?? t("Could not load leave requests", "تعذر تحميل طلبات الإجازة")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setRequests(data.requests); setPage(number); setNextPage(data.nextPage);
   }, [options, t]);
   const loadEmployees = useCallback(async (index: number, number = 0) => {
@@ -47,7 +48,7 @@ export function LeaveWorkspace({ options, locale }: { options: Option[]; locale:
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json();
-      setMessage(response.ok ? success : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? success : presentApiError(t, data, response.status));
       if (response.ok) await load(selected, number);
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -87,6 +88,7 @@ export function LeaveWorkspace({ options, locale }: { options: Option[]; locale:
       const rights = leave.branchId ? scope.branches.find((branch) => branch.id === leave.branchId) : scope.companyRights;
       return <article key={leave.id} className="card">
         <strong>{leave.employee.fullName}</strong> · {leave.employee.code}
+        <p><a href={sourceLink({tenantId:scope.tenantId,companyId:scope.companyId,branchId:leave.branchId},"LEAVE",leave.id)}>{t("Approval workflow / current state", "مسار الموافقة / الحالة الحالية")}</a></p>
         <p>{t(leave.type, ({ ANNUAL: "سنوية", SICK: "مرضية", UNPAID: "غير مدفوعة", OTHER: "أخرى" })[leave.type])} · {leave.startDate.slice(0, 10)} {t("to", "إلى")} {leave.endDate.slice(0, 10)} · {t(leave.status, ({ PENDING: "معلّقة", APPROVED: "مقبولة", REJECTED: "مرفوضة", CANCELLED: "ملغاة" })[leave.status])} · {leave.branchId ? scope.branches.find((branch) => branch.id === leave.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>
         {leave.note && <p>{leave.note}</p>}{leave.decisionNote && <p>{t("Decision note:", "ملاحظة القرار:")} {leave.decisionNote}</p>}
         {rights?.canDecide && leave.status === "PENDING" && <button disabled={busy}

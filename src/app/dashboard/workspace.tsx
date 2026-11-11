@@ -1,6 +1,6 @@
 "use client";
 
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Option = { tenantId: string; companyId: string; label: string };
@@ -27,7 +27,7 @@ export function DashboardWorkspace({ options, locale }: { options: Option[]; loc
       const data = await response.json();
       if (currentRequest !== requestNumber.current) return;
       if (!response.ok) {
-        setError(data.error ?? t("Could not load dashboard", "تعذر تحميل لوحة المعلومات"));
+        setError(presentApiError(t, data, response.status));
         return;
       }
       setSummary(data);

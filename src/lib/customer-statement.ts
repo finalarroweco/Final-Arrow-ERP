@@ -1,4 +1,5 @@
-import {Prisma} from "@prisma/client";
+import {invoiceSourceWhere} from "./invoice-source";
+import {moneyMillis,moneyText} from "./exact-money";
 import {z} from "zod";
 import {db} from "./db";
 import {canAccess,readableCompanyPermissions} from "./access";
@@ -11,15 +12,15 @@ export class CustomerStatementError extends Error{constructor(message:string,pub
 export async function customerStatement(userId:string,raw:unknown){
  const parsed=filters.safeParse(raw);if(!parsed.success)throw new CustomerStatementError("Invalid statement filters (maximum 366 days)",400);
  const {tenantId,companyId,customerId,branchId,from,to,format}=parsed.data;
- const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["invoice:read","order:read","ledger:read"]});
+ const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["invoice:read","order:read","billing-subscription:read","project:read","project-time:read","project-time-invoice:read","project-milestone:read","ledger:read"]});
  const invoiceRights=rights["invoice:read"],orderRights=rights["order:read"],ledger=rights["ledger:read"];
- if(invoiceRights===false||orderRights===false||ledger===false)throw new CustomerStatementError("Forbidden",403);
+ if(invoiceRights===false||(orderRights===false&&rights["billing-subscription:read"]===false&&rights["project-time-invoice:read"]===false&&rights["project-milestone:read"]===false)||ledger===false)throw new CustomerStatementError("Forbidden",403);
  const branches=invoiceRights===null?ledger:ledger===null?invoiceRights:invoiceRights.filter(id=>ledger.includes(id));
  if(branchId&&branches!==null&&!branches.includes(branchId))throw new CustomerStatementError("Forbidden",403);
  const customer=await db.customer.findFirst({where:{id:customerId,tenantId,companyId},select:{id:true,code:true,displayName:true,branchId:true,archivedAt:true}});
  if(!customer)throw new CustomerStatementError("Customer not found",404);
  if(!(await canAccess({userId,tenantId,companyId,branchId:customer.branchId??undefined,permission:"customer:read"})))throw new CustomerStatementError("Forbidden",403);
- const sourceWhere={tenantId,companyId,customerId,...(branchId?{branchId}:branches===null?{}:{branchId:{in:branches}}),...(orderRights===null?{}:{order:{branchId:{in:orderRights}}})};
+ const sourceWhere={tenantId,companyId,customerId,...(branchId?{branchId}:branches===null?{}:{branchId:{in:branches}}),...invoiceSourceWhere(orderRights,rights["billing-subscription:read"],rights["project:read"],rights["project-time:read"],rights["project-time-invoice:read"],rights["project-milestone:read"])};
  return db.$transaction(async tx=>{
   const invoices=await tx.invoice.findMany({where:sourceWhere,select:{id:true,number:true,branchId:true},take:20001});
   const settlements=await tx.customerSettlement.findMany({where:{tenantId,invoice:sourceWhere},select:{id:true,kind:true,invoiceId:true},take:20001});
@@ -33,18 +34,18 @@ export async function customerStatement(userId:string,raw:unknown){
   // receivable contributes to a customer balance, never the cash/bank line.
   const receivables=new Map(entries.filter(e=>sources.get(e.number)?.kind==="invoice").map(e=>[sources.get(e.number)!.documentId,e.lines.find(l=>l.position===0)?.accountId]));
   entries.sort((a,b)=>a.entryDate.getTime()-b.entryDate.getTime()||a.createdAt.getTime()-b.createdAt.getTime()||a.id.localeCompare(b.id));
-  const groups=new Map<string,{currency:string;opening:Prisma.Decimal;increase:Prisma.Decimal;decrease:Prisma.Decimal;closing:Prisma.Decimal}>();
+  const groups=new Map<string,{currency:string;opening:bigint;increase:bigint;decrease:bigint;closing:bigint}>();
   const rows=[],start=new Date(`${from}T00:00:00Z`);
   for(const e of entries){const source=sources.get(e.original?.number??e.number);if(!source||source.branchId!==e.branchId)continue;
    const receivable=receivables.get(source.documentId);if(!receivable)throw new CustomerStatementError("Original invoice receivable is unavailable.",409);
-   const change=e.lines.filter(l=>l.accountId===receivable).reduce((n,l)=>n.plus(l.debit).minus(l.credit),new Prisma.Decimal(0));
-   let g=groups.get(e.currency);if(!g){g={currency:e.currency,opening:new Prisma.Decimal(0),increase:new Prisma.Decimal(0),decrease:new Prisma.Decimal(0),closing:new Prisma.Decimal(0)};groups.set(e.currency,g);}
-   g.closing=g.closing.plus(change);if(e.entryDate<start){g.opening=g.opening.plus(change);continue;}
-   const increase=change.gt(0)?change:new Prisma.Decimal(0),decrease=change.lt(0)?change.negated():new Prisma.Decimal(0);g.increase=g.increase.plus(increase);g.decrease=g.decrease.plus(decrease);
-   rows.push({id:e.id,number:e.number,date:e.entryDate.toISOString().slice(0,10),currency:e.currency,...source,reversal:!!e.original,increase:increase.toFixed(3),decrease:decrease.toFixed(3),balance:g.closing.toFixed(3)});
+   const change=e.lines.filter(l=>l.accountId===receivable).reduce((n,l)=>n+moneyMillis(l.debit.toFixed(3))-moneyMillis(l.credit.toFixed(3)),BigInt(0));
+   let g=groups.get(e.currency);if(!g){g={currency:e.currency,opening:BigInt(0),increase:BigInt(0),decrease:BigInt(0),closing:BigInt(0)};groups.set(e.currency,g);}
+   g.closing+=change;if(e.entryDate<start){g.opening+=change;continue;}
+   const increase=change>BigInt(0)?change:BigInt(0),decrease=change<BigInt(0)?-change:BigInt(0);g.increase+=increase;g.decrease+=decrease;
+   rows.push({id:e.id,number:e.number,date:e.entryDate.toISOString().slice(0,10),currency:e.currency,...source,reversal:!!e.original,increase:moneyText(increase),decrease:moneyText(decrease),balance:moneyText(g.closing)});
    if(rows.length>5000)throw new CustomerStatementError("Statement exceeds 5000 period journals. Select a shorter period.",413);
   }
-  return {customer,from,to,branchId:branchId??null,format,rows,summary:[...groups.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(g=>({currency:g.currency,opening:g.opening.toFixed(3),increase:g.increase.toFixed(3),decrease:g.decrease.toFixed(3),closing:g.closing.toFixed(3)}))};
+  return {customer,from,to,branchId:branchId??null,format,rows,summary:[...groups.values()].sort((a,b)=>a.currency.localeCompare(b.currency)).map(g=>({currency:g.currency,opening:moneyText(g.opening),increase:moneyText(g.increase),decrease:moneyText(g.decrease),closing:moneyText(g.closing)}))};
  },{isolationLevel:"RepeatableRead",timeout:15000,maxWait:10000});
 }
 const cell=(v:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(v)?`'${v}`:v).replaceAll('"','""')}"`;

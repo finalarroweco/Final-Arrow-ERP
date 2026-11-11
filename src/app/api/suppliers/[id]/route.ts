@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -17,21 +17,21 @@ const schema = z.union([updateSchema, archiveSchema]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid supplier update" }, { status: 400 });
+    return apiJson({ error: "Invalid supplier update" }, { status: 400 });
   const { tenantId } = parsed.data;
   const supplier = await db.supplier.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true, archivedAt: true } });
-  if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
+  if (!supplier) return apiJson({ error: "Supplier not found" }, { status: 404 });
   const permission = parsed.data.action === "archive" ? "supplier:archive" : "supplier:update";
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: supplier.companyId,
     branchId: supplier.branchId ?? undefined, permission })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   if (parsed.data.action === "update" && supplier.archivedAt)
-    return NextResponse.json({ error: "Restore supplier before editing" }, { status: 409 });
+    return apiJson({ error: "Restore supplier before editing" }, { status: 409 });
   const update = parsed.data.action === "archive"
     ? { archivedAt: parsed.data.archived ? new Date() : null }
     : { displayName: parsed.data.displayName, legalName: parsed.data.legalName,
@@ -43,5 +43,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entity: "Supplier", entityId: id } });
     return result;
   });
-  return NextResponse.json({ supplier: result });
+  return apiJson({ supplier: result });
 }

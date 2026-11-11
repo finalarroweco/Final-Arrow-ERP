@@ -1,5 +1,5 @@
 import {z} from "zod";
-const uuid=z.string().uuid();
+const uuid=z.string().uuid().transform(value=>value.toLowerCase());
 export const reservationScope=z.object({tenantId:uuid,companyId:uuid,branchId:uuid});
 const quantity=z.string().regex(/^(?=.*[1-9])(?:0|[1-9]\d{0,8})(?:\.\d{1,3})?$/);
 export const reservationRequest=z.discriminatedUnion("action",[

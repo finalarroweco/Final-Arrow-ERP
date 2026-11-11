@@ -1,5 +1,5 @@
+import { apiJson } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -18,22 +18,22 @@ const schema = z.object({
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid quote update" }, { status: 400 });
+    return apiJson({ error: "Invalid quote update" }, { status: 400 });
   const { tenantId, notes, lines } = parsed.data;
   const quote = await db.quote.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+  if (!quote) return apiJson({ error: "Quote not found" }, { status: 404 });
   if (!(await canAccess({ userId: actor.id, tenantId, companyId: quote.companyId,
     branchId: quote.branchId ?? undefined, permission: "quote:update" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const amounts = lines.map((line) => new Prisma.Decimal(line.unitPrice).mul(line.quantity));
   const subtotal = amounts.reduce((sum, amount) => sum.add(amount), new Prisma.Decimal(0));
   if (subtotal.greaterThan("999999999999999.999"))
-    return NextResponse.json({ error: "Quote total too large" }, { status: 400 });
+    return apiJson({ error: "Quote total too large" }, { status: 400 });
   const result = await db.$transaction(async (tx) => {
     const changed = await tx.quote.updateMany({ where: { id, tenantId, status: "DRAFT" },
       data: { notes: notes ?? null, subtotal } });
@@ -46,6 +46,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entity: "Quote", entityId: id, metadata: { subtotal: subtotal.toString(), lineCount: lines.length } } });
     return tx.quote.findUnique({ where: { id }, include: { lines: { orderBy: { position: "asc" } } } });
   });
-  if (!result) return NextResponse.json({ error: "Only draft quotes can be edited" }, { status: 409 });
-  return NextResponse.json({ quote: result });
+  if (!result) return apiJson({ error: "Only draft quotes can be edited" }, { status: 409 });
+  return apiJson({ quote: result });
 }

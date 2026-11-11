@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 
 type Entry = { id: string; action: string; entity: string; entityId: string | null; actorName: string | null; actorId: string | null; createdAt: string };
 type Summary = { events: number; userEvents: number; systemEvents: number;
@@ -26,12 +26,12 @@ export function AuditWorkspace({ options, locale }: { options: { id: string; nam
     try {
       const response = await fetch(`/api/audit?${new URLSearchParams({ tenantId: option.id, page: String(number), ...filters })}`, { cache: "no-store" });
       const data = await response.json(); if (generation !== listRequest.current) return;
-      if (!response.ok) { setEntries([]); setNext(null); setMessage(data.error); return; }
+      if (!response.ok) { setEntries([]); setNext(null); setMessage(presentApiError(t, data, response.status)); return; }
       setEntries(data.entries); setPage(number); setNext(data.nextPage); setListTimeZone(data.timeZone);
     } catch { if (generation === listRequest.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
     finally { if (generation === listRequest.current) setBusy(false); }
   }, [option, filters, t]);
-  useEffect(() => { void load(); return () => { listRequest.current++; }; }, [load]);
+  useEffect(() => { const listRequestRef = listRequest; void load(); return () => { listRequestRef.current++; }; }, [load]);
   useEffect(() => () => { reportRequest.current++; }, []);
   async function summarize(values: Record<string, string>) {
     if (!option) return;
@@ -42,7 +42,7 @@ export function AuditWorkspace({ options, locale }: { options: { id: string; nam
       const response = await fetch(`/api/audit/report?${query}`, { cache: "no-store" });
       const data = await response.json(); if (generation !== reportRequest.current) return;
       if (response.ok) setReport({ summary: data.summary, query, from: data.from, to: data.to, timeZone: data.timeZone });
-      else setReportMessage(data.error);
+      else setReportMessage(presentApiError(t, data, response.status));
     } catch { if (generation === reportRequest.current) setReportMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
     finally { if (generation === reportRequest.current) setReportBusy(false); }
   }

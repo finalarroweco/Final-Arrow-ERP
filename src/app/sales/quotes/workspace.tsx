@@ -1,7 +1,7 @@
 "use client";
 
 import {FinancialReport} from "@/app/accounting/financial-report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Permissions = { canCreate: boolean; canUpdate: boolean; canSend: boolean; canDecide: boolean; canOrder: boolean };
@@ -42,7 +42,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
     ]);
     const [quoteData, customerData] = await Promise.all([quoteResponse.json(), customerResponse.json()]);
     if(generation!==requestVersion.current)return;
-    if (!quoteResponse.ok) { setMessage(quoteData.error ?? t("Could not load quotes", "تعذر تحميل عروض الأسعار")); return; }
+    if (!quoteResponse.ok) { setMessage(presentApiError(t,quoteData,quoteResponse.status)); return; }
     setQuotes(quoteData.quotes); setPage(pageNumber); setNextPage(quoteData.nextPage);
     if (customerResponse.ok) {
       const allCustomers: Customer[] = [...customerData.customers];
@@ -75,7 +75,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
           notes: form.get("notes") || null,
           lines: lines.map((line) => ({ description: line.description, quantity: Number(line.quantity), unitPrice: line.unitPrice })) }) });
       const data = await response.json();
-      setMessage(response.ok ? t("Quote created", "تم إنشاء عرض السعر") : data.error ?? t("Could not create quote", "تعذر إنشاء عرض السعر"));
+      setMessage(response.ok ? t("Quote created", "تم إنشاء عرض السعر") : presentApiError(t, data, response.status));
       if (response.ok) { setLines([{ description: "", quantity: "1", unitPrice: "0.000" }]); setReportVersion(value=>value+1); await load(selected); }
     } finally { setBusy(false); }
   }
@@ -87,7 +87,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: option.tenantId, action }) });
       const data = await response.json();
-      setMessage(response.ok ? `${t("Quote marked", "حالة العرض")}: ${t(data.quote.status, ({ DRAFT: "مسودة", SENT: "مرسل", ACCEPTED: "مقبول", REJECTED: "مرفوض" })[data.quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED"] ?? data.quote.status)}` : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? `${t("Quote marked", "حالة العرض")}: ${t(data.quote.status, ({ DRAFT: "مسودة", SENT: "مرسل", ACCEPTED: "مقبول", REJECTED: "مرفوض" })[data.quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED"] ?? data.quote.status)}` : presentApiError(t, data, response.status));
       if (response.ok) {setReportVersion(value=>value+1); await load(selected, page);}
     } finally { setBusy(false); }
   }
@@ -107,7 +107,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
           lines: editLines.map((line) => ({ description: line.description,
             quantity: Number(line.quantity), unitPrice: line.unitPrice })) }) });
       const data = await response.json();
-      setMessage(response.ok ? t("Draft updated", "تم تحديث المسودة") : data.error ?? t("Could not update draft", "تعذر تحديث المسودة"));
+      setMessage(response.ok ? t("Draft updated", "تم تحديث المسودة") : presentApiError(t, data, response.status));
       if (response.ok) { setEditing(null); setReportVersion(value=>value+1); await load(selected, page); }
     } finally { setBusy(false); }
   }
@@ -119,7 +119,7 @@ export function QuotesWorkspace({ options, locale }: { options: Option[]; locale
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: option.tenantId, number: form.get("number") }) });
       const data = await response.json();
-      setMessage(response.ok ? t("Sales order created", "تم إنشاء طلب البيع") : data.error ?? t("Could not create order", "تعذر إنشاء طلب البيع"));
+      setMessage(response.ok ? t("Sales order created", "تم إنشاء طلب البيع") : presentApiError(t, data, response.status));
       if (response.ok) { setOrdering(null); setReportVersion(value=>value+1); await load(selected, page); }
     } finally { setBusy(false); }
   }

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { readableCompanyBranches } from "@/lib/access";
@@ -8,24 +8,24 @@ const uuid = z.string().uuid();
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(params.get("tenantId"));
   const companyId = uuid.safeParse(params.get("companyId"));
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId: tenantId.data,
     companyId: companyId.data, permission: "order:read" });
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false) return apiJson({ error: "Forbidden" }, { status: 403 });
   const orders = await db.salesOrder.findMany({ where: { tenantId: tenantId.data,
     companyId: companyId.data, ...(branches === null ? {} : { branchId: { in: branches } }) },
     select: { id: true, number: true, quoteId: true, customerName: true, branchId: true,
       status: true, startedAt: true, completedAt: true, cancelledAt: true,
       currency: true, subtotal: true, createdAt: true,
       invoice: { select: { id: true, number: true } },
-      lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
+      lines: { select: { id: true, position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
-  return NextResponse.json({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });
+  return apiJson({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });
 }

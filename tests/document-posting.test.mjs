@@ -12,7 +12,7 @@ async function call(path,method="GET",body,cookie) {
 test("document posting is exact, scoped, single-use and reversal-safe",{timeout:90000},async()=>{
   // CI-only fixtures: use the isolated PostgreSQL service, never the live ERP.
   const db=new PrismaClient();
-  const server=spawn("./node_modules/.bin/next",["start","-p","3218"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+  const server=spawn("./node_modules/.bin/next",["start","-H", "127.0.0.1", "-p","3218"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
   try {
     let ready=false;
     for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}

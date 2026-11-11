@@ -1,0 +1,21 @@
+import {z} from 'zod';
+import {milestoneAction,milestoneInvoiceRequest,canonicalMilestoneAction,canonicalMilestoneInvoiceRequest,type MilestoneAction,type MilestoneInvoiceRequest} from '@/lib/project-milestone-input';
+const uuid=z.string().uuid(),money=z.string().regex(/^\d+\.\d{3}$/),invoice=z.object({id:uuid,number:z.string(),status:z.enum(['DRAFT','ISSUED','VOID'])});
+const receipt=z.object({requestId:uuid,actorId:uuid,outcome:z.enum(['COMMITTED','ABANDONED']),request:z.union([milestoneAction,milestoneInvoiceRequest]),result:z.union([z.object({kind:z.literal('abandoned')}),z.object({kind:z.literal('milestone'),milestoneId:uuid,status:z.enum(['DRAFT','COMPLETED','APPROVED','CANCELLED']),sequence:z.number().int()}),z.object({kind:z.literal('invoice'),projectMilestoneSourceId:uuid,invoice})])});
+export type MilestoneReceipt=z.infer<typeof receipt>;
+export function milestoneReceiptMatches(p:MilestoneAction|MilestoneInvoiceRequest,raw:unknown,mode:'definition'|'invoice'){
+ const parsed=receipt.safeParse(raw);if(!parsed.success)return false;const r=parsed.data;
+ try{const canonical=mode==='definition'?canonicalMilestoneAction:canonicalMilestoneInvoiceRequest;
+ if(r.requestId!==p.requestId||r.actorId!==p.expectedActorId||JSON.stringify(canonical(r.request))!==JSON.stringify(canonical(p)))return false;
+ if(r.outcome==='ABANDONED')return r.result.kind==='abandoned';
+ if(mode==='invoice')return r.result.kind==='invoice'&&r.result.invoice.status==='DRAFT'&&r.result.invoice.number===`PM-${BigInt('0x'+r.result.projectMilestoneSourceId.replaceAll('-','')).toString(36).toUpperCase().padStart(25,'0')}`;
+ const action=milestoneAction.parse(p);return r.result.kind==='milestone'&&r.result.milestoneId===action.milestoneId&&r.result.status===({CREATE:'DRAFT',COMPLETE:'COMPLETED',APPROVE:'APPROVED',CANCEL:'CANCELLED'}[action.kind])&&r.result.sequence===(action.kind==='CREATE'?0:action.expectedSequence+1);
+ }catch{return false;}
+}
+export function pendingMilestoneRequest(raw:unknown,actorId:string,scope:{tenantId:string;companyId:string;branchId:string|null},mode:'definition'|'invoice'){
+ const parsed=z.object({version:z.literal(1),actorId:uuid,request:mode==='definition'?milestoneAction:milestoneInvoiceRequest}).strict().safeParse(raw);if(!parsed.success)return null;const p=parsed.data.request;return parsed.data.actorId===actorId&&p.expectedActorId===actorId&&p.tenantId===scope.tenantId&&p.companyId===scope.companyId&&p.branchId===scope.branchId?p:null;
+}
+const commercial={customerId:uuid,currency:z.string(),agreedPrice:money,treatment:z.enum(['STANDARD','ZERO','EXEMPT']),paymentTerms:z.string().nullable(),paymentDueDate:z.string().nullable()};
+const identity={id:uuid,tenantId:uuid,companyId:uuid,branchId:uuid.nullable(),projectId:uuid,description:z.string()};
+export const register=z.object({actorId:uuid,projects:z.array(z.object({id:uuid,code:z.string(),name:z.string(),branchId:uuid.nullable(),status:z.string()})).max(50),customers:z.array(z.object({id:uuid,displayName:z.string(),branchId:uuid.nullable(),archivedAt:z.string().nullable()})).max(50),milestones:z.array(z.object({...identity,...commercial,status:z.enum(['DRAFT','COMPLETED','APPROVED','CANCELLED']),sequence:z.number().int(),claimed:z.boolean()})).max(50),sources:z.array(z.object({...identity,...commercial,milestoneId:uuid,subtotal:money,taxAmount:money,replacesSourceId:uuid.nullable(),reason:z.string(),invoice:invoice.nullable()})).max(50),page:z.number().int().nonnegative(),nextPage:z.number().int().nullable()});
+export const preview=z.object({actorId:uuid,projectId:uuid,milestoneId:uuid,customerId:uuid,description:z.string(),agreedPrice:money,treatment:z.enum(['STANDARD','ZERO','EXEMPT']),paymentTerms:z.string().nullable(),paymentDueDate:z.string().nullable(),replacesSourceId:uuid.nullable(),previewHash:z.string().regex(/^[a-f0-9]{64}$/),prices:z.object({currency:z.string().regex(/^[A-Z]{3}$/),lines:z.array(z.object({description:z.string(),quantity:z.literal(1),unitPrice:money,amount:money,treatment:z.enum(['STANDARD','ZERO','EXEMPT']),tax:money})).length(1),subtotal:money,taxAmount:money,gross:money,quantityMeaning:z.literal('ONE_MILESTONE')}),invoiceDate:z.string(),outcome:z.string()});

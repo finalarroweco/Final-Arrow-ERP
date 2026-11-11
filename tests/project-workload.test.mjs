@@ -9,7 +9,7 @@ async function call(path, method = "GET", body, cookie) {
   return { status: response.status, data: await response.json(), cookie: response.headers.get("set-cookie")?.split(";")[0] };
 }
 test("cross-project workload intersects task, time and employee scopes and exports full current activity", { timeout: 90000 }, async () => {
-  const db = new PrismaClient(), server = spawn("./node_modules/.bin/next", ["start", "-p", "3244"], { env: { ...process.env, ALLOW_REGISTRATION: "true" }, stdio: ["ignore", "ignore", "inherit"] });
+  const db = new PrismaClient(), server = spawn("./node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", "3244"], { env: { ...process.env, ALLOW_REGISTRATION: "true" }, stdio: ["ignore", "ignore", "inherit"] });
   try {
     let ready = false;
     for (let i = 0; i < 60; i++) { try { if ((await fetch(origin)).ok) { ready = true; break; } } catch {} await new Promise(resolve => setTimeout(resolve, 500)); }

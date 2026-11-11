@@ -1,0 +1,9 @@
+import { apiJson } from "@/lib/api-response";
+import {Prisma} from '@prisma/client';
+import {RFQ_REQUEST_MAX_BYTES} from './supplier-rfq-input';
+import {RfqError} from './supplier-rfqs';
+export const rfqHeaders={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
+export function rfqFailure(e:unknown){if(e instanceof RfqError)return apiJson({error:e.message},{status:e.status,headers:rfqHeaders});if(e instanceof Prisma.PrismaClientKnownRequestError&&['P2002','P2003','P2004','P2010','P2034'].includes(e.code)||e instanceof Prisma.PrismaClientUnknownRequestError&&/code: "(23514|23503|22003|40001)"/.test(e.message))return apiJson({error:'RFQ conflict. Check current access, versions, source eligibility and PO number. Keep the exact request for retry or check-and-abandon.'},{status:409,headers:rfqHeaders});throw e;}
+export async function boundedRfqJson(request:Request){const reader=request.body?.getReader();if(!reader)throw new RfqError('Request body required',400);const chunks:Uint8Array[]=[];let length=0;try{while(true){const r=await reader.read();if(r.done)break;length+=r.value.byteLength;if(length>RFQ_REQUEST_MAX_BYTES){await reader.cancel();throw new RfqError('Request exceeds 120000 UTF-8 bytes',413);}chunks.push(r.value);}}finally{reader.releaseLock();}const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}try{return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));}catch{throw new RfqError('Invalid JSON body',400);}}
+export function uniqueRfqQuery(request:Request){const params=new URL(request.url).searchParams;if([...params.keys()].some(k=>params.getAll(k).length!==1))throw new RfqError('Duplicate query parameters',400);return Object.fromEntries(params);}
+export const csvRfqCell=(value:unknown)=>{const s=String(value??'');return `"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(s)?`'${s}`:s).replaceAll('"','""')}"`;};

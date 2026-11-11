@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { readableCompanyBranches } from "@/lib/access";
@@ -10,12 +10,12 @@ const limit = 25;
 
 export async function GET(request: Request) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const query = new URL(request.url).searchParams;
   const tenantId = uuid.safeParse(query.get("tenantId"));
   const companyId = uuid.safeParse(query.get("companyId"));
   if (!tenantId.success || !companyId.success)
-    return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+    return apiJson({ error: "Invalid scope" }, { status: 400 });
   const scope = { userId: actor.id, tenantId: tenantId.data, companyId: companyId.data };
   const permissions = await Promise.all(["leave:read", "leave:decide", "expense:read", "expense:post",
     "purchase-order:read", "purchase-order:manage", "payroll:read", "payroll:approve"].map((permission) =>
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   const purchaseBranches = intersectBranches(permissions[4], permissions[5]);
   const payrollBranches = intersectBranches(permissions[6], permissions[7]);
   if ([leaveBranches, expenseBranches, purchaseBranches, payrollBranches].every((value) => value === false))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   const base = { tenantId: tenantId.data, companyId: companyId.data };
   const filter = (branches: string[] | null) => branches === null ? {} : { branchId: { in: branches } };
   const [leaves, expenses, purchases, leaveCount, expenseCount, purchaseCount, payrolls, payrollCount] = await Promise.all([
@@ -60,6 +60,6 @@ export async function GET(request: Request) {
       createdAt: entry.createdAt, title: `${entry.employeeCode} · ${entry.employeeName}`,
       detail: `${entry.period.toISOString().slice(0, 7)} · ${entry.netPay.toString()} ${entry.currency}` })),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id)).slice(0, limit);
-  return NextResponse.json({ items, counts: { leave: leaveCount, expense: expenseCount, purchase: purchaseCount, payroll: payrollCount },
+  return apiJson({ items, counts: { leave: leaveCount, expense: expenseCount, purchase: purchaseCount, payroll: payrollCount },
     hasMore: leaveCount + expenseCount + purchaseCount + payrollCount > items.length });
 }

@@ -4,7 +4,7 @@ import {BalanceSheet} from "./balance-sheet";
 import {IncomeStatement} from "./income-statement";
 import {AccountStatement} from "./statement";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 type Option = { tenantId: string; companyId: string; label: string; currency: string; canManageAccounts: boolean; canPost: boolean; branches: { id: string; name: string; canPost: boolean }[] };
 type Account = { id: string; code: string; name: string; type: string };
 type Entry = { id: string; number: string; entryDate: string; description: string; branchId: string | null; total: string; currency: string; reversalOf: string | null; reversal: { number: string } | null; lines: { id: string; account: { code: string; name: string }; debit: string; credit: string }[] };
@@ -27,20 +27,20 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
   const load = useCallback(async (number = 0) => {
     if (!option) return;
     const request = ++journalRequest.current;
-    try { const response = await fetch(`/api/ledger/journals?${query({page: String(number)})}`); const data = await response.json(); if (request !== journalRequest.current) return; if (!response.ok) { setMessage(data.error); return; } setEntries(data.entries); setPage(number); setNext(data.nextPage); }
+    try { const response = await fetch(`/api/ledger/journals?${query({page: String(number)})}`); const data = await response.json(); if (request !== journalRequest.current) return; if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; } setEntries(data.entries); setPage(number); setNext(data.nextPage); }
     catch { if (request !== journalRequest.current) return; setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   },[option,query,t]);
   const loadAccounts = useCallback(async (number = 0) => {
     if (!option) return;
     const request = ++accountRequest.current;
-    try { const response = await fetch(`/api/ledger/accounts?${new URLSearchParams({tenantId: option.tenantId, companyId: option.companyId, page: String(number)})}`); const data = await response.json(); if (request !== accountRequest.current) return; if (!response.ok) { setMessage(data.error); return; } setAccounts((old) => number === 0 ? data.accounts : [...old,...data.accounts]); setAccountNext(data.nextPage); }
+    try { const response = await fetch(`/api/ledger/accounts?${new URLSearchParams({tenantId: option.tenantId, companyId: option.companyId, page: String(number)})}`); const data = await response.json(); if (request !== accountRequest.current) return; if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; } setAccounts((old) => number === 0 ? data.accounts : [...old,...data.accounts]); setAccountNext(data.nextPage); }
     catch { if (request !== accountRequest.current) return; setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   },[option,t]);
   useEffect(() => { setRows([]); setReport(false); void load(); },[load]);
   useEffect(() => { void loadAccounts(); },[loadAccounts]);
   async function save(url: string, body: object) {
     setBusy(true); setMessage("");
-    try { const response = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data = await response.json(); setMessage(response.ok ? t("Saved", "تم الحفظ") : data.error); if(response.ok) { setStatementVersion(n=>n+1); setRows([]); setReport(false); await load(); if(url.endsWith("accounts")) await loadAccounts(); } }
+    try { const response = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data = await response.json(); setMessage(response.ok ? t("Saved", "تم الحفظ") : presentApiError(t, data, response.status)); if(response.ok) { setStatementVersion(n=>n+1); setRows([]); setReport(false); await load(); if(url.endsWith("accounts")) await loadAccounts(); } }
     catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
   if(!option) return <section className="panel"><p>{t("No accessible ledger.", "لا يوجد دفتر أستاذ متاح.")}</p></section>;
@@ -80,7 +80,7 @@ export function LedgerWorkspace({ options, locale }: { options: Option[]; locale
     <form key={`filters-${option.companyId}`} action={(form) => setFilters({from:String(form.get("from") || ""),to:String(form.get("to") || ""),branchId:String(form.get("branchId") || "")})}>
       <label>{t("From", "من")} <input name="from" type="date" /></label><label>{t("To", "إلى")} <input name="to" type="date" /></label><label>{t("Branch", "الفرع")} <select name="branchId"><option value="">{t("All accessible records", "كل السجلات المتاحة")}</option>{option.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><button disabled={busy}>{t("Apply", "تطبيق")}</button>
       <button type="reset" disabled={busy} onClick={() => setFilters({from:"",to:"",branchId:""})}>{t("Reset", "إعادة الضبط")}</button></form>
-    <button disabled={busy} onClick={async () => {setBusy(true);setReport(false);setMessage("");try {const response=await fetch(`/api/ledger/trial-balance?${query()}`);const data=await response.json();if(response.ok){setRows(data.rows);setTotals(data.summary);setReportQuery(query().toString());setReport(true);}else setMessage(data.error);}catch{setMessage(t("Network request failed", "فشل الاتصال بالشبكة"));}finally{setBusy(false);}}}>{t("View trial balance", "عرض ميزان المراجعة")}</button>
+    <button disabled={busy} onClick={async () => {setBusy(true);setReport(false);setMessage("");try {const response=await fetch(`/api/ledger/trial-balance?${query()}`);const data=await response.json();if(response.ok){setRows(data.rows);setTotals(data.summary);setReportQuery(query().toString());setReport(true);}else setMessage(presentApiError(t, data, response.status));}catch{setMessage(t("Network request failed", "فشل الاتصال بالشبكة"));}finally{setBusy(false);}}}>{t("View trial balance", "عرض ميزان المراجعة")}</button>
     <p>{t("The report covers the selected dates and accessible branches. A start date limits movements; omit it for balances through the end date. Reversals remain in the report.", "يشمل التقرير التواريخ والفروع المتاحة المحددة. تاريخ البداية يقيّد الحركات؛ اتركه فارغاً لحساب الأرصدة حتى تاريخ النهاية. تبقى القيود العكسية ضمن التقرير.")}</p>
     {report && <div style={{overflowX:"auto"}}><a href={`/api/ledger/trial-balance?${reportQuery}&format=csv`}>{t("Download CSV","تنزيل CSV")}</a>{totals.map(g=><article className="card" key={g.currency}><strong>{g.currency} · {g.balanced?t("Balanced","متوازن"):t("Unbalanced","غير متوازن")}</strong><p>{t("Debit movements","الحركات المدينة")}: {g.debit} · {t("Credit movements","الحركات الدائنة")}: {g.credit}</p><p>{t("Debit balance","رصيد مدين")}: {g.debitBalance} · {t("Credit balance","رصيد دائن")}: {g.creditBalance}</p></article>)}<table><thead><tr>{[t("Account","الحساب"),t("Currency","العملة"),t("Debit movements","الحركات المدينة"),t("Credit movements","الحركات الدائنة"),t("Debit balance","رصيد مدين"),t("Credit balance","رصيد دائن")].map((label) => <th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={`${row.accountId}:${row.currency}`}><td>{row.code} · {row.name}</td><td>{row.currency}</td><td>{row.debit}</td><td>{row.credit}</td><td>{row.debitBalance}</td><td>{row.creditBalance}</td></tr>)}</tbody></table>{rows.length===0 && <p>{t("No posted movements.", "لا توجد حركات مرحلة.")}</p>}</div>}
     {entries.map((entry) => <article className="card" key={entry.id}><strong>{entry.number} · {entry.description}</strong><p><a href={`/accounting/ledger/journals/${entry.id}`}>{t("View / print journal","عرض / طباعة القيد")}</a></p><p>{entry.entryDate.slice(0,10)} · {entry.total} {entry.currency} · {entry.branchId ? option.branches.find((branch) => branch.id===entry.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>

@@ -18,10 +18,12 @@ const groups = [
   { en: "Finance and registers", ar: "المالية وسجلات المستندات", reports: [
     ["/accounting/ledger", "Ledger and financial reports", "دفتر الأستاذ والتقارير المالية", "Trial balance, account statements and financial views", "ميزان المراجعة وكشوف الحسابات والعروض المالية"],
     ["/accounting/bank", "Bank reconciliation", "التسوية البنكية", "Imported lines, matching and live reconciliation", "الحركات المستوردة والمطابقة والتسوية الحالية"],
+    ["/accounting/recurring-billing", "Recurring billing calendar and history", "تقويم الفوترة الدورية وسجلها", "Finite periods, exact plan revisions, explicit draft invoices and linked corrections", "فترات محدودة ومراجعات أسعار دقيقة ومسودات صريحة وتصحيحات مرتبطة"],
     ["/accounting/invoices", "Invoice register", "سجل الفواتير", "Creation-date filters; invoice value is not cash collected", "فلاتر تاريخ الإنشاء؛ قيمة الفاتورة ليست التحصيل النقدي"],
     ["/accounting/expenses", "Expense register", "سجل المصاريف", "Expense-date totals, categories and saved VAT", "إجماليات تاريخ المصروف والتصنيفات والضريبة المحفوظة"],
     ["/sales/quotes", "Quote register", "سجل عروض الأسعار", "Creation-date, status and customer filters", "فلاتر تاريخ الإنشاء والحالة والعميل"],
     ["/sales/orders", "Sales-order register", "سجل طلبات البيع", "Saved orders, status totals and CSV", "الطلبات المحفوظة وإجماليات الحالات والتصدير"],
+    ["/purchasing/rfqs", "Supplier offer comparison", "مقارنة عروض الموردين", "Explicit same-currency net prices, completeness and expiry; no automatic award", "أسعار صافية صريحة بعملة واحدة مع اكتمال العروض وصلاحيتها؛ دون ترسية تلقائية"],
     ["/purchasing/orders", "Purchase-order register", "سجل أوامر الشراء", "Order values, supplier and status filters", "قيم الأوامر وفلاتر المورد والحالة"],
     ["/purchasing/receipts", "Goods receipt register", "سجل استلام البضائع", "UTC receipt dates and saved source values", "تواريخ الاستلام بتوقيت UTC وقيم المستندات المحفوظة"],
     ["/purchasing/returns", "Goods return register", "سجل مرتجعات البضائع", "Return documents and source-linked history", "مستندات المرتجعات وتاريخها المرتبط بالمصدر"],
@@ -29,6 +31,7 @@ const groups = [
   { en: "People and operations", ar: "الموظفون والعمليات", reports: [
     ["/projects/workload", "Cross-project employee workload", "عبء عمل الموظفين عبر المشاريع", "Current open tasks and recorded time by review status", "المهام المفتوحة الحالية والساعات حسب حالة المراجعة"],
     ["/projects", "Project time, budgets and invoices", "ساعات المشاريع والميزانيات والفواتير", "Select a project for its separately authorized reports", "اختر مشروعًا لفتح تقاريره حسب صلاحيات كل تقرير"],
+    ["/inventory/reordering", "Configured low-stock report", "تقرير نقص المخزون المُعدّ", "Explicit item/branch thresholds against current available stock; no purchase orders", "حدود صريحة للصنف والفرع مقابل المخزون المتاح الحالي؛ دون إنشاء أوامر شراء"],
     ["/inventory/stock", "Stock movements and reservations", "حركات المخزون والحجوزات", "Select an item/branch for physical movements and available quantity", "اختر الصنف والفرع للحركات الفعلية والكمية المتاحة"],
     ["/hr/attendance", "Attendance report", "تقرير الحضور", "Work dates and recorded attendance status", "تواريخ العمل وحالات الحضور المسجلة"],
     ["/hr/payroll", "Payroll report", "تقرير الرواتب", "Monthly manual payroll, status and currency totals", "الرواتب اليدوية الشهرية وإجماليات الحالة والعملة"],
@@ -49,7 +52,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     <section className="hero"><p>{t("REPORT CENTER", "مركز التقارير")}</p><h1>{t("Find the report you need.", "اعثر على التقرير الذي تحتاجه.")}</h1><p className="sub">{t("One directory for financial and operational reports.", "دليل واحد للتقارير المالية والتشغيلية.")}</p></section>
     <section className="panel"><form method="get"><label>{t("Search reports", "بحث التقارير")}<input name="q" maxLength={120} defaultValue={q} /></label><button>{t("Search", "بحث")}</button><a href="/reports">{t("Show all", "عرض الكل")}</a></form>
       <p>{t("This directory contains no business records or combined totals. Each destination checks your current permissions and offers its own company, branch, date, print and export controls. Some reports open inside their workspace after selecting a source.", "لا يحتوي هذا الدليل على سجلات العمل أو إجماليات مجمّعة. تتحقق كل وجهة من صلاحياتك الحالية وتعرض خياراتها للشركة والفرع والتاريخ والطباعة والتصدير. تُفتح بعض التقارير داخل مساحة العمل بعد اختيار المصدر.")}</p>
-      <p><a href="/saved-reports">{t("Reuse private balance and aging filters", "إعادة استخدام فلاتر الأرصدة والأعمار الخاصة")}</a> · <a href="/release-status">{t("Supported scope and remaining work", "النطاق المدعوم والعمل المتبقي")}</a></p>
+      <p><a href="/saved-reports">{t("Reuse private balance, aging and register filters", "إعادة استخدام فلاتر الأرصدة والأعمار وسجلات المستندات الخاصة")}</a> · <a href="/release-status">{t("Supported scope and remaining work", "النطاق المدعوم والعمل المتبقي")}</a></p>
       {!visible.length && <p role="status">{t("No report matches this search.", "لا يوجد تقرير يطابق هذا البحث.")}</p>}
     </section>
     {visible.map(group => <section className="panel" key={group.en}><h2>{t(group.en, group.ar)}</h2><div className="grid">{group.reports.map(([href, en, ar, detailEn, detailAr]) => <article className="card" key={href}><h3><a href={href}>{t(en, ar)}</a></h3><p>{t(detailEn, detailAr)}</p></article>)}</div></section>)}

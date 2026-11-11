@@ -10,7 +10,7 @@ async function call(path,method="GET",body,cookie){
 }
 test("stock returns preserve sources, enforce scope and quantities, serialize reversals, and roll back atomically",{timeout:90000},async()=>{
  const db=new PrismaClient();
- const server=spawn("./node_modules/.bin/next",["start","-p","3221"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
+ const server=spawn("./node_modules/.bin/next",["start","-H", "127.0.0.1", "-p","3221"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready);
   async function owner(){const s=randomUUID().slice(0,8),r=await call("/api/auth/register","POST",{name:"Returns QA",email:`return-${s}@example.invalid`,password:"Return-test-password-2026",organization:"Return QA",slug:`return-${s}`});assert.equal(r.status,201);return r;}

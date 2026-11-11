@@ -1,9 +1,10 @@
 "use client";
 
+import {invoiceSourceView} from "./source-view";
 import {PaymentTermsFields} from "../../payment-terms-fields";
 import { DocumentPosting } from "../document-posting";
 import {FinancialReport} from "../financial-report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 type Rights = { canPostLedger: boolean; canCreate: boolean; canIssue: boolean; canVoid: boolean };
@@ -11,7 +12,7 @@ type Option = { tenantId: string; companyId: string; label: string; vatActive: b
   branches: ({ id: string; name: string } & Rights)[] };
 type Order = { id: string; number: string; customerName: string; branchId: string | null;
   status: string; currency: string; subtotal: string; lines: {position:number;description:string;amount:string}[]; invoice: { id: string } | null };
-type Invoice = { id: string; number: string; orderId: string; customerName: string;
+type Invoice = { id: string; number: string; orderId: string|null; serviceSourceId: string|null; projectTimeSourceId: string|null; projectMilestoneSourceId: string|null; customerName: string;
   branchId: string | null; status: "DRAFT" | "ISSUED" | "VOID"; currency: string;
   paymentTerms:string|null;paymentDueDate:string|null;subtotal: string; gross: string; vat: {taxAmount:string}|null; voidReason: string | null;
   lines: { description: string; quantity: number; unitPrice: string; amount: string }[] };
@@ -40,7 +41,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
     const response = await fetch(`/api/invoices?${query}`);
     const data = await response.json();
     if (request !== requestNumber.current) return;
-    if (!response.ok) { setError(data.error ?? t("Could not load invoices", "تعذر تحميل الفواتير")); return; }
+    if (!response.ok) { setError(presentApiError(t, data, response.status)); return; }
     setInvoices(data.invoices); setPage(pageNumber); setNextPage(data.nextPage); setError("");
     } catch { if (request === requestNumber.current) setError(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
@@ -67,7 +68,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, number: values.get("number"), ...(values.get("paymentDueDate")||String(values.get("paymentTermsLabel")??"").trim()?{paymentTerms:{label:String(values.get("paymentTermsLabel")??"").trim(),dueDate:values.get("paymentDueDate")}}:{}), ...(scope.vatActive?{vat: orders.find(o=>o.id===orderId)?.lines.map(l=>({position:l.position,treatment:values.get(`vat-${l.position}`)}))}:{}) }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not create invoice", "تعذر إنشاء الفاتورة"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else { setReportVersion(value=>value+1);form.reset(); setOrderId(""); await Promise.all([load(selected), loadOrders(selected)]); }
     } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -79,7 +80,7 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId: scope.tenantId, action, ...(action === "void" ? { reason } : {}) }) });
       const data = await response.json();
-      if (!response.ok) setError(data.error ?? t("Could not update invoice", "تعذر تحديث الفاتورة"));
+      if (!response.ok) setError(presentApiError(t, data, response.status));
       else {setReportVersion(value=>value+1);await load(selected, page);}
     } catch { setError(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -102,9 +103,11 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
     {error && <p role="alert">{error}</p>}
     <FinancialReport key={`${scope.companyId}:${reportVersion}`} kind="invoices" scope={scope} locale={locale}/>
     <div className="customer-list">{invoices.map((invoice) => {
+      const sourceView=invoiceSourceView(invoice,locale);
       const rights = invoice.branchId ? scope.branches.find((branch) => branch.id === invoice.branchId)
         : scope.companyPermissions;
       return <article key={invoice.id}><div><h3>{invoice.number} · {invoice.customerName}</h3>
+        <p>{sourceView&&<a href={sourceView.href}>{sourceView.label} · {sourceView.id}</a>}</p>{sourceView?.kind==='project-time'&&<p>{t("Quantity 1 represents one approved time record, not one hour. Rates and minutes are frozen in the source snapshot.","الكمية ١ تمثل سجل وقت معتمداً واحداً وليس ساعة واحدة. الأسعار والدقائق محفوظة في لقطة المصدر الثابتة.")}</p>}
         <p>{t(invoice.status, ({ DRAFT: "مسودة", ISSUED: "مصدرة", VOID: "ملغاة" })[invoice.status])} · {invoice.gross} {invoice.currency}</p>
         <p>{invoice.paymentDueDate?`${invoice.paymentTerms} · ${t("Due UTC","الاستحقاق UTC")}: ${invoice.paymentDueDate.slice(0,10)}`:t("No agreed due date","بدون موعد استحقاق متفق عليه")}</p>{invoice.vat&&<p>{t("Net", "الصافي")}: {invoice.subtotal} · {t("VAT", "الضريبة")}: {invoice.vat.taxAmount} · {t("Total including VAT", "الإجمالي شامل الضريبة")}: {invoice.gross} {invoice.currency}</p>}
         {rights?.canPostLedger && invoice.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${invoice.id}:${invoice.status}`} kind="invoice" id={invoice.id} scope={scope} locale={locale} amount={invoice.gross} currency={invoice.currency} eligible={invoice.status === "ISSUED"}/>}

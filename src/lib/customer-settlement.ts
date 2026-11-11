@@ -1,13 +1,15 @@
+import {invoiceSourceAllowed,invoiceSourceInclude} from "./invoice-source";
 import {invoiceGross} from "./invoice-vat";
+import {db} from "./db";
 import {Prisma} from "@prisma/client";
 import {canAccess} from "./access";
 import {documentJournalNumber} from "./document-journal";
 export class CustomerSettlementConflict extends Error {}
 export function customerSettlementNumber(kind:"COLLECTION"|"REFUND",id:string){return `${kind==="COLLECTION"?"SYSK":"SYSF"}-${BigInt(`0x${id.replaceAll("-","")}`).toString(36).toUpperCase().padStart(25,"0")}`;}
-export async function settlementInvoice(tx:Prisma.TransactionClient,tenantId:string,id:string){return tx.invoice.findFirst({where:{id,tenantId},include:{vat:true,order:{select:{branchId:true}},customer:{select:{branchId:true}}}});}
-export async function customerSettlementAllowed(userId:string,invoice:NonNullable<Awaited<ReturnType<typeof settlementInvoice>>>,post=false){
+export async function settlementInvoice(tx:Prisma.TransactionClient,tenantId:string,id:string){return tx.invoice.findFirst({where:{id,tenantId},include:{vat:true,...invoiceSourceInclude}});}
+export async function customerSettlementAllowed(userId:string,invoice:NonNullable<Awaited<ReturnType<typeof settlementInvoice>>>,post=false,tx:Prisma.TransactionClient=db){
  const scope={userId,tenantId:invoice.tenantId,companyId:invoice.companyId};
- return (await Promise.all([canAccess({...scope,branchId:invoice.branchId??undefined,permission:"invoice:read"}),canAccess({...scope,branchId:invoice.order.branchId??undefined,permission:"order:read"}),canAccess({...scope,branchId:invoice.customer.branchId??undefined,permission:"customer:read"}),canAccess({...scope,branchId:invoice.branchId??undefined,permission:"ledger:read"}),...(post?[canAccess({...scope,branchId:invoice.branchId??undefined,permission:"ledger:post"})]:[])])).every(Boolean);
+ return (await Promise.all([canAccess({...scope,branchId:invoice.branchId??undefined,permission:"invoice:read"},tx),invoiceSourceAllowed(userId,invoice,tx),canAccess({...scope,branchId:invoice.customer.branchId??undefined,permission:"customer:read"},tx),canAccess({...scope,branchId:invoice.branchId??undefined,permission:"ledger:read"},tx),...(post?[canAccess({...scope,branchId:invoice.branchId??undefined,permission:"ledger:post"},tx)]:[])])).every(Boolean);
 }
 export async function invoiceSettlementState(tx:Prisma.TransactionClient,invoice:NonNullable<Awaited<ReturnType<typeof settlementInvoice>>>){
  const {tenantId,companyId,id:invoiceId}=invoice;

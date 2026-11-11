@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
@@ -12,19 +12,19 @@ const schema = z.object({ tenantId: uuid, paymentTerms:paymentTermsInput.optiona
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser();
-  if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const { id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!uuid.safeParse(id).success || !parsed.success)
-    return NextResponse.json({ error: "Invalid invoice" }, { status: 400 });
+    return apiJson({ error: "Invalid invoice" }, { status: 400 });
   const { tenantId, number,vat,paymentTerms } = parsed.data;
   const order = await db.salesOrder.findUnique({ where: { tenantId_id: { tenantId, id } },
     select: { companyId: true, branchId: true } });
-  if (!order) return NextResponse.json({ error: "Sales order not found" }, { status: 404 });
+  if (!order) return apiJson({ error: "Sales order not found" }, { status: 404 });
   const scope = { userId: actor.id, tenantId, companyId: order.companyId, branchId: order.branchId ?? undefined };
   if (!(await canAccess({ ...scope, permission: "invoice:create" })) ||
     !(await canAccess({ ...scope, permission: "order:read" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
   try {
     const invoice = await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Company" WHERE id=${order.companyId}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
@@ -48,12 +48,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         metadata: { paymentTerms:paymentTerms??null, orderId: source.id, subtotal: source.subtotal.toString(), currency: source.currency } } });
       return tx.invoice.findUniqueOrThrow({where:{id:invoice.id},include:{lines:true,vat:true}});
     });
-    if (!invoice) return NextResponse.json({ error: "Sales order must be completed" }, { status: 409 });
-    return NextResponse.json({ invoice }, { status: 201 });
+    if (!invoice) return apiJson({ error: "Sales order must be completed" }, { status: 409 });
+    return apiJson({ invoice }, { status: 201 });
   } catch (error) {
-    if(error instanceof VatConflict)return NextResponse.json({error:error.message},{status:409});
+    if(error instanceof VatConflict)return apiJson({error:error.message},{status:409});
     if (typeof error === "object" && error && "code" in error && error.code === "P2002")
-      return NextResponse.json({ error: "Order already invoiced or invoice number is in use" }, { status: 409 });
+      return apiJson({ error: "Order already invoiced or invoice number is in use" }, { status: 409 });
     throw error;
   }
 }

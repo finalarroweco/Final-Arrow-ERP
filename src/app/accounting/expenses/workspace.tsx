@@ -1,8 +1,9 @@
 "use client";
+import {sourceLink} from "@/app/approvals/workflows/read-input";
 
 import { DocumentPosting } from "../document-posting";
 import {FinancialReport} from "../financial-report";
-import { translate, type Locale } from "@/lib/locale";
+import { presentApiError, translate, type Locale } from "@/lib/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Rights = { canPostLedger: boolean; canCreate: boolean; canPost: boolean; canVoid: boolean };
@@ -33,7 +34,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
     const response = await fetch(`/api/expenses?${query}`);
     const data = await response.json();
     if (request !== requestNumber.current) return;
-    if (!response.ok) { setMessage(data.error ?? t("Could not load expenses", "تعذر تحميل المصاريف")); return; }
+    if (!response.ok) { setMessage(presentApiError(t, data, response.status)); return; }
     setExpenses(data.expenses); setPage(number); setNextPage(data.nextPage);
     } catch { if (request === requestNumber.current) setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); }
   }, [options, t]);
@@ -43,7 +44,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json();
-      setMessage(response.ok ? success : data.error ?? t("Action failed", "تعذر تنفيذ الإجراء"));
+      setMessage(response.ok ? success : presentApiError(t, data, response.status));
       if (response.ok) {setReportVersion(value=>value+1);await load(selected, pageNumber);}
     } catch { setMessage(t("Network request failed", "فشل الاتصال بالشبكة")); } finally { setBusy(false); }
   }
@@ -77,6 +78,7 @@ export function ExpensesWorkspace({ options, locale }: { options: Option[]; loca
     {expenses.map((expense) => {
       const rights = expense.branchId ? scope.branches.find((branch) => branch.id === expense.branchId) : scope.companyRights;
       return <article key={expense.id} className="card"><strong>{expense.number} · {expense.description}</strong>
+        <p><a href={sourceLink({tenantId:scope.tenantId,companyId:scope.companyId,branchId:expense.branchId},"EXPENSE",expense.id)}>{t("Approval workflow / current state", "مسار الموافقة / الحالة الحالية")}</a></p>
         <p>{expense.category} · {expense.amount} {expense.currency} · {expense.expenseDate.slice(0, 10)} · {t(expense.status, ({ DRAFT: "مسودة", POSTED: "مرحّل", VOID: "ملغى" })[expense.status])} · {expense.branchId ? scope.branches.find((branch) => branch.id === expense.branchId)?.name : t("Company wide", "على مستوى الشركة")}</p>
         {expense.vatRecorded&&<p>{t("Saved VAT","الضريبة المحفوظة")}: {expense.taxAmount} · {t("Deductible VAT","الضريبة القابلة للخصم")}: {expense.recoverableTax} · {t("Gross document amount","قيمة المستند شامل الضريبة")}: {expense.grossAmount} · {t("Expense cost","تكلفة المصروف")}: {expense.expenseCost} {expense.currency}</p>}
         {rights?.canPostLedger && expense.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${expense.id}:${expense.status}`} onPosted={()=>{if(activeCompany.current!==scope.companyId)return;setReportVersion(v=>v+1);void load(selected,page);}} kind="expense" id={expense.id} scope={scope} locale={locale} amount={expense.amount} currency={expense.currency} eligible={expense.status === "POSTED"}/>}

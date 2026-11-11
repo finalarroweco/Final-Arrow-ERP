@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { translate, type Locale } from "@/lib/locale";
+import {presentApiError, translate, type Locale } from "@/lib/locale";
 import { useRouter } from "next/navigation";
 
 export function AcceptForm({ token, needsAccount, locale }: { token: string; needsAccount: boolean; locale: Locale }) {
@@ -18,7 +18,7 @@ export function AcceptForm({ token, needsAccount, locale }: { token: string; nee
     });
     if (!response.ok) {
       const result: { error?: string } = await response.json();
-      setError(result.error ?? t("Could not accept invitation", "تعذر قبول الدعوة"));
+      setError(presentApiError(t, result, response.status));
       return;
     }
     router.replace("/workspace");

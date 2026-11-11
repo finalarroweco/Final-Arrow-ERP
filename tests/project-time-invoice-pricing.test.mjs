@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+const pricing=await import('data:text/javascript;base64,'+Buffer.from(ts.transpile(fs.readFileSync('src/lib/recurring-pricing.ts','utf8'),{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022})).toString('base64'));
+const source=fs.readFileSync('src/lib/project-time-invoice-pricing.ts','utf8').replace("import {billingPriceSnapshot,BillingPricingError} from './recurring-pricing';",'const {billingPriceSnapshot,BillingPricingError}=globalThis.__timePricing;');
+globalThis.__timePricing=pricing;
+const {projectTimeInvoicePrices}=await import('data:text/javascript;base64,'+Buffer.from(ts.transpile(source,{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022})).toString('base64'));
+const line={entryId:'fixture',minutes:1,hourlyRate:'1.001',description:'Approved time',treatment:'STANDARD'};
+test('time price rounds extended amount once and quantity means one record',()=>{const p=projectTimeInvoicePrices([line],false,'OMR');assert.equal(p.subtotal,'0.017');assert.equal(p.lines[0].quantity,1);assert.match(p.lines[0].description,/0h 1m @ 1.001 OMR\/h/);assert.equal(projectTimeInvoicePrices([{...line,minutes:30,hourlyRate:'0.001'}],false,'OMR').subtotal,'0.001');});
+test('large exact time amounts never pass through IEEE754 money',()=>{assert.equal(projectTimeInvoicePrices([{...line,minutes:90,hourlyRate:'90071992547409.913'}],false,'OMR').subtotal,'135107988821114.870');assert.throws(()=>projectTimeInvoicePrices([{...line,minutes:1440,hourlyRate:'999999999999999.999'}],false,'OMR'));});
+test('tax rounds per line and preserves explicit zero/exempt classifications',()=>{const p=projectTimeInvoicePrices(['STANDARD','ZERO','EXEMPT'].map(treatment=>({...line,minutes:60,hourlyRate:'0.010',treatment})),true,'OMR');assert.equal(p.taxAmount,'0.001');assert.equal(p.gross,'0.031');assert.throws(()=>projectTimeInvoicePrices([line],true,'USD'));});
+test('invalid minutes and implicit prices are rejected',()=>{for(const patch of [{minutes:0},{minutes:1.5},{minutes:1441},{hourlyRate:'1.00'},{hourlyRate:'1.0001'},{hourlyRate:'-1.000'}])assert.throws(()=>projectTimeInvoicePrices([{...line,...patch}],false,'OMR'));});

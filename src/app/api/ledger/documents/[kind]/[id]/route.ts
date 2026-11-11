@@ -1,9 +1,10 @@
+import { apiJson } from "@/lib/api-response";
+import {invoiceDocumentSourceAllowed,invoiceSourceInclude} from "@/lib/invoice-source";
 import {expenseVatInput,calculateExpenseVat,expenseGross} from "@/lib/expense-vat";
 import {purchaseVatInput,calculatePurchaseVat} from "@/lib/purchase-vat";
 import {VatConflict} from "@/lib/invoice-vat";
 import {invoiceGross} from "@/lib/invoice-vat";
 import {purchaseDocument,isPurchaseDocument} from "@/lib/purchase-ledger";
-import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -27,7 +28,7 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
       eligible:kind === "payroll" ? ["APPROVED","PAID"].includes(row.status) : row.status === "PAID"};
   }
   if (kind === "invoice") {
-    const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true} });
+    const row = await client.invoice.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true,...invoiceSourceInclude} });
     return row && { ...row, amount: invoiceGross(row), date: row.issuedAt?.toISOString().slice(0,10), eligible: row.status === "ISSUED" };
   }
   if (kind === "pos") {
@@ -37,21 +38,26 @@ async function source(kind: DocumentKind, tenantId: string, id: string, client: 
   const row = await client.expense.findUnique({ where: { tenantId_id: { tenantId, id } },include:{vat:true} });
   return row && { ...row, netAmount:row.amount,amount:expenseGross(row), date: row.expenseDate.toISOString().slice(0,10), eligible: row.status === "POSTED" };
 }
-async function permitted(userId: string, kind: DocumentKind, tenantId: string, row: { companyId: string; branchId: string | null; orderBranchId?:string|null }, post: boolean) {
+async function permitted(userId: string, kind: DocumentKind, tenantId: string, row: { companyId: string; branchId: string | null; orderBranchId?:string|null; id?:string }, post: boolean, client:Prisma.TransactionClient=db) {
+  if(kind==="invoice"){
+    if(!row.id)return false;
+    const invoice=await client.invoice.findUnique({where:{tenantId_id:{tenantId,id:row.id}},include:invoiceSourceInclude});
+    if(!invoice||!(await invoiceDocumentSourceAllowed(userId,invoice,client)))return false;
+  }
   const scope = { userId, tenantId, companyId: row.companyId, branchId: row.branchId ?? undefined };
-  const checks = await Promise.all([canAccess({ ...scope, ...(isPurchaseDocument(kind)?{branchId:row.orderBranchId??undefined}:{}), permission: `${isPurchaseDocument(kind) ? "purchase-order" : kind === "payroll-payment" ? "payroll" : kind}:read` }),
-    canAccess({ ...scope, permission: "ledger:read" }), ...(isPurchaseDocument(kind)?[canAccess({...scope,permission:"inventory-stock:read"})]:[]), ...(post ? [canAccess({ ...scope, permission: "ledger:post" })] : [])]);
+  const checks = await Promise.all([canAccess({ ...scope, ...(isPurchaseDocument(kind)?{branchId:row.orderBranchId??undefined}:{}), permission: `${isPurchaseDocument(kind) ? "purchase-order" : kind === "payroll-payment" ? "payroll" : kind}:read` },client),
+    canAccess({ ...scope, permission: "ledger:read" },client), ...(isPurchaseDocument(kind)?[canAccess({...scope,permission:"inventory-stock:read"},client)]:[]), ...(post ? [canAccess({ ...scope, permission: "ledger:post" },client)] : [])]);
   return checks.every(Boolean);
 }
 export async function GET(request: Request, context: Context) {
-  const actor = await currentUser(); if (!actor) return NextResponse.json({error:"Unauthenticated"},{status:401});
+  const actor = await currentUser(); if (!actor) return apiJson({error:"Unauthenticated"},{status:401});
   const path = pathSchema.safeParse(await context.params);
   const query = new URL(request.url).searchParams;
   const tenant = uuid.safeParse(query.get("tenantId"));
-  if (!path.success || !tenant.success || query.getAll("tenantId").length !== 1) return NextResponse.json({error:"Invalid document"},{status:400});
+  if (!path.success || !tenant.success || query.getAll("tenantId").length !== 1) return apiJson({error:"Invalid document"},{status:400});
   const row = await source(path.data.kind, tenant.data, path.data.id);
-  if (!row) return NextResponse.json({error:"Document not found"},{status:404});
-  if (!(await permitted(actor.id,path.data.kind,tenant.data,row,false))) return NextResponse.json({error:"Forbidden"},{status:403});
+  if (!row) return apiJson({error:"Document not found"},{status:404});
+  if (!(await permitted(actor.id,path.data.kind,tenant.data,row,false))) return apiJson({error:"Forbidden"},{status:403});
   const entry = await documentJournal(db,path.data.kind,tenant.data,row.companyId,path.data.id);
   let purchaseSetup=null;
   if(path.data.kind==="purchase-return"&&"receiptId" in row){
@@ -68,24 +74,26 @@ export async function GET(request: Request, context: Context) {
   const expenseVatSetup=path.data.kind==="expense"&&"expenseDate" in row?{required:Boolean(profile?.enabled&&profile.effectiveFrom&&row.date>=profile.effectiveFrom.toISOString().slice(0,10)),netAmount:row.netAmount.toFixed(3),snapshot:row.vat,amount:row.amount.toFixed(3),inputAccountId:profile?.inputAccountId??null}:null;
   const invoiceVat=path.data.kind==="invoice"&&"subtotal" in row&&row.vat?{taxAmount:row.vat.taxAmount.toFixed(3),outputAccount:await db.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId:tenant.data,companyId:row.companyId},select:{code:true,name:true}})}:null;
   const posVat=path.data.kind==="pos"&&"kitchenStatus" in row&&row.vat?{taxAmount:row.vat.taxAmount.toFixed(3),outputAccount:await db.ledgerAccount.findFirst({where:{id:row.vat.outputAccountId,tenantId:tenant.data,companyId:row.companyId},select:{code:true,name:true}})}:null;
-  return NextResponse.json({entry,posVat,invoiceVat,expenseVatSetup,purchaseVatSetup,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
+  return apiJson({entry,posVat,invoiceVat,expenseVatSetup,purchaseVatSetup,...(isPurchaseDocument(path.data.kind)?{purchaseSetup,amount:row.amount.toString(),currency:row.currency}:{})},{headers:{"Cache-Control":"private, no-store"}});
 }
 export async function POST(request: Request, context: Context) {
-  const actor = await currentUser(); if (!actor) return NextResponse.json({error:"Unauthenticated"},{status:401});
+  const actor = await currentUser(); if (!actor) return apiJson({error:"Unauthenticated"},{status:401});
   const path = pathSchema.safeParse(await context.params);
   const body = bodySchema.safeParse(await request.json().catch(()=>null));
-  if (!path.success || !body.success) return NextResponse.json({error:"Invalid document posting"},{status:400});
+  if (!path.success || !body.success) return apiJson({error:"Invalid document posting"},{status:400});
   const {kind,id} = path.data;
   const {tenantId,entryDate,debitAccountId,creditAccountId,deductionAccountId,purchaseVat,creditReference,expenseVat} = body.data;
-  if ((expenseVat&&kind!=="expense")||(purchaseVat&&kind!=="purchase-receipt")||(creditReference&&kind!=="purchase-return")) return NextResponse.json({error:"Invalid purchase tax fields"},{status:400});
-  if (kind !== "payroll" && deductionAccountId) return NextResponse.json({error:"Deduction account is only supported for payroll"},{status:400});
+  if ((expenseVat&&kind!=="expense")||(purchaseVat&&kind!=="purchase-receipt")||(creditReference&&kind!=="purchase-return")) return apiJson({error:"Invalid purchase tax fields"},{status:400});
+  if (kind !== "payroll" && deductionAccountId) return apiJson({error:"Deduction account is only supported for payroll"},{status:400});
   const initial = await source(kind,tenantId,id);
-  if (!initial) return NextResponse.json({error:"Document not found"},{status:404});
-  if (!(await permitted(actor.id,kind,tenantId,initial,true))) return NextResponse.json({error:"Forbidden"},{status:403});
+  if (!initial) return apiJson({error:"Document not found"},{status:404});
+  if (!(await permitted(actor.id,kind,tenantId,initial,true))) return apiJson({error:"Forbidden"},{status:403});
   try {
     const entry = await db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
       await lockDocument(tx,kind,tenantId,id);
       const row = await source(kind,tenantId,id,tx);
+      if(row&&!(await permitted(actor.id,kind,tenantId,row,true,tx)))throw new PostingConflict("Current document and ledger permissions are required");
       if (!row?.eligible || !row.date) throw new PostingConflict("Document is unavailable for posting: check its status and any reversed receipt stock movements");
       if (entryDate < row.date) throw new PostingConflict("Journal date cannot precede the document date");
       if (await documentJournal(tx,kind,tenantId,row.companyId,id)) throw new PostingConflict("Document already has a ledger journal, including if reversed");
@@ -183,13 +191,13 @@ export async function POST(request: Request, context: Context) {
     const savedTax=isPurchaseDocument(kind)?await db.purchaseVat.findUnique({where:{entryId:entry.id}}):null;
     const savedExpense=kind==="expense"?await db.expenseVat.findUnique({where:{entryId:entry.id}}):null;
     const savedVat=savedTax??savedExpense;
-    return NextResponse.json({entry,purchaseVat:savedTax,expenseVat:savedExpense,gross:savedVat?.netAmount.plus(savedVat.taxAmount).toFixed(3)},{status:201});
+    return apiJson({entry,purchaseVat:savedTax,expenseVat:savedExpense,gross:savedVat?.netAmount.plus(savedVat.taxAmount).toFixed(3)},{status:201});
   } catch(error) {
-    if (error instanceof LedgerPeriodClosed) return NextResponse.json({error:error.message,lockedThrough:error.lockedThrough},{status:409});
-    if (error instanceof VatConflict) return NextResponse.json({error:error.message},{status:409});
-    if (error instanceof PostingConflict) return NextResponse.json({error:error.message},{status:409});
-    if (error instanceof LedgerCompanyMissing) return NextResponse.json({error:"Company not found"},{status:404});
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return NextResponse.json({error:"Document already posted"},{status:409});
+    if (error instanceof LedgerPeriodClosed) return apiJson({error:error.message,lockedThrough:error.lockedThrough},{status:409});
+    if (error instanceof VatConflict) return apiJson({error:error.message},{status:409});
+    if (error instanceof PostingConflict) return apiJson({error:error.message},{status:409});
+    if (error instanceof LedgerCompanyMissing) return apiJson({error:"Company not found"},{status:404});
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return apiJson({error:"Document already posted"},{status:409});
     throw error;
   }
 }

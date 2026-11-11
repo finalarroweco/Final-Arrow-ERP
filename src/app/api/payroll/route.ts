@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiJson } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -11,18 +11,18 @@ const period = z.string().regex(/^\d{4}-\d{2}$/).refine((value) => dueDate.safeP
 const schema = z.object({ tenantId: uuid, companyId: uuid, employeeId: uuid, period,
   baseSalary: amount, allowances: amount, deductions: amount, note: z.string().trim().max(1000).nullish() }).strict();
 export async function GET(request: Request) {
-  const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const actor = await currentUser(); if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const query = new URL(request.url).searchParams;
   const keys = ["tenantId", "companyId", "period", "page", "q", "status", "branchId"];
-  if (keys.some((key) => query.getAll(key).length > 1)) return NextResponse.json({ error: "Duplicate payroll filter" }, { status: 400 });
+  if (keys.some((key) => query.getAll(key).length > 1)) return apiJson({ error: "Duplicate payroll filter" }, { status: 400 });
   const parsed = z.object({ tenantId: uuid, companyId: uuid, period: period.optional(),
     q: z.string().trim().max(120).optional(), status: z.enum(["DRAFT", "APPROVED", "PAID", "VOID"]).optional(), branchId: uuid.optional(), page: z.coerce.number().int().min(0).max(100000).default(0) })
     .safeParse(Object.fromEntries(keys.filter((key) => query.has(key)).map((key) => [key, query.get(key)])));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid payroll scope" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid payroll scope" }, { status: 400 });
   const { tenantId, companyId, period: month, page, q, status, branchId } = parsed.data;
   const branches = await readableCompanyBranches({ userId: actor.id, tenantId, companyId, permission: "payroll:read" });
-  if (branches === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (branchId && branches !== null && !branches.includes(branchId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (branches === false) return apiJson({ error: "Forbidden" }, { status: 403 });
+  if (branchId && branches !== null && !branches.includes(branchId)) return apiJson({ error: "Forbidden" }, { status: 403 });
   const entries = await db.payrollEntry.findMany({ where: { tenantId, companyId,
     ...(branchId ? { branchId } : branches === null ? {} : { branchId: { in: branches } }),
     ...(status ? { status } : {}), ...(q ? { OR: [
@@ -30,21 +30,21 @@ export async function GET(request: Request) {
       { employeeCode: { contains: q, mode: "insensitive" as const } }
     ] } : {}), ...(month ? { period: new Date(`${month}-01T00:00:00.000Z`) } : {}) },
     orderBy: [{ period: "desc" }, { createdAt: "desc" }, { id: "asc" }], skip: page * 50, take: 51 });
-  return NextResponse.json({ entries: entries.slice(0, 50), nextPage: entries.length > 50 ? page + 1 : null });
+  return apiJson({ entries: entries.slice(0, 50), nextPage: entries.length > 50 ? page + 1 : null });
 }
 export async function POST(request: Request) {
-  const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const actor = await currentUser(); if (!actor) return apiJson({ error: "Unauthenticated" }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid payroll entry" }, { status: 400 });
+  if (!parsed.success) return apiJson({ error: "Invalid payroll entry" }, { status: 400 });
   const { tenantId, companyId, employeeId, period: month, baseSalary, allowances, deductions, note } = parsed.data;
   const employee = await db.employee.findUnique({ where: { tenantId_companyId_id: { tenantId, companyId, id: employeeId } } });
-  if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!employee) return apiJson({ error: "Employee not found" }, { status: 404 });
   const scope = { userId: actor.id, tenantId, companyId, branchId: employee.branchId ?? undefined };
   if (!(await canAccess({ ...scope, permission: "payroll:create" })) || !(await canAccess({ ...scope, permission: "employee:read" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (employee.status !== "ACTIVE") return NextResponse.json({ error: "Employee is inactive" }, { status: 409 });
+    return apiJson({ error: "Forbidden" }, { status: 403 });
+  if (employee.status !== "ACTIVE") return apiJson({ error: "Employee is inactive" }, { status: 409 });
   const netPay = new Prisma.Decimal(baseSalary).plus(allowances).minus(deductions);
-  if (netPay.isNegative()) return NextResponse.json({ error: "Deductions exceed gross pay" }, { status: 400 });
+  if (netPay.isNegative()) return apiJson({ error: "Deductions exceed gross pay" }, { status: 400 });
   const company = await db.company.findUniqueOrThrow({ where: { tenantId_id: { tenantId, id: companyId } }, select: { baseCurrency: true } });
   try {
     const entry = await db.$transaction(async (tx) => {
@@ -54,9 +54,9 @@ export async function POST(request: Request) {
       await tx.auditLog.create({ data: { tenantId, actorId: actor.id, action: "payroll.created", entity: "PayrollEntry", entityId: entry.id } });
       return entry;
     });
-    return NextResponse.json({ entry }, { status: 201 });
+    return apiJson({ entry }, { status: 201 });
   } catch (error) {
-    if (typeof error === "object" && error && "code" in error && error.code === "P2002") return NextResponse.json({ error: "Payroll already exists for this employee and month" }, { status: 409 });
+    if (typeof error === "object" && error && "code" in error && error.code === "P2002") return apiJson({ error: "Payroll already exists for this employee and month" }, { status: 409 });
     throw error;
   }
 }

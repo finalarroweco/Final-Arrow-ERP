@@ -1,0 +1,21 @@
+import {z} from 'zod';
+const uuid=z.string().uuid().transform(v=>v.toLowerCase());
+const text=(max:number)=>z.string().trim().min(3).max(max).refine(v=>!/[\u0000-\u001f\u007f]/u.test(v));
+const dueDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>v>='2000-01-01'&&v<='2099-12-31'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v);
+export const milestoneCommercialFields={customerId:uuid,currency:z.string().regex(/^[A-Z]{3}$/),agreedPrice:z.string().regex(/^(0|[1-9]\d{0,14})\.\d{3}$/),treatment:z.enum(['STANDARD','ZERO','EXEMPT']),paymentTerms:text(120).nullable(),paymentDueDate:dueDate.nullable()};
+export const milestoneTermsPaired=(p:{paymentTerms:string|null;paymentDueDate:string|null})=>(p.paymentTerms===null)===(p.paymentDueDate===null);
+const scope={tenantId:uuid,companyId:uuid,branchId:uuid.nullable(),projectId:uuid,expectedActorId:uuid};
+const action={...scope,requestId:uuid,milestoneId:uuid,reason:text(300)};
+export const milestoneDefinition=z.object({...action,kind:z.literal('CREATE'),description:text(500),...milestoneCommercialFields}).strict().refine(milestoneTermsPaired);
+export const milestoneTransition=z.object({...action,kind:z.enum(['COMPLETE','APPROVE','CANCEL']),expectedSequence:z.number().int().min(0).max(2)}).strict();
+export const milestoneAction=z.union([milestoneDefinition,milestoneTransition]);
+const selection=z.object({...scope,milestoneId:uuid,expectedSequence:z.literal(2),...milestoneCommercialFields,replacesSourceId:uuid.nullable()}).strict();
+export const milestoneInvoiceSelection=selection.refine(milestoneTermsPaired);
+export const milestoneInvoiceRequest=selection.extend({requestId:uuid,previewHash:z.string().regex(/^[a-f0-9]{64}$/),reason:text(300)}).strict().refine(milestoneTermsPaired);
+export const milestoneFilters=z.object({tenantId:uuid,companyId:uuid,expectedActorId:uuid,projectId:uuid.optional(),page:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
+export type MilestoneAction=z.infer<typeof milestoneAction>;
+export type MilestoneInvoiceSelection=z.infer<typeof milestoneInvoiceSelection>;
+export type MilestoneInvoiceRequest=z.infer<typeof milestoneInvoiceRequest>;
+/** Parsing supplies stable key order and rejects unknown state-changing fields. */
+export const canonicalMilestoneAction=(value:unknown)=>milestoneAction.parse(value);
+export const canonicalMilestoneInvoiceRequest=(value:unknown)=>milestoneInvoiceRequest.parse(value);

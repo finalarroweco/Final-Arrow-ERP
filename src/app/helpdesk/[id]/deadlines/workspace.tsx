@@ -1,11 +1,11 @@
 "use client";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { deadlineChangeInput, deadlineFromEditor, decodeDeadlineRetry, type PendingDeadline, type DeadlineState } from "@/lib/ticket-deadline-input";
-import { translate, type Locale } from "@/lib/locale";
+import { LocalizedPresentationError, presentCaughtError, presentApiError, translate, type Locale } from "@/lib/locale";
 import styles from "../../deadlines/deadlines.module.css";
 type Snapshot = { evaluatedAt: string; ticket: { id: string; number: string; status: string; resolutionDueAt: string | null; deadlineSequence: number; deadlineState: DeadlineState }; changes: { id: string; sequence: number; dueAt: string | null; reason: string; authorName: string | null; createdAt: string }[]; nextPage: number | null };
 export function DeadlineWorkspace({ tenantId, ticketId, actorId, canManage, locale }: { tenantId: string; ticketId: string; actorId: string; canManage: boolean; locale: Locale }) {
- const t = (en: string, ar: string) => translate(locale, en, ar);
+ const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
  const [snapshot, setSnapshot] = useState<Snapshot | null>(null), [page, setPage] = useState(0), [refresh, setRefresh] = useState(0), [error, setError] = useState(""), [message, setMessage] = useState("");
  const [mode, setMode] = useState<"SET" | "CLEAR">("SET"), [editor, setEditor] = useState(""), [reason, setReason] = useState(""), [pending, setPending] = useState<PendingDeadline | null>(null), [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [loading, setLoading] = useState(true), [storageError, setStorageError] = useState(false);
  const key = `erp-ticket-deadline:v1:${actorId}:${tenantId}:${ticketId}`, root = `/api/tickets/${ticketId}/deadlines`, format = (value: string | null) => value ? new Date(value).toLocaleString(locale === "ar" ? "ar-OM" : "en-GB", { timeZone: "UTC", dateStyle: "medium", timeStyle: "medium" }) + " UTC" : t("No deadline", "دون موعد");
@@ -13,21 +13,21 @@ export function DeadlineWorkspace({ tenantId, ticketId, actorId, canManage, loca
  useEffect(() => { try { const value = decodeDeadlineRetry(sessionStorage.getItem(key), actorId, tenantId, ticketId); if (value && canManage) { setPending(value); setMode(value.payload.dueAt ? "SET" : "CLEAR"); setEditor(value.payload.dueAt?.slice(0, -1) ?? ""); setReason(value.payload.reason); } else sessionStorage.removeItem(key); } catch { setStorageError(true); } setReady(true); }, [key, actorId, tenantId, ticketId, canManage]);
  useEffect(() => {
   const controller = new AbortController(); setLoading(true); setError("");
-  fetch(root + "?" + new URLSearchParams({ tenantId, page: String(page) }), { cache: "no-store", signal: controller.signal }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); if (!controller.signal.aborted) setSnapshot(data); }).catch(error => { if (!controller.signal.aborted) setError(String(error)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+  fetch(root + "?" + new URLSearchParams({ tenantId, page: String(page) }), { cache: "no-store", signal: controller.signal }).then(async response => { const data = await response.json(); if (!response.ok) throw new LocalizedPresentationError(presentApiError(t, data, response.status)); if (!controller.signal.aborted) setSnapshot(data); }).catch(error => { if (!controller.signal.aborted) setError(presentCaughtError(t, error)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
   return () => controller.abort();
- }, [root, tenantId, page, refresh]);
+ }, [root, tenantId, page, refresh, t]);
  const remember = useCallback((value: PendingDeadline | null) => { setPending(value); try { if (value) sessionStorage.setItem(key, JSON.stringify(value)); else sessionStorage.removeItem(key); } catch { setStorageError(true); } }, [key]);
  async function send(value: PendingDeadline) {
   setBusy(true); setMessage(""); remember(value);
   try { const response = await fetch(root, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value.payload) }); const data = await response.json();
-   if (!response.ok) { if (response.status < 500) { remember(null); setRefresh(value => value + 1); } throw new Error(data.error); }
+   if (!response.ok) { if (response.status < 500) { remember(null); setRefresh(value => value + 1); } throw new LocalizedPresentationError(presentApiError(t, data, response.status)); }
    remember(null); setReason(""); setEditor(""); setMode("SET"); setPage(0); setRefresh(value => value + 1); setMessage(t("Deadline change saved.", "تم حفظ تغيير الموعد."));
-  } catch (error) { setMessage(String(error)); } finally { setBusy(false); }
+  } catch (error) { setMessage(presentCaughtError(t, error)); } finally { setBusy(false); }
  }
  async function submit(event: FormEvent) {
   event.preventDefault(); if (!snapshot || pending || busy || loading || !ready) return;
-  try { const dueAt = mode === "CLEAR" ? null : deadlineFromEditor(editor); if (mode === "SET" && !dueAt) throw new Error(t("Enter a UTC deadline.", "أدخل الموعد بتوقيت UTC.")); const parsed = deadlineChangeInput.safeParse({ tenantId, requestId: crypto.randomUUID(), expectedSequence: snapshot.ticket.deadlineSequence, dueAt, reason }); if (!parsed.success) throw new Error(t("Check the UTC date and reason.", "راجع التاريخ بتوقيت UTC وسبب التغيير.")); await send({ version: 1, actorId, ticketId, payload: parsed.data }); }
-  catch (error) { setMessage(String(error)); }
+  try { const dueAt = mode === "CLEAR" ? null : deadlineFromEditor(editor); if (mode === "SET" && !dueAt) throw new LocalizedPresentationError(t("Enter a UTC deadline.", "أدخل الموعد بتوقيت UTC.")); const parsed = deadlineChangeInput.safeParse({ tenantId, requestId: crypto.randomUUID(), expectedSequence: snapshot.ticket.deadlineSequence, dueAt, reason }); if (!parsed.success) throw new LocalizedPresentationError(t("Check the UTC date and reason.", "راجع التاريخ بتوقيت UTC وسبب التغيير.")); await send({ version: 1, actorId, ticketId, payload: parsed.data }); }
+  catch (error) { setMessage(presentCaughtError(t, error)); }
  }
  const active = snapshot && ["OPEN", "IN_PROGRESS"].includes(snapshot.ticket.status), locked = busy || !!pending || loading || !ready;
  return <section className={`panel ${styles.workspace}`}>
