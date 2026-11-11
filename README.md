@@ -49,3 +49,5 @@ See [staging setup](docs/STAGING_SETUP.md) for database/hosting setup and live r
 New bank-statement import clients must send `X-Expected-Actor-Id`. Current workspaces bind private reads to their mounted operator and verify pending import outcomes. Actorless legacy import storage remains quarantined; an `UNKNOWN` outcome is not safe abandonment. See [import recovery](docs/BANK_STATEMENT_IMPORT_RECOVERY.md) and [mounted read identity](docs/MOUNTED_WORKSPACE_READ_IDENTITY.md).
 
 Actor-bound pending bank imports support explicit permanent abandonment with immutable UUID fences and exact terminal receipts. It never reverses a saved statement or changes money. Keep migration79 guards and tombstones on application rollback; see [the recovery contract](docs/BANK_STATEMENT_IMPORT_ABANDONMENT.md).
+
+Private, explicitly configured [operational alerts](docs/PRIVATE_ALERTS.md) cover ticket deadlines, manual subscription review dates and configured stock shortages. They are evaluated only when requested in-app, with no background scheduler or external delivery.

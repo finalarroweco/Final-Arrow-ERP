@@ -145,3 +145,7 @@
 ## Manual inventory reordering
 
 The bounded manual reorder implementation lives at `/inventory/reordering`; see [manual reorder policies](MANUAL_REORDER_POLICIES.md). Operators explicitly configure per-item, concrete-branch minimum and target thresholds, with immutable revisions and current policies-first stock reporting. This does not implement procurement planning, supplier selection, purchase recommendations, orders, forecasting or automation. Unit revisions invalidate old thresholds even after an away-and-back unit change.
+
+## Private operational alerts
+
+[Private alert rules](PRIVATE_ALERTS.md) observe ticket deadlines, manual subscription review dates and configured stock shortages on explicit evaluation. They never modify those source records or send externally. History remains subject to current source access; authenticated metadata-only terminal recovery reveals no source counts or details. Background scheduling and provider-backed AI are separate unfinished modules.

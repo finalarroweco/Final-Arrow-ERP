@@ -5,6 +5,7 @@ const groups = [
     ["/workspace", "Companies, branches & team", "الشركات والفروع والفريق"],
     ["/release-status", "Delivery status", "حالة التطوير والمتبقي"], ["/approvals", "Approvals", "الموافقات"], ["/audit", "Activity", "سجل النشاط"],
     ["/reports", "Report center", "مركز التقارير"],
+    ["/private-alerts", "My operational alerts", "تنبيهاتي التشغيلية"],
     ["/saved-reports", "My saved reports", "تقاريري المحفوظة"],
     ["/accounting/recurring-billing", "Recurring draft billing", "فوترة دورية بمسودات"],
     ["/manual-subscriptions", "Manual subscription register", "سجل الاشتراكات اليدوي"],

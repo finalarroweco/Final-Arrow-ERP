@@ -143,6 +143,8 @@ model Tenant {
 }
 
 model Company {
+  privateAlertRules PrivateAlertRule[]
+  privateAlertRequests PrivateAlertRequest[]
   paymentTermTemplates PaymentTermTemplate[]
   savedReports SavedReport[]
   importBatches CatalogImportBatch[]
@@ -208,6 +210,7 @@ model PaymentTermTemplate {
 }
 
 model Branch {
+  privateAlertRules PrivateAlertRule[]
   savedReports SavedReport[]
   importBatches CatalogImportBatch[]
   id             String          @id @default(uuid()) @db.Uuid
@@ -285,6 +288,8 @@ model Session {
 }
 
 model Membership {
+  privateAlertRules PrivateAlertRule[]
+  privateAlertRequests PrivateAlertRequest[]
  bankImportCancellations BankStatementImportCancellation[]
  bankRequestResolutions BankRequestResolution[]
  certificatesCreated BankReconciliationCertificate[] @relation("CertificateCreator")
@@ -969,6 +974,7 @@ model LeaveRequest {
 }
 
 model Ticket {
+  alertReopenVersion Int @default(0)
   resolutionDueAt DateTime? @db.Timestamptz(3)
   deadlineSequence Int @default(0)
   deadlineChanges TicketDeadlineChange[]
@@ -2348,4 +2354,57 @@ model SupplierRfqRequest {
  createdAt DateTime @default(now()) @db.Timestamptz(3)
  @@unique([tenantId,companyId,id])
  @@index([tenantId,companyId,rfqId,createdAt])
+}
+
+model PrivateAlertRule {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ actorId String @db.Uuid
+ kind String
+ lookbackDays Int?
+ horizonDays Int?
+ priority String?
+ enabled Boolean @default(false)
+ version Int
+ lastEvaluatedAt DateTime? @db.Timestamptz(3)
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ branch Branch? @relation(fields:[tenantId,companyId,branchId],references:[tenantId,companyId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ notices PrivateAlertNotice[]
+ @@unique([id,tenantId,companyId,actorId])
+ @@index([tenantId,companyId,actorId,createdAt,id],map:"private_alert_rules_owner")
+}
+model PrivateAlertNotice {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ ruleId String @db.Uuid
+ sourceId String @db.Uuid
+ fingerprint String
+ episode Int
+ observation Json
+ observedAt DateTime @db.Timestamptz(3)
+ lastMatchedAt DateTime @db.Timestamptz(3)
+ lastEvaluationMatched Boolean
+ acknowledgedAt DateTime? @db.Timestamptz(3)
+ rule PrivateAlertRule @relation(fields:[ruleId],references:[id],onDelete:Restrict)
+ @@unique([ruleId,sourceId,episode])
+ @@index([ruleId,observedAt,id],map:"private_alert_notice_page")
+}
+model PrivateAlertRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ actorId String @db.Uuid
+ ruleId String @db.Uuid
+ action String
+ expectedVersion Int
+ request Json
+ outcome String
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
+ actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
+ @@index([tenantId,companyId,actorId,ruleId],map:"private_alert_request_owner")
 }
