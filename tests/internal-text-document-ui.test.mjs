@@ -20,7 +20,7 @@ const payload = { tenantId, companyId, documentId, branchId, expectedActorId: ac
 const row = { id: id(8), requestId: payload.requestId, tenantId, companyId, documentId, branchId, version: 1, action: 'create', title: payload.title, body: payload.body, reason: payload.reason, archived: false, createdBy: actorId, createdAt: '2026-11-11T12:00:00.000Z' };
 const current = { id: documentId, tenantId, companyId, branchId, version: 1, title: row.title, body: row.body, archived: false, createdBy: actorId, createdAt: row.createdAt, updatedAt: row.createdAt };
 const scope = { tenantId, companyId, branchId, label: 'Company / Branch', canManage: true };
-const detail = { document: current, events: [row], page: 0, nextPage: null, canManage: true };
+const detail = { actorId, document: current, events: [row], page: 0, nextPage: null, canManage: true };
 const envelope = request => JSON.stringify({ version: 1, actorId, request });
 function browser() {
  const storage = new Map(), held = new Set();
@@ -103,13 +103,13 @@ test('actor and scope switches fence late responses and leave old requests uncha
  }
 });
 test('history detail rejects scope substitutions, incoherent latest text, version order and missing pagination', () => {
- assert.deepEqual(readInput.verifiedDocumentDetail(detail, scope, documentId, 0), detail);
- for (const patch of [{ body: 'tampered' }, { title: 'tampered' }, { archived: true }, { version: 2 }, { branchId: null }, { id: id(99) }, { tenantId: id(99) }]) assert.equal(readInput.verifiedDocumentDetail({ ...detail, document: { ...current, ...patch } }, scope, documentId, 0), null);
- for (const patch of [{ documentId: id(99) }, { branchId: null }, { tenantId: id(99) }, { body: 'tampered' }, { version: 2 }]) assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: [{ ...row, ...patch }] }, scope, documentId, 0), null);
- assert.equal(readInput.verifiedDocumentDetail({ ...detail, nextPage: 2 }, scope, documentId, 0), null);
- assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: [] }, scope, documentId, 0), null);
- assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: [row, row] }, scope, documentId, 0), null);
- assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: Array(51).fill(row) }, scope, documentId, 0), null);
+ assert.deepEqual(readInput.verifiedDocumentDetail(detail, scope, documentId, 0, actorId), detail);
+ for (const patch of [{ body: 'tampered' }, { title: 'tampered' }, { archived: true }, { version: 2 }, { branchId: null }, { id: id(99) }, { tenantId: id(99) }]) assert.equal(readInput.verifiedDocumentDetail({ ...detail, document: { ...current, ...patch } }, scope, documentId, 0, actorId), null);
+ for (const patch of [{ documentId: id(99) }, { branchId: null }, { tenantId: id(99) }, { body: 'tampered' }, { version: 2 }]) assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: [{ ...row, ...patch }] }, scope, documentId, 0, actorId), null);
+ assert.equal(readInput.verifiedDocumentDetail({ ...detail, nextPage: 2 }, scope, documentId, 0, actorId), null);
+ assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: [] }, scope, documentId, 0, actorId), null);
+ assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: [row, row] }, scope, documentId, 0, actorId), null);
+ assert.equal(readInput.verifiedDocumentDetail({ ...detail, events: Array(51).fill(row) }, scope, documentId, 0, actorId), null);
  const unicode = '😀'.repeat(200); assert.ok(readInput.documentMetadata.safeParse({ ...current, title: unicode }).success);
 });
 test('all explicit action payloads retain independent document and request identities through retries', async () => {
@@ -177,4 +177,11 @@ test('out-of-order detail and close responses cannot expose stale history', asyn
  buttons[0].props.onClick(); assert.equal(pending.length, 3); close.props.onClick();
  pending[2].resolve({ ok: true, json: async () => detail }); await new Promise(resolve => setImmediate(resolve)); assert.equal(h.slots[7], null); assert.equal(h.slots[8], null);
  h.unmount();
+});
+
+test('read receipts reject a changed actor and all workspace read links bind the mounted identity',()=>{assert.equal(readInput.verifiedDocumentDetail({...detail,actorId:id(99)},scope,documentId,0,actorId),null);const source=readFileSync(directory+'workspace.tsx','utf8');assert.equal((source.match(/new URLSearchParams\(\{ expectedActorId: actorId/g)||[]).length,2);assert.match(source,/data\.actorId !== actorId/);});
+test('changed-session JSON cannot populate register or document state in a mounted actor workspace',async()=>{
+ const urls=[],h=workspaceHarness({effects:true,fetcher:async url=>{urls.push(url);return {ok:true,json:async()=>({actorId:id(99),documents:[current],page:0,nextPage:null})};}});h.render();await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(h.slots[3],[]);assert.ok(urls.every(url=>new URL(url,'https://erp.test').searchParams.get('expectedActorId')===actorId));h.unmount();
+ const detailUrls=[],d=workspaceHarness({state:{3:[current],5:false},effects:true,fetcher:async url=>{detailUrls.push(url);return url.includes('/api/documents?')?{ok:false,json:async()=>({})}:{ok:true,json:async()=>({...detail,actorId:id(99)})};}});const button=d.descendants(d.render()).find(e=>e.type==='button'&&e.props.children===row.title);button.props.onClick();await new Promise(resolve=>setImmediate(resolve));assert.equal(d.slots[7],null);assert.equal(d.slots[8],null);assert.ok(detailUrls.every(url=>new URL(url,'https://erp.test').searchParams.get('expectedActorId')===actorId));d.unmount();
+ const links=workspaceHarness({state:{7:detail,8:row}});for(const link of links.descendants(links.render()).filter(e=>e.type==='a'&&(e.props.href.includes('/api/documents')||e.props.href.includes('/print?'))))assert.equal(new URL(link.props.href,'https://erp.test').searchParams.get('expectedActorId'),actorId);
 });

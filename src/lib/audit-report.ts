@@ -19,7 +19,7 @@ export function auditWhere({ tenantId, action, entity, entityId, actorId, from, 
   return {
     tenantId,
     // Source-private physical-document identifiers stay in their reauthorized register.
-    AND: [{ entity: { notIn: ["SalesStockDocument", "SalesStockCancellation", "InternalTextDocument", "InternalTextDocumentEvent", "InternalTextDocumentRequest"] } }],
+    AND: [{ entity: { notIn: ["SalesStockDocument", "SalesStockCancellation", "InternalTextDocument", "InternalTextDocumentEvent", "InternalTextDocumentRequest", "ManualSubscription", "ManualSubscriptionRevision", "ManualSubscriptionRequest"] } }],
     ...(action ? { action: { contains: action, mode: "insensitive" } } : {}),
     ...(entity ? { entity: { contains: entity, mode: "insensitive" } } : {}),
     ...(entityId ? { entityId } : {}),

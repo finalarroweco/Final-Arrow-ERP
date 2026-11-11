@@ -28,8 +28,8 @@ export function DocumentScopeWorkspace({ actorId, scope, locale }: { actorId: st
   const [detail, setDetail] = useState<DocumentDetail | null>(null), [selected, setSelected] = useState<DocumentEvent | null>(null), [detailLoading, setDetailLoading] = useState(false);
   const mounted = useRef(false), sequence = useRef(0);
   const blocked = request.blocked || request.busy || !request.ready;
-  const query = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId, branchId: scope.branchId ?? "company", state: filters.state, q: filters.q, page: String(page) }).toString();
-  const scopeQuery = new URLSearchParams({ tenantId: scope.tenantId, companyId: scope.companyId }).toString();
+  const query = new URLSearchParams({ expectedActorId: actorId, tenantId: scope.tenantId, companyId: scope.companyId, branchId: scope.branchId ?? "company", state: filters.state, q: filters.q, page: String(page) }).toString();
+  const scopeQuery = new URLSearchParams({ expectedActorId: actorId, tenantId: scope.tenantId, companyId: scope.companyId }).toString();
   useEffect(() => { const current = sequence; mounted.current = true; return () => { mounted.current = false; current.current++; }; }, []);
   useEffect(() => {
     let active = true;
@@ -37,19 +37,19 @@ export function DocumentScopeWorkspace({ actorId, scope, locale }: { actorId: st
     void (async () => { try {
       const response = await fetch(`/api/documents?${query}`, { cache: "no-store" }), data = await response.json();
       const parsed = documentMetadata.array().max(50).safeParse(data.documents);
-      if (!response.ok || !parsed.success || data.page !== page || !(data.nextPage === null || data.nextPage === page + 1) || parsed.data.some(row => !belongsToScope(row, scope) || (filters.state === "ACTIVE" && row.archived) || (filters.state === "ARCHIVED" && !row.archived))) throw Error("unverified register");
+      if (!response.ok || data.actorId !== actorId || !parsed.success || data.page !== page || !(data.nextPage === null || data.nextPage === page + 1) || parsed.data.some(row => !belongsToScope(row, scope) || (filters.state === "ACTIVE" && row.archived) || (filters.state === "ARCHIVED" && !row.archived))) throw Error("unverified register");
       if (active) { setRows(parsed.data); setNextPage(data.nextPage); }
     } catch { if (active) setMessage(t("The register could not be verified. Refresh to retry.", "تعذر التحقق من السجل. حدّث لإعادة المحاولة.")); }
     finally { if (active) setLoading(false); } })();
     return () => { active = false; };
-  }, [query, page, refresh, scope, filters.state, t]);
+  }, [query, page, refresh, scope, filters.state, t, actorId]);
   function closeDetail() { sequence.current++; setDetail(null); setSelected(null); setDetailLoading(false); }
   async function openDetail(id: string, historyPage = 0) {
     const current = ++sequence.current;
     setDetail(null); setSelected(null); setDetailLoading(true);
     try {
       const response = await fetch(`/api/documents/${id}?${scopeQuery}&page=${historyPage}`, { cache: "no-store" }), data = await response.json();
-      const checked = verifiedDocumentDetail(data, scope, id, historyPage);
+      const checked = verifiedDocumentDetail(data, scope, id, historyPage, actorId);
       if (!response.ok || !checked) throw Error("unverified detail");
       if (!mounted.current || sequence.current !== current) return;
       setDetail(checked); setSelected(checked.events[0] ?? null);

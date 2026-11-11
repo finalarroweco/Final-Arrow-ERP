@@ -396,6 +396,8 @@ model Invitation {
 }
 
 model Customer {
+  manualSubscriptions ManualSubscription[]
+  manualSubscriptionRequests ManualSubscriptionRequest[]
   importBatchId String? @db.Uuid
   importBatch CatalogImportBatch? @relation(fields:[importBatchId],references:[id],onDelete:Restrict)
   @@index([importBatchId])
@@ -1963,4 +1965,82 @@ model InternalTextDocumentRequest {
  createdAt DateTime @default(now()) @db.Timestamptz(3)
  @@unique([tenantId,companyId,id])
  @@index([tenantId,companyId,documentId,createdAt])
+}
+
+model ManualSubscription {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ reference String @db.VarChar(40)
+ customerBranchId String? @db.Uuid
+ customerName String
+ customerCode String
+ serviceLabel String @db.VarChar(200)
+ description String
+ agreementReference String @db.VarChar(200)
+ status String @db.VarChar(7)
+ startDate DateTime? @db.Date
+ endDate DateTime? @db.Date
+ nextReviewDate DateTime? @db.Date
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ customer Customer @relation(fields:[tenantId,companyId,customerId],references:[tenantId,companyId,id],onDelete:Restrict)
+ revisions ManualSubscriptionRevision[]
+ @@unique([tenantId,companyId,id])
+ @@unique([tenantId,companyId,reference])
+ @@index([tenantId,companyId,branchId,archived,updatedAt,id],map:"manual_subscription_register")
+ @@index([tenantId,companyId,customerId])
+}
+model ManualSubscriptionRevision {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ subscriptionId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ reference String @db.VarChar(40)
+ customerBranchId String? @db.Uuid
+ customerName String
+ customerCode String
+ serviceLabel String @db.VarChar(200)
+ description String
+ agreementReference String @db.VarChar(200)
+ status String @db.VarChar(7)
+ startDate DateTime? @db.Date
+ endDate DateTime? @db.Date
+ nextReviewDate DateTime? @db.Date
+ version Int
+ action String @db.VarChar(7)
+ reason String @db.VarChar(300)
+ archived Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ subscription ManualSubscription @relation(fields:[tenantId,companyId,subscriptionId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([subscriptionId,version])
+ @@index([tenantId,companyId,subscriptionId,version])
+}
+model ManualSubscriptionRequest {
+ id String @id @db.Uuid
+ subscriptionId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ customerId String @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(7)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ customer Customer @relation(fields:[tenantId,companyId,customerId],references:[tenantId,companyId,id],onDelete:Restrict)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,subscriptionId,createdAt])
+ @@index([tenantId,companyId,customerId])
 }

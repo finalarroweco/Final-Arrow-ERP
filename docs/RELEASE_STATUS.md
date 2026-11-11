@@ -14,7 +14,8 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Management | Scoped dashboard, report directory, private saved filters for customer/supplier balances and posting-date/due-date aging, invoice/expense/quote/sales-order/purchase-order register presets, company payment-term templates and action inbox for leave, expense and purchase drafts | Configurable approval policies, presets for other report types |
 | POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV, saved Oman VAT, full/partial refund accounting, branch cash shifts/closure and a kitchen queue | inclusive tax pricing, kitchen printers, device payment, stock recipes |
 | Internal documents | Scoped plain-text operating notes/reference documents, immutable revisions, explicit archive/restore, metadata export and selected-version download/print | Attachments, approval chains, signatures, external sharing and retention policies |
-| Other planned modules | Preview cards only | Subscriptions, AI and automation |
+| Subscriptions | Manual customer agreement register, operator-reported status and review dates, immutable revisions, explicit archive/restore and scoped history/export | Billing plans, recurrence, invoicing/payment, renewals, service entitlement changes and alerts |
+| Other planned modules | Preview cards only | AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
 
 ## Before live operational acceptance
@@ -32,6 +33,26 @@ The configured Core checks workflow audits dependencies, runs ESLint and TypeScr
 ## Implementation history
 
 The notes below describe incremental releases; older exclusions describe their original slice. The current matrix above and latest dated release entries are authoritative.
+
+### Combined manual subscription verification — 11 November 2026
+
+The final integrated candidate, including mounted-actor document read guards and lossless legacy customer-name snapshots, passed 78 fresh migrations, 336 unit/component tests, 35 database tests and 39 API checks on disposable vanilla PostgreSQL 17. Production build, TypeScript and dependency audit passed; ESLint remains at zero errors and 23 existing warnings. The final source was a clean commit with unchanged complete archive digest. Focused subscription APIs passed with eight- and one-connection pools, including long multiline Arabic/emoji and empty legacy customer names through creation, original replay, resolution, detail and selected-version export/print.
+
+A populated 77-to-78 upgrade preserved all original rows and row versions across 86 existing tables. Fresh vanilla and broad-provider-default database checks, concurrent atomic publication and deliberately injected late-failure rollback passed. The migration manufactured no subscriptions or revisions. Tests verify independent record/customer permission intersections, current actor checks, immutable source constraints, real calendar dates, explicit null clearing and unchanged customer, financial and stock records. Independent review findings were fixed and rechecked.
+
+These are isolated technical results. Local dependencies were copied from the verified baseline with independent Prisma generation; the exact remote candidate must still pass clean installation and PostgreSQL 16 CI. Actual-browser interrupted flows, mobile/RTL/accessibility, physical printing and business acceptance remain separate. No merge, manual deployment, live migration or external agreement/payment action was performed.
+
+### Manual subscription register — review candidate
+
+The bilingual `/manual-subscriptions` workspace tracks known customer agreements, free-text service labels, operator-reported planned/active/paused/ended status, optional calendar start/end dates and an explicit next review date. These are internal records: status never activates or suspends a service, dates do not trigger billing or renewal, and a review date does not schedule a reminder. No monetary fields, financial balances, invoices, payments, tax or stock effects are introduced.
+
+Every read, search, history view, export, print and replay requires subscription rights at the record scope together with customer read rights at the customer's actual scope. These permissions may come from independently scoped roles. Branch rights do not expose company-wide or sibling records/customers. Source filtering happens before pagination. New and existing Owner defaults receive the private register rights; Manager/Viewer defaults do not. Customer snapshots retain only needed name/code labels, while general audit reports exclude private register/request history.
+
+An internal reference, customer and organization scope are fixed on creation. Corrections append full immutable revisions with reasons and optimistic version checks. Archive/restore are recorded independently of agreement status and never cancel a customer agreement. Wrong-source records must be archived and recreated with a new internal reference. New records require an unarchived customer; customer archival preserves authorized historical reading and correction. Customer scope remains protected even by an abandoned-only request, so abandoning an attempt does not remove its permanent source constraints.
+
+Actor-bound request identities, exact replay, permanent abandonment, cross-tab recovery and fresh authorization protect interrupted operations. Unsent drafts remain in memory; submitted uncertain agreement text is stored on this device with an explicit disclosure. Literal text, actual calendar dates, explicit null clearing, UTF-8/serialized-byte limits, complete selected-version output and bounded metadata exports avoid hidden conversions or truncation. SQL guards enforce immutable source/revision/projection/audit relationships and reject ordinary deletion/truncation; they are not tamper-proof against deliberate database-administrator changes.
+
+This is a bounded tracking register, not the planned recurring-billing platform. Billing calendars, pricing/currency/tax, notice periods, renewal authority, cancellation/refunds/proration, entitlements, notifications, signatures and retention rules still need separate product decisions and implementation. See [manual subscription semantics](MANUAL_SUBSCRIPTIONS.md). No external agreement, subscription, payment, sharing or live database action is performed by this slice.
 
 ### Combined internal text-document verification — 11 November 2026
 
