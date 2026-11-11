@@ -1914,3 +1914,53 @@ model SalesStockCancellation {
  request Json
  @@index([tenantId,companyId,createdAt])
 }
+
+model InternalTextDocument {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ title String @db.VarChar(200)
+ body String
+ version Int
+ archived Boolean @default(false)
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,branchId,archived,updatedAt,id],map:"internal_text_document_register")
+}
+model InternalTextDocumentEvent {
+ id String @id @db.Uuid
+ requestId String @unique @db.Uuid
+ documentId String @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ version Int
+ action String @db.VarChar(7)
+ title String @db.VarChar(200)
+ body String
+ reason String @db.VarChar(300)
+ archived Boolean
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([documentId,version])
+ @@index([tenantId,companyId,documentId,version])
+}
+model InternalTextDocumentRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ documentId String @db.Uuid
+ createdBy String @db.Uuid
+ action String @db.VarChar(7)
+ expectedVersion Int
+ request Json
+ outcome String @db.VarChar(9)
+ result Json?
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,documentId,createdAt])
+}

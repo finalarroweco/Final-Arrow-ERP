@@ -13,7 +13,8 @@ This repository is an expanding product foundation. The bilingual `/erp-preview-
 | Accounting | Internal invoice/expense registers, optional Oman VAT snapshots for invoices, purchase receipts/returns, expenses and POS, chart of accounts, balanced manual and source-linked journals, customer/supplier settlements and statements/balances, reversals, period locks, financial reports, audited source payment-term amendments and imported bank statement full/partial allocations and corrections with retained internal snapshots | Statutory tax documents/filing, inclusive prices, imports/reverse charge, automated/final closing, unallocated settlements, statutory reconciliation certification and bank feeds |
 | Management | Scoped dashboard, report directory, private saved filters for customer/supplier balances and posting-date/due-date aging, invoice/expense/quote/sales-order/purchase-order register presets, company payment-term templates and action inbox for leave, expense and purchase drafts | Configurable approval policies, presets for other report types |
 | POS | Branch menu, dine-in/takeaway orders with price snapshots, manual cash/card payment recording, cancellation, printable internal receipts, scoped paid-sales reports with CSV, saved Oman VAT, full/partial refund accounting, branch cash shifts/closure and a kitchen queue | inclusive tax pricing, kitchen printers, device payment, stock recipes |
-| Other planned modules | Preview cards only | Subscriptions, documents, AI and automation |
+| Internal documents | Scoped plain-text operating notes/reference documents, immutable revisions, explicit archive/restore, metadata export and selected-version download/print | Attachments, approval chains, signatures, external sharing and retention policies |
+| Other planned modules | Preview cards only | Subscriptions, AI and automation |
 | Localization | AR/EN switch and RTL foundation; primary workflows, including sales, purchasing, projects, team access and invitation acceptance, have translated interface text | Server error text, end-to-end translation QA, typography and remaining edge cases |
 
 ## Before live operational acceptance
@@ -31,6 +32,24 @@ The configured Core checks workflow audits dependencies, runs ESLint and TypeScr
 ## Implementation history
 
 The notes below describe incremental releases; older exclusions describe their original slice. The current matrix above and latest dated release entries are authoritative.
+
+### Combined internal text-document verification — 11 November 2026
+
+The final integrated candidate passed 77 fresh migrations, 293 unit/component tests, 24 database tests, 38 API checks, production build and TypeScript checks on disposable PostgreSQL 17. The aggregate verifier used vanilla PostgreSQL without optional provider roles. ESLint remains at zero errors and 23 existing warnings; dependency audit reports no vulnerabilities. A separate document API run passed with a one-connection pool. Authorization tests confirm fixed query counts across 10,000 branch checks rather than a database query per branch.
+
+Fresh database checks also passed under broad provider default grants. A populated 76-to-77 upgrade retained all original rows and row versions across 83 existing tables, including financial, bank and physical-sales history; the migration created no text documents or document events. Concurrent publication and deliberately injected late-failure rollback checks passed. New and existing Owner defaults, Manager/Viewer exclusion, full escaped 64 KiB text recovery and SQL truncate protection were verified. Independent review findings about default grants and serialized request limits were fixed and rechecked.
+
+The exact parent source was verified from a clean commit, with a matching complete source archive digest before and after the run. Browser interaction, accessibility, RTL/mobile layout and physical printing remain separate acceptance work. Local dependencies were physically copied from the verified baseline and the Prisma client regenerated; clean dependency installation must be checked by the exact remote candidate CI. No merge, manual deployment, live migration or external text sharing was performed.
+
+### Internal text documents — review candidate
+
+The bilingual `/documents` workspace provides independent company/branch operating notes and reference text. Creating, editing, archiving and restoring are explicit actions with reasons and a shared monotonic version. Every action saves immutable full-text history; stale edits cannot silently overwrite another action. Restore reactivates the current archived content rather than replacing it with an older revision. Scope and original authorship cannot be changed. Plain text is rendered literally, with no embedded resources or executable markup.
+
+New document read/manage rights default only to existing and newly registered Owners. Branch grants cannot read company-wide or sibling-branch documents. Current permissions apply before search/pagination and to every history view, selected-version text download, print, metadata CSV, mutation and retry. Company-wide text is visible to authorized company-wide readers, not private to its author; generic audit reports exclude these private entities and do not duplicate their text.
+
+A submitted request UUID permanently binds actor, scope, action, expected version and exact payload. Committed retries return the original event; explicit check-and-abandon either returns that event or saves a permanent tombstone that blocks delayed execution. Unsent drafts stay in memory. Submitted uncertain requests retain their complete text on the device in actor/scoped browser storage, disclosed in the workspace; this is not encrypted or author-private storage. Cross-tab locking and exact receipt verification prevent silent replacement or incorrect clearing.
+
+Technical limits reject oversized input/export rather than truncating content. Register and history are paginated; selected-version output contains complete text. Database guards protect immutable history, current projections and required audits, including accidental delete/truncate commands. Database administrators can still deliberately alter those guards. This bounded internal library does not implement attachments, source links, approval/signature workflows, external sharing, retention rules or enterprise document governance. See [internal text-document semantics](INTERNAL_TEXT_DOCUMENTS.md). No external text sharing or live migration is included.
 
 ### Combined sales-stock verification — 11 November 2026
 

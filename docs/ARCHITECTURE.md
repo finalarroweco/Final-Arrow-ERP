@@ -104,7 +104,8 @@
 - Alerts
 
 ## 9. Documents & Workflow
-- Documents
+- Implemented review slice: scoped internal plain-text reference documents with immutable revisions, explicit archive/restore, durable request recovery, selected-version text/print and metadata CSV. See [Internal text documents](INTERNAL_TEXT_DOCUMENTS.md). This does not complete enterprise DMS.
+- Planned: attachments and broader document management
 - Templates
 - Approval chains
 - Business rules

@@ -25,6 +25,7 @@ export default async function ReleaseStatusPage(){
  ["/projects/workload",t("Cross-project employee workload, current task due buckets and recorded time by review status","عبء عمل الموظفين عبر المشاريع وتصنيف مواعيد المهام الحالية والساعات حسب حالة المراجعة")],
  ["/projects",t("Projects, linked invoice/collection tracking, manual budgets/costs, tasks, prerequisite dependencies, assignments, time recording and independent time review","المشاريع ومتابعة الفواتير والتحصيلات المرتبطة والميزانيات والتكاليف اليدوية والمهام والمتطلبات السابقة والتكليف وتسجيل الوقت واعتماده بصلاحية مستقلة")],
  ["/helpdesk/deadlines",t("Manual ticket deadlines, permanent change history and current overdue register","مواعيد التذاكر اليدوية وسجل تغييراتها الدائم وسجل التأخير الحالي")],
+ ["/documents",t("Internal plain-text documents with scoped access, immutable revisions, explicit archive/restore and safe request recovery","مستندات نصية داخلية بصلاحيات محددة وإصدارات محفوظة وأرشفة واستعادة صريحة وتعافٍ آمن للطلبات")],
  ["/helpdesk",t("Ticket workflow and permanent internal follow-up","مسار التذاكر وسجل المتابعة الداخلية الدائم")]]},
  {title:t("Remaining product development","تطوير منتج متبقٍ"),description:t("These items require additional implementation and verification; existing module screens do not mean these capabilities are complete.","تحتاج هذه البنود إلى تنفيذ وفحص إضافيين؛ وجود شاشة القسم لا يعني اكتمال هذه الإمكانات."),items:[
  ["",t("Sales: unallocated advances and statutory documents","المبيعات: الدفعات غير المخصصة والمستندات النظامية")],
@@ -33,7 +34,7 @@ export default async function ReleaseStatusPage(){
  ["",t("Helpdesk: attachments, notifications, customer portal and SLA rules","الدعم: المرفقات والإشعارات وبوابة العميل وقواعد مستوى الخدمة")],
  ["",t("Management: configurable approval policies and broader report preset coverage","الإدارة: سياسات اعتماد قابلة للتهيئة وتوسيع أنواع التقارير المحفوظة")],
  ["",t("Finance/POS: inclusive taxes, external bank feeds and multi-drawer supervision","المالية ونقاط البيع: الضريبة الشاملة والربط البنكي الخارجي والرقابة على الصناديق المتعددة")],
- ["",t("Planned modules: subscriptions, documents, AI and automation","أقسام مخطط لها: الاشتراكات والمستندات والذكاء الاصطناعي والأتمتة")],
+ ["",t("Planned modules: subscriptions, enterprise document/approval workflows, AI and automation","أقسام مخطط لها: الاشتراكات ومسارات المستندات والاعتماد المؤسسي والذكاء الاصطناعي والأتمتة")],
  ["",t("Full translation, accessibility, performance and operational acceptance review","مراجعة الترجمة والإتاحة والأداء واعتماد التشغيل بشكل كامل")]]},
  {title:t("Release acceptance evidence still required","أدلة اعتماد الإصدار ما زالت مطلوبة"),description:t("Validate the exact candidate release in an isolated environment. Automated tests do not replace operational acceptance or regulatory review.","يجب فحص الإصدار المرشح نفسه في بيئة معزولة. لا تُغني الفحوص الآلية عن اعتماد التشغيل أو المراجعة النظامية."),items:[
  ["",t("Record migration, unit, database, build and API results for the candidate commit; verify deployment matches it","توثيق نتائج الترحيلات وفحوص الوحدات وقاعدة البيانات والبناء وواجهات البرمجة للإصدار المرشح، والتحقق من تطابق النشر معه")],

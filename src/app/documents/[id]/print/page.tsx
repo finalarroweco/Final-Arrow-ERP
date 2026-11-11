@@ -1,0 +1,7 @@
+import {notFound,redirect} from 'next/navigation';
+import {z} from 'zod';
+import {currentUser} from '@/lib/auth';
+import {documentExportFilters} from '@/lib/internal-text-document-input';
+import {DocumentError,readInternalDocument} from '@/lib/internal-text-documents';
+export const dynamic='force-dynamic';
+export default async function DocumentPrint({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){const actor=await currentUser();if(!actor)redirect('/login');const id=z.string().uuid().safeParse((await params).id),q=await searchParams,p=documentExportFilters.safeParse(q);if(!id.success||!p.success)notFound();try{const result=await readInternalDocument(actor.id,id.data,p.data,0,p.data.eventId),event=result.events[0];return <main dir="auto" style={{maxWidth:'80ch',margin:'2rem auto',padding:'1rem'}}><p>Internal text document / مستند نصي داخلي</p><h1 style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{event.title}</h1><p>Version / الإصدار: {event.version} · {event.action} · {event.createdAt.toISOString()}</p><p>Scope / النطاق: {event.branchId??'Company-wide / الشركة كاملة'}</p><article style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{event.body}</article><footer><p>Change reason / سبب التغيير: {event.reason}</p><p>Internal reference text only. No approval or signature. / نص مرجعي داخلي فقط، دون اعتماد أو توقيع.</p></footer></main>;}catch(e){if(e instanceof DocumentError)notFound();throw e;}}
