@@ -101,10 +101,12 @@ test('recurring configured service invoices are genuine drafts with exact recove
   const reverse=(id,number)=>call(`/api/ledger/journals/${id}/reverse`,'POST',{tenantId,number,entryDate:today,reason:'Explicit recurring correction'},cookie);
   status(await reverse(posting.entry.id,'REC-PARENT-BLOCK'),409);status(await reverse(collection.settlement.entry.id,'REC-COLLECTION-REV'),201);status(await reverse(posting.entry.id,'REC-INVOICE-REV'),201);
   status(await call(`/api/invoices/${invoiceId}/status`,'PATCH',{tenantId,action:'void',reason:'Replace with explicitly selected corrected tariff'},cookie),200);assert.equal(status(await statement(),200).summary[0].closing,'0.000');
+  status(await call(`/api/invoices/${invoiceId}/status`,'PATCH',{tenantId,action:'issue'},cookie),409);
   assert.equal(status(await post(exact),201).result.invoice.id,invoiceId,'void never silently regenerates original request');
   const revisedPlan={...p,requestId:randomUUID(),expectedVersion:1,reason:'Correct explicit service tariff',lines:p.lines.map(l=>({...l,unitPrice:'1.000'}))},revised=status(await post(revisedPlan),201);
   const correctedPreview=status(await preview(c.subscriptionId,{replacesSourceId:sourceId,replacementPlanRevisionId:revised.result.revisionId}),200).periods[0];assert.equal(correctedPreview.prices.subtotal,'4.000');
   const correction=prepare(correctedPreview,{action:'replace',replacesSourceId:sourceId,replacementPlanRevisionId:revised.result.revisionId,reason:'Explicit void-linked corrected invoice'}),replacement=status(await post(correction),201);
+  status(await call(`/api/invoices/${invoiceId}/status`,'PATCH',{tenantId,action:'issue'},cookie),409);
   assert.notEqual(replacement.result.invoice.id,invoiceId);assert.notEqual(replacement.result.invoice.number,invoice.number);assert.equal(replacement.result.invoice.status,'DRAFT');
   const replacementSource=await db.serviceInvoiceSource.findUniqueOrThrow({where:{id:replacement.result.serviceSourceId}});assert.equal(replacementSource.replacesSourceId,sourceId);assert.equal(replacementSource.correctionIndex,1);assert.equal(replacementSource.periodIndex,0);assert.equal(await db.salesOrder.count({where:{tenantId}}),0);
   status(await post({...correction,requestId:randomUUID()}),409);assert.equal(status(await post(correction),201).result.invoice.id,replacement.result.invoice.id);

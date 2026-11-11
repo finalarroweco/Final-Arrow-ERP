@@ -17,12 +17,12 @@ export async function GET(request: Request) {
   const page = z.coerce.number().int().min(0).max(100000).safeParse(params.get("page") ?? "0");
   if (!tenantId.success || !companyId.success || !page.success)
     return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
-  const rights = await readableCompanyPermissions({userId:actor.id,tenantId:tenantId.data,companyId:companyId.data,permissions:["invoice:read","customer:read","billing-subscription:read"]});
+  const rights = await readableCompanyPermissions({userId:actor.id,tenantId:tenantId.data,companyId:companyId.data,permissions:["invoice:read","customer:read","billing-subscription:read","project:read","project-time:read","project-time-invoice:read"]});
   const branches=rights["invoice:read"], customers=rights["customer:read"];
   if(branches===false)return NextResponse.json({error:"Forbidden"},{status:403});
   const invoices = await db.invoice.findMany({ where: { tenantId: tenantId.data,
-    companyId: companyId.data, ...invoiceDocumentWhere(rights["billing-subscription:read"],customers), ...(branches === null ? {} : { branchId: { in: branches } }) },
-    select: { id: true, number: true, orderId: true, serviceSourceId:true, customerName: true, branchId: true,
+    companyId: companyId.data, ...invoiceDocumentWhere(rights["billing-subscription:read"],customers,rights["project:read"],rights["project-time:read"],rights["project-time-invoice:read"]), ...(branches === null ? {} : { branchId: { in: branches } }) },
+    select: { id: true, number: true, orderId: true, serviceSourceId:true, projectTimeSourceId:true, customerName: true, branchId: true,
       paymentTerms:true,paymentDueDate:true,status: true, issuedAt: true, voidedAt: true, voidReason: true,
       currency: true, subtotal: true, createdAt: true, vat:{select:{taxAmount:true}},
       lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },

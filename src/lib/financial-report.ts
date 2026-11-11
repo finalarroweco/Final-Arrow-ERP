@@ -21,9 +21,9 @@ export async function financialReport(request:Request,kind:"expenses"|"invoices"
  const scope={tenantId,companyId,...(branchId?{branchId}:branches===null?{}:{branchId:{in:branches}})};
  const invoiceSource:Prisma.InvoiceWhereInput={};
  if(kind==="invoices"){
-  const rights=await readableCompanyPermissions({userId:actor.id,tenantId,companyId,permissions:["customer:read","billing-subscription:read"]});
+  const rights=await readableCompanyPermissions({userId:actor.id,tenantId,companyId,permissions:["customer:read","billing-subscription:read","project:read","project-time:read","project-time-invoice:read"]});
   const customers=rights["customer:read"];
-  Object.assign(invoiceSource,{AND:[invoiceDocumentWhere(rights["billing-subscription:read"],customers)]});
+  Object.assign(invoiceSource,{AND:[invoiceDocumentWhere(rights["billing-subscription:read"],customers,rights["project:read"],rights["project-time:read"],rights["project-time-invoice:read"])]});
  }
  const start=new Date(`${from}T00:00:00Z`);const end=new Date(`${to}T00:00:00Z`);const nextDay=new Date(end.getTime()+86400000);
  const purchaseRows=kind==="purchase-orders"?await db.purchaseOrder.findMany({where:{...scope,createdAt:{gte:start,lt:nextDay},...(status?{status:status as "DRAFT"|"ISSUED"|"RECEIVED"|"CANCELLED"}:{}),...(q?{OR:[{number:{contains:q,mode:"insensitive"}},{supplierName:{contains:q,mode:"insensitive"}}]}:{})},select:{number:true,createdAt:true,supplierId:true,supplierName:true,subtotal:true,currency:true,status:true,branchId:true},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001}):[];

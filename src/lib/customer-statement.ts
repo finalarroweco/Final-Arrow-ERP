@@ -12,15 +12,15 @@ export class CustomerStatementError extends Error{constructor(message:string,pub
 export async function customerStatement(userId:string,raw:unknown){
  const parsed=filters.safeParse(raw);if(!parsed.success)throw new CustomerStatementError("Invalid statement filters (maximum 366 days)",400);
  const {tenantId,companyId,customerId,branchId,from,to,format}=parsed.data;
- const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["invoice:read","order:read","billing-subscription:read","ledger:read"]});
+ const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["invoice:read","order:read","billing-subscription:read","project:read","project-time:read","project-time-invoice:read","ledger:read"]});
  const invoiceRights=rights["invoice:read"],orderRights=rights["order:read"],ledger=rights["ledger:read"];
- if(invoiceRights===false||(orderRights===false&&rights["billing-subscription:read"]===false)||ledger===false)throw new CustomerStatementError("Forbidden",403);
+ if(invoiceRights===false||(orderRights===false&&rights["billing-subscription:read"]===false&&rights["project-time-invoice:read"]===false)||ledger===false)throw new CustomerStatementError("Forbidden",403);
  const branches=invoiceRights===null?ledger:ledger===null?invoiceRights:invoiceRights.filter(id=>ledger.includes(id));
  if(branchId&&branches!==null&&!branches.includes(branchId))throw new CustomerStatementError("Forbidden",403);
  const customer=await db.customer.findFirst({where:{id:customerId,tenantId,companyId},select:{id:true,code:true,displayName:true,branchId:true,archivedAt:true}});
  if(!customer)throw new CustomerStatementError("Customer not found",404);
  if(!(await canAccess({userId,tenantId,companyId,branchId:customer.branchId??undefined,permission:"customer:read"})))throw new CustomerStatementError("Forbidden",403);
- const sourceWhere={tenantId,companyId,customerId,...(branchId?{branchId}:branches===null?{}:{branchId:{in:branches}}),...invoiceSourceWhere(orderRights,rights["billing-subscription:read"])};
+ const sourceWhere={tenantId,companyId,customerId,...(branchId?{branchId}:branches===null?{}:{branchId:{in:branches}}),...invoiceSourceWhere(orderRights,rights["billing-subscription:read"],rights["project:read"],rights["project-time:read"],rights["project-time-invoice:read"])};
  return db.$transaction(async tx=>{
   const invoices=await tx.invoice.findMany({where:sourceWhere,select:{id:true,number:true,branchId:true},take:20001});
   const settlements=await tx.customerSettlement.findMany({where:{tenantId,invoice:sourceWhere},select:{id:true,kind:true,invoiceId:true},take:20001});

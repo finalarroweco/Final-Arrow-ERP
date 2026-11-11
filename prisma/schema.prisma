@@ -772,6 +772,7 @@ model Invoice {
   branchId     String?       @db.Uuid
   customerId   String        @db.Uuid
   orderId      String?       @unique @db.Uuid
+  projectTimeSourceId String? @unique @db.Uuid
   serviceSourceId String? @unique @db.Uuid
   number       String
   customerName String
@@ -788,6 +789,7 @@ model Invoice {
   branch       Branch?       @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict)
   customer     Customer      @relation(fields: [tenantId, companyId, customerId], references: [tenantId, companyId, id], onDelete: Restrict)
   order        SalesOrder?   @relation(fields: [tenantId, companyId, orderId], references: [tenantId, companyId, id], onDelete: Restrict)
+  projectTimeSource ProjectTimeInvoiceSource? @relation(fields: [tenantId, companyId, projectTimeSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
   serviceSource ServiceInvoiceSource? @relation(fields: [tenantId, companyId, serviceSourceId], references: [tenantId, companyId, id], onDelete: Restrict)
   lines        InvoiceLine[]
   vat InvoiceVat?
@@ -796,6 +798,7 @@ model Invoice {
 
   @@unique([companyId, number])
   @@unique([tenantId, companyId, orderId])
+  @@unique([tenantId, companyId, projectTimeSourceId])
   @@unique([tenantId, companyId, serviceSourceId])
   @@unique([tenantId, companyId, id])
   @@unique([tenantId, id])
@@ -2407,4 +2410,55 @@ model PrivateAlertRequest {
  company Company @relation(fields:[tenantId,companyId],references:[tenantId,id],onDelete:Restrict)
  actor Membership @relation(fields:[tenantId,actorId],references:[tenantId,userId],onDelete:Restrict)
  @@index([tenantId,companyId,actorId,ruleId],map:"private_alert_request_owner")
+}
+
+model ProjectTimeInvoiceSource {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ customerId String @db.Uuid
+ customerName String
+ currency String @db.VarChar(3)
+ entries Json
+ lines Json
+ subtotal Decimal @db.Decimal(18,3)
+ taxAmount Decimal @db.Decimal(18,3)
+ vatProfileRevision Int?
+ paymentTerms String? @db.VarChar(120)
+ paymentDueDate DateTime? @db.Date
+ replacesSourceId String? @unique @db.Uuid
+ reason String
+ requestId String @unique @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ invoice Invoice?
+ @@unique([tenantId,companyId,id])
+ @@index([tenantId,companyId,projectId,createdAt,id])
+}
+model ProjectTimeInvoiceClaim {
+ entryId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ projectId String @db.Uuid
+ sourceId String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@index([sourceId])
+}
+model ProjectTimeInvoiceRequest {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String? @db.Uuid
+ projectId String @db.Uuid
+ request Json
+ result Json
+ outcome String
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now())
+ creationTransaction String @default(dbgenerated("(txid_current())::text"))
+ @@unique([tenantId,companyId,id])
 }

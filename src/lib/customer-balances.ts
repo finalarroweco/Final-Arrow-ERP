@@ -16,14 +16,14 @@ export async function customerBalances(userId:string,raw:unknown,includeAging=fa
  const parsed=filters.safeParse(raw);if(!parsed.success)throw new CustomerBalanceError("Invalid balance filters",400);
  const {tenantId,companyId,branchId,asOf,q,format}=parsed.data;
  const termsCutoff=paymentTermsCutoff(asOf);
- const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["customer:read","order:read","billing-subscription:read","invoice:read","ledger:read"]});
+ const rights=await readableCompanyPermissions({userId,tenantId,companyId,permissions:["customer:read","order:read","billing-subscription:read","project:read","project-time:read","project-time-invoice:read","invoice:read","ledger:read"]});
  const orderRights=rights["order:read"],invoiceRights=rights["invoice:read"],ledger=rights["ledger:read"];
  const customerRights=rights["customer:read"];
- if(customerRights===false||(orderRights===false&&rights["billing-subscription:read"]===false)||invoiceRights===false||ledger===false)throw new CustomerBalanceError("Forbidden",403);
+ if(customerRights===false||(orderRights===false&&rights["billing-subscription:read"]===false&&rights["project-time-invoice:read"]===false)||invoiceRights===false||ledger===false)throw new CustomerBalanceError("Forbidden",403);
  const invoiceBranches=invoiceRights===null?ledger:ledger===null?invoiceRights:invoiceRights.filter(id=>ledger.includes(id));
  if(branchId&&invoiceBranches!==null&&!invoiceBranches.includes(branchId))throw new CustomerBalanceError("Forbidden",403);
  const customerWhere={...(customerRights===null?{}:{branchId:{in:customerRights}}),...(q?{OR:[{displayName:{contains:q,mode:"insensitive" as const}},{code:{contains:q,mode:"insensitive" as const}}]}:{})};
- const sourceWhere={tenantId,companyId,...(branchId?{branchId}:invoiceBranches===null?{}:{branchId:{in:invoiceBranches}}),...invoiceSourceWhere(orderRights,rights["billing-subscription:read"]),customer:customerWhere};
+ const sourceWhere={tenantId,companyId,...(branchId?{branchId}:invoiceBranches===null?{}:{branchId:{in:invoiceBranches}}),...invoiceSourceWhere(orderRights,rights["billing-subscription:read"],rights["project:read"],rights["project-time:read"],rights["project-time-invoice:read"]),customer:customerWhere};
  return db.$transaction(async tx=>{
   // Both original documents and their immutable correction journals stay in the report.
   // Bounds apply before building the journal lookup; never silently truncate a balance.

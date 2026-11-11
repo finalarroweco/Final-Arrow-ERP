@@ -1,5 +1,6 @@
 "use client";
 
+import {invoiceSourceView} from "./source-view";
 import {PaymentTermsFields} from "../../payment-terms-fields";
 import { DocumentPosting } from "../document-posting";
 import {FinancialReport} from "../financial-report";
@@ -11,7 +12,7 @@ type Option = { tenantId: string; companyId: string; label: string; vatActive: b
   branches: ({ id: string; name: string } & Rights)[] };
 type Order = { id: string; number: string; customerName: string; branchId: string | null;
   status: string; currency: string; subtotal: string; lines: {position:number;description:string;amount:string}[]; invoice: { id: string } | null };
-type Invoice = { id: string; number: string; orderId: string|null; serviceSourceId: string|null; customerName: string;
+type Invoice = { id: string; number: string; orderId: string|null; serviceSourceId: string|null; projectTimeSourceId: string|null; customerName: string;
   branchId: string | null; status: "DRAFT" | "ISSUED" | "VOID"; currency: string;
   paymentTerms:string|null;paymentDueDate:string|null;subtotal: string; gross: string; vat: {taxAmount:string}|null; voidReason: string | null;
   lines: { description: string; quantity: number; unitPrice: string; amount: string }[] };
@@ -102,9 +103,11 @@ export function InvoicesWorkspace({ options, locale }: { options: Option[]; loca
     {error && <p role="alert">{error}</p>}
     <FinancialReport key={`${scope.companyId}:${reportVersion}`} kind="invoices" scope={scope} locale={locale}/>
     <div className="customer-list">{invoices.map((invoice) => {
+      const sourceView=invoiceSourceView(invoice,locale);
       const rights = invoice.branchId ? scope.branches.find((branch) => branch.id === invoice.branchId)
         : scope.companyPermissions;
       return <article key={invoice.id}><div><h3>{invoice.number} · {invoice.customerName}</h3>
+        <p>{sourceView&&<a href={sourceView.href}>{sourceView.label} · {sourceView.id}</a>}</p>{sourceView?.kind==='project-time'&&<p>{t("Quantity 1 represents one approved time record, not one hour. Rates and minutes are frozen in the source snapshot.","الكمية ١ تمثل سجل وقت معتمداً واحداً وليس ساعة واحدة. الأسعار والدقائق محفوظة في لقطة المصدر الثابتة.")}</p>}
         <p>{t(invoice.status, ({ DRAFT: "مسودة", ISSUED: "مصدرة", VOID: "ملغاة" })[invoice.status])} · {invoice.gross} {invoice.currency}</p>
         <p>{invoice.paymentDueDate?`${invoice.paymentTerms} · ${t("Due UTC","الاستحقاق UTC")}: ${invoice.paymentDueDate.slice(0,10)}`:t("No agreed due date","بدون موعد استحقاق متفق عليه")}</p>{invoice.vat&&<p>{t("Net", "الصافي")}: {invoice.subtotal} · {t("VAT", "الضريبة")}: {invoice.vat.taxAmount} · {t("Total including VAT", "الإجمالي شامل الضريبة")}: {invoice.gross} {invoice.currency}</p>}
         {rights?.canPostLedger && invoice.status !== "DRAFT" && <DocumentPosting key={`${scope.companyId}:${invoice.id}:${invoice.status}`} kind="invoice" id={invoice.id} scope={scope} locale={locale} amount={invoice.gross} currency={invoice.currency} eligible={invoice.status === "ISSUED"}/>}

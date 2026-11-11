@@ -181,3 +181,19 @@ test('explicit PAUSED and ENDED backfill corrections preserve configuration and 
  assert.equal(await db.salesOrder.count({where:{tenantId:f.tenantId}}),0);
  }
 });
+
+test('service VOID is terminal before and after replacement while normal lifecycle and concurrent correction remain valid',async()=>{
+ const f=await fixture(),original=await f.generate();assert.equal(original.invoice.status,'DRAFT');
+ await db.invoice.update({where:{id:original.invoice.id},data:{status:'ISSUED',issuedAt:new Date()}});
+ await db.invoice.update({where:{id:original.invoice.id},data:{status:'VOID',voidedAt:new Date(),voidReason:'Explicit service correction'}});
+ const reopen=status=>db.invoice.update({where:{id:original.invoice.id},data:{status,issuedAt:status==='ISSUED'?new Date():null,voidedAt:null,voidReason:null}});
+ for(const status of ['DRAFT','ISSUED'])await assert.rejects(reopen(status));
+ const request={action:'replace',replacesSourceId:original.source.id,replacementPlanRevisionId:f.planRevisionId};
+ const race=await Promise.allSettled([f.generate(request,async({source})=>source.correctionIndex=1),f.generate(request,async({source})=>source.correctionIndex=1),reopen('ISSUED')]);
+ assert.equal(race.filter(r=>r.status==='fulfilled').length,1);const replacement=race.find(r=>r.status==='fulfilled').value;
+ assert.equal(replacement.invoice.status,'DRAFT');assert.equal(await db.serviceInvoiceSource.count({where:{subscriptionId:f.subscriptionId}}),2);assert.equal((await db.invoice.findUniqueOrThrow({where:{id:original.invoice.id}})).status,'VOID');
+ for(const status of ['DRAFT','ISSUED'])await assert.rejects(reopen(status));
+ await db.invoice.update({where:{id:replacement.invoice.id},data:{status:'ISSUED',issuedAt:new Date()}});
+ await db.invoice.update({where:{id:replacement.invoice.id},data:{status:'VOID',voidedAt:new Date(),voidReason:'Retain second immutable source'}});
+ for(const status of ['DRAFT','ISSUED'])await assert.rejects(db.invoice.update({where:{id:replacement.invoice.id},data:{status}}));
+});

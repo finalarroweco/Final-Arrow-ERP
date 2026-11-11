@@ -1,0 +1,12 @@
+import {z} from 'zod';
+const dueDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>v>='2000-01-01'&&v<='2099-12-31'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v);
+const uuid=z.string().uuid().transform(v=>v.toLowerCase());
+const text=(max:number)=>z.string().trim().min(3).max(max).refine(s=>!/[\u0000-\u001f\u007f]/u.test(s));
+const selection=z.object({tenantId:uuid,companyId:uuid,branchId:uuid.nullable(),projectId:uuid,expectedActorId:uuid,customerId:uuid,currency:z.string().regex(/^[A-Z]{3}$/),entries:z.array(z.object({entryId:uuid,expectedSequence:z.number().int().min(1).max(1000),hourlyRate:z.string().regex(/^(0|[1-9]\d{0,14})\.\d{3}$/),treatment:z.enum(['STANDARD','ZERO','EXEMPT'])}).strict()).min(1).max(100).refine(a=>new Set(a.map(e=>e.entryId)).size===a.length),paymentTerms:text(120).nullable(),paymentDueDate:dueDate.nullable(),replacesSourceId:uuid.nullable()}).strict();
+const termsPaired=(p:{paymentTerms:string|null;paymentDueDate:string|null})=>(p.paymentTerms===null)===(p.paymentDueDate===null);
+export const projectTimeInvoiceSelection=selection.refine(termsPaired);
+export const projectTimeInvoiceRequest=selection.extend({requestId:uuid,previewHash:z.string().regex(/^[a-f0-9]{64}$/),reason:text(300)}).strict().refine(termsPaired);
+export const projectTimeInvoiceFilters=z.object({tenantId:uuid,companyId:uuid,expectedActorId:uuid,projectId:uuid.optional(),page:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
+export type TimeInvoiceSelection=z.infer<typeof projectTimeInvoiceSelection>;
+export type TimeInvoiceRequest=z.infer<typeof projectTimeInvoiceRequest>;
+export const canonicalTimeInvoiceRequest=(p:TimeInvoiceRequest)=>projectTimeInvoiceRequest.parse({...p,entries:[...p.entries].sort((a,b)=>a.entryId.localeCompare(b.entryId))});
