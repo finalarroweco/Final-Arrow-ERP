@@ -156,12 +156,17 @@ test('abandoned request tombstones are scoped, audited, immutable and block late
 
 test.after(async()=>{await db.$disconnect();});
 
-test('bank allocation SQL entry points reject inherited public API role grants',async()=>{
+test('bank allocation SQL entry points reject PUBLIC and available API role grants',async()=>{
  const signatures=['erp_validate_bank_match()','erp_bank_allocation_audit()','erp_bank_statement_correction()','erp_bank_statement_void_audit()','erp_bank_reconciliation_inputs(uuid,uuid)','erp_bank_certificate_guard()','erp_bank_request_resolution_guard()','erp_bank_request_resolution_audit()'];
+ // Vanilla PostgreSQL has neither provider role. Catalog assertions still run,
+ // including acldefault: a NULL function ACL grants PUBLIC EXECUTE by default.
+ const roles=await db.$queryRaw`SELECT rolname FROM pg_roles WHERE rolname IN ('anon','authenticated') ORDER BY rolname`;
  for(const signature of signatures){
-  const [row]=await db.$queryRaw`SELECT has_function_privilege('anon',${signature},'EXECUTE') AS anon,has_function_privilege('authenticated',${signature},'EXECUTE') AS authenticated`;
-  assert.equal(row.anon,false,signature);assert.equal(row.authenticated,false,signature);
+  const rows=await db.$queryRaw`SELECT p.oid::text AS id,EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS "publicExecute" FROM pg_proc p WHERE p.oid=to_regprocedure(${signature})`;
+  assert.equal(rows.length,1,`Required function missing: ${signature}`);assert.equal(rows[0].publicExecute,false,`PUBLIC EXECUTE: ${signature}`);
+  for(const {rolname} of roles){const [row]=await db.$queryRaw`SELECT has_function_privilege(${rolname},${signature},'EXECUTE') AS allowed`;assert.equal(row.allowed,false,`${rolname} EXECUTE: ${signature}`);}
  }
- const [row]=await db.$queryRaw`SELECT has_table_privilege('anon','"BankRequestResolution"','SELECT,INSERT,UPDATE,DELETE') AS anon,has_table_privilege('authenticated','"BankRequestResolution"','SELECT,INSERT,UPDATE,DELETE') AS authenticated`;
- assert.equal(row.anon,false);assert.equal(row.authenticated,false);
+ const tables=await db.$queryRaw`SELECT c.relrowsecurity AS rls,EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) AS "publicPrivileges" FROM pg_class c WHERE c.oid=to_regclass('"BankRequestResolution"') AND c.relkind='r'`;
+ assert.equal(tables.length,1,'Required request registry missing');assert.equal(tables[0].rls,true,'Request registry RLS required');assert.equal(tables[0].publicPrivileges,false,'PUBLIC registry privileges must be revoked');
+ for(const {rolname} of roles){const [row]=await db.$queryRaw`SELECT has_table_privilege(${rolname},'"BankRequestResolution"','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS allowed`;assert.equal(row.allowed,false,`${rolname} registry privileges`);}
 });
