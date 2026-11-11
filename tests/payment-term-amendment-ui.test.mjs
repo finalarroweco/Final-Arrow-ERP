@@ -12,7 +12,7 @@ function load(file,overrides={},environment={}){
  const filename=new URL(`../src/${file}`,import.meta.url);
  const {outputText}=ts.transpileModule(readFileSync(filename,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020},fileName:filename.pathname});
  const exports={};
- new Function("require","exports","fetch","localStorage","window","crypto",outputText)(name=>Object.hasOwn(overrides,name)?overrides[name]:require(name),exports,environment.fetch,environment.localStorage,environment.window,{randomUUID});
+ new Function("require","exports","fetch","localStorage","window","crypto","navigator",outputText)(name=>Object.hasOwn(overrides,name)?overrides[name]:require(name),exports,environment.fetch,environment.localStorage,environment.window,{randomUUID},environment.navigator);
  return exports;
 }
 const localeModule=load("lib/locale.ts"),inputModule=load("lib/payment-term-amendment-input.ts");
@@ -28,7 +28,10 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
 // Execute real TSX and effects with deterministic hook state and request timing.
 // No browser, Next server, database, or new dependency is needed.
+const storageLocks=new WeakMap();
 function harness(props=baseProps,storage=new Map()){
+ if(!storageLocks.has(storage))storageLocks.set(storage,new Set());
+ const held=storageLocks.get(storage);
  let slots=[],cursor=0,effects=[],tree,reloads=0,denied=false;
  const calls=[],listeners=new Set();
  const same=(a,b)=>a&&b&&a.length===b.length&&a.every((value,index)=>Object.is(value,b[index]));
@@ -38,12 +41,17 @@ function harness(props=baseProps,storage=new Map()){
   useEffect(effect,deps){const index=cursor++,previous=slots[index];if(!previous||!same(previous.deps,deps)){const slot={deps,cleanup:previous?.cleanup};slots[index]=slot;effects.push(()=>{slot.cleanup?.();slot.cleanup=effect();});}},
  };
  const environment={
+  navigator:{locks:{request(name,options,callback){
+   assert.equal(options.ifAvailable,true);
+   if(held.has(name))return Promise.resolve(callback(null));
+   held.add(name);try{return Promise.resolve(callback({name})).finally(()=>held.delete(name));}catch(error){held.delete(name);return Promise.reject(error);}
+  }}},
   localStorage:{getItem(name){if(denied)throw new Error("Storage unavailable");return storage.get(name)??null;},setItem(name,value){if(denied)throw new Error("Storage unavailable");storage.set(name,value);},removeItem(name){if(denied)throw new Error("Storage unavailable");storage.delete(name);}},
   window:{addEventListener(type,listener){if(type==="storage")listeners.add(listener);},removeEventListener(type,listener){listeners.delete(listener);},location:{reload(){reloads++;}}},
   fetch:(url,options)=>new Promise((resolve,reject)=>calls.push({url,options,resolve,reject})),
  };
  const {PaymentTermAmendmentForm}=load("app/payment-term-amendment-form.tsx",{react:mockReact,"@/lib/locale":localeModule,"@/lib/payment-term-amendment-input":inputModule},environment);
- function render(){cursor=0;tree=PaymentTermAmendmentForm(props);const queued=effects.splice(0);for(const effect of queued)effect();return tree;}
+ function render(){cursor=0;const controller=PaymentTermAmendmentForm(props);tree=controller.type(controller.props);const queued=effects.splice(0);for(const effect of queued)effect();return tree;}
  function mount(){for(const slot of slots)slot?.cleanup?.();slots=[];effects=[];render();render();}
  mount();
  return {calls,storage,render,mount,get reloads(){return reloads;},
@@ -54,6 +62,10 @@ function harness(props=baseProps,storage=new Map()){
   async reject(index){calls[index].reject(new Error("Lost response"));await tick();render();},
   notify(){for(const listener of listeners)listener({key});render();},
   denyStorage(){denied=true;mount();},
+  denyLocks(){environment.navigator.locks=undefined;mount();},
+  changeProps(next){props=next;mount();},
+  unmount(){for(const slot of slots)slot?.cleanup?.();},
+
  };
 }
 
@@ -75,7 +87,7 @@ test("remount restores a pending payload and exact replay clears it and reloads 
 
 for(const status of [400,409])test(`${status} rejection requires explicit discard and reload, never automatic replacement`,async()=>{
  const saved=request(),h=harness(baseProps,new Map([[key,envelope(saved)]]));h.button("Retry exact saved request").props.onClick();
- await h.respond(0,status,{error:"Rejected request",requestOutcome:{code:"NOT_RECORDED",requestId:saved.requestId}});assert.equal(h.storage.get(key),envelope(saved));assert.equal(h.reloads,0);
+ await h.respond(0,status,{error:"Rejected request",requestOutcome:{code:"NOT_RECORDED",requestId:saved.requestId,actorId}});assert.equal(h.storage.get(key),envelope(saved));assert.equal(h.reloads,0);
  h.button("Discard rejected request and reload").props.onClick();assert.equal(h.storage.has(key),false);assert.equal(h.reloads,1);
 });
 
@@ -118,9 +130,9 @@ test("mismatched200 acknowledgement identity or payload cannot resolve the pendi
 });
 
 test("another tab's newer cache is neither overwritten on submit nor removed by an older successful response",async()=>{
- const h=harness();h.prepare();const saved=request();h.storage.set(key,envelope(saved));h.submit();assert.equal(h.calls.length,0);assert.equal(h.storage.get(key),envelope(saved));
+ const h=harness();h.prepare();const saved=request();h.storage.set(key,envelope(saved));h.submit();await tick();assert.equal(h.calls.length,0);assert.equal(h.storage.get(key),envelope(saved));
  h.button("Retry exact saved request").props.onClick();const newer=request();h.storage.set(key,envelope(newer));h.notify();
- await h.respond(0,200,{change:savedChange(saved),replayed:false});assert.equal(h.storage.get(key),envelope(newer));assert.equal(h.reloads,1);
+ await h.respond(0,200,{change:savedChange(saved),replayed:false});assert.equal(h.storage.get(key),envelope(newer));assert.equal(h.reloads,0);
 });
 
 test("a successful response cannot clear a changed cached payload that reused the same UUID",async()=>{
@@ -130,7 +142,7 @@ test("a successful response cannot clear a changed cached payload that reused th
 });
 
 test("explicit discard of an old rejected payload cannot clear another tab's newer cache",async()=>{
- const saved=request(),h=harness(baseProps,new Map([[key,envelope(saved)]]));h.button("Retry exact saved request").props.onClick();await h.respond(0,409,{error:"Conflict",requestOutcome:{code:"NOT_RECORDED",requestId:saved.requestId}});
+ const saved=request(),h=harness(baseProps,new Map([[key,envelope(saved)]]));h.button("Retry exact saved request").props.onClick();await h.respond(0,409,{error:"Conflict",requestOutcome:{code:"NOT_RECORDED",requestId:saved.requestId,actorId}});
  const discard=h.button("Discard rejected request and reload"),newer=request();h.storage.set(key,envelope(newer));discard.props.onClick();
  assert.equal(h.storage.get(key),envelope(newer));assert.equal(h.reloads,0);assert.equal(elements(h.render(),"fieldset")[0].props.disabled,true);
 });
@@ -208,4 +220,79 @@ test("retained-history limit disables new submissions but preserves exact pendin
  assert.deepEqual(JSON.parse(pending.calls[0].options.body),saved);
  await pending.respond(0,200,{change:savedChange(saved),replayed:true});assert.equal(storage.has(key),false);assert.equal(pending.reloads,1);
  const available=harness({...baseProps,sequence:999});assert.equal(elements(available.render(),"fieldset")[0].props.disabled,false);
+});
+
+test("two payment tabs share one exclusive preparation/send claim and cannot replace an uncertain request",async()=>{
+ const storage=new Map(),a=harness(baseProps,storage),b=harness(baseProps,storage);
+ a.prepare();b.prepare();const staleSubmit=elements(b.render(),"form")[0].props.onSubmit;
+ a.submit();const original=storage.get(key),saved=JSON.parse(original).request;
+ staleSubmit({preventDefault(){}});await tick();
+ assert.equal(a.calls.length,1);assert.equal(b.calls.length,0);assert.equal(storage.get(key),original);
+ assert.equal(a.calls[0].options.headers["X-Expected-Actor-Id"],actorId);
+ assert.equal(b.button("Retry exact saved request").props.disabled,false);
+ b.button("Retry exact saved request").props.onClick();await tick();assert.equal(b.calls.length,0);
+ await a.reject(0);b.notify();b.button("Retry exact saved request").props.onClick();
+ assert.deepEqual(JSON.parse(b.calls[0].options.body),saved);assert.equal(b.calls[0].options.headers["X-Expected-Actor-Id"],actorId);
+ await b.respond(0,409,{error:"Session switched",requestOutcome:{code:"UNRESOLVED",requestId:saved.requestId}});
+ assert.equal(storage.get(key),original);assert.ok(!b.button("Discard rejected request and reload"));
+ a.notify();a.button("Retry exact saved request").props.onClick();
+ await a.respond(1,201,{change:savedChange(saved),replayed:false});assert.equal(storage.has(key),false);
+ b.notify();assert.equal(elements(b.render(),"fieldset")[0].props.disabled,false);
+});
+
+test("unsupported locking and corrupt empty storage fail closed without replacing v1 data",()=>{
+ const saved=request(),original=envelope(saved),h=harness(baseProps,new Map([[key,original]]));h.denyLocks();
+ assert.equal(elements(h.render(),"fieldset")[0].props.disabled,true);assert.equal(h.button("Retry exact saved request")?.props.disabled??true,true);
+ h.submit();assert.equal(h.calls.length,0);assert.equal(h.storage.get(key),original);
+ const empty=harness(baseProps,new Map([[key,""]]));empty.prepare();empty.submit();assert.equal(empty.calls.length,0);assert.equal(empty.storage.get(key),"");
+});
+
+test("legacy v1 envelope sends its original actor and never permits an unbound absence verdict",async()=>{
+ for(const outcome of [{code:"NOT_RECORDED"},{code:"NOT_RECORDED",actorId:randomUUID()}]){
+  const saved=request(),original=envelope(saved),h=harness(baseProps,new Map([[key,original]]));
+  h.button("Retry exact saved request").props.onClick();assert.equal(h.calls[0].options.headers["X-Expected-Actor-Id"],actorId);
+  assert.deepEqual(JSON.parse(h.calls[0].options.body),saved);
+  await h.respond(0,409,{requestOutcome:{...outcome,requestId:saved.requestId}});
+  assert.equal(h.storage.get(key),original);assert.ok(!h.button("Discard rejected request and reload"));
+ }
+});
+
+test("account/source changes invalidate old callbacks while retaining their exact pending envelope",async()=>{
+ const saved=request(),original=envelope(saved),storage=new Map([[key,original]]),h=harness(baseProps,storage);
+ const oldRetry=h.button("Retry exact saved request");
+ const next={...baseProps,actorId:randomUUID(),sourceId:randomUUID()};h.changeProps(next);
+ oldRetry.props.onClick();await tick();assert.equal(h.calls.length,0);assert.equal(storage.get(key),original);
+ assert.equal(elements(h.render(),"fieldset")[0].props.disabled,false);
+ h.changeProps(baseProps);h.button("Retry exact saved request").props.onClick();
+ assert.equal(h.calls[0].options.headers["X-Expected-Actor-Id"],actorId);assert.deepEqual(JSON.parse(h.calls[0].options.body),saved);
+ h.changeProps(next);await h.respond(0,200,{ok:true});assert.equal(storage.get(key),original);assert.equal(h.reloads,0);
+ assert.equal(elements(h.render(),"fieldset")[0].props.disabled,false);
+});
+
+test("discard cannot race another tab's pending replay claim",async()=>{
+ const saved=request(),original=envelope(saved),storage=new Map([[key,original]]),a=harness(baseProps,storage),b=harness(baseProps,storage);
+ a.button("Retry exact saved request").props.onClick();await a.respond(0,409,{requestOutcome:{code:"NOT_RECORDED",requestId:saved.requestId,actorId}});
+ const discard=a.button("Discard rejected request and reload");b.button("Retry exact saved request").props.onClick();discard.props.onClick();await tick();
+ assert.equal(storage.get(key),original);assert.equal(a.reloads,0);
+ await b.reject(0);a.notify();assert.ok(!a.button("Discard rejected request and reload"));
+});
+
+test("both payment routes deny missing or switched actors before mutation and any absence verdict",async()=>{
+ let authenticated=actorId,calls=0;
+ class NotRecorded extends Error{}
+ const records=new Map(),services={PaymentTermRequestNotRecorded:NotRecorded,
+  async amendPaymentTerms(actor,kind,id,payload){calls++;if(payload.reason==="Reject request")throw new NotRecorded("Rejected");const replayed=records.has(payload.requestId);records.set(payload.requestId,{actor,kind,id});return {change:savedChange(payload,{...baseProps,actorId:actor,kind,sourceId:id}),replayed};}};
+ const route=load("lib/payment-term-amendment-route.ts",{"./auth":{currentUser:async()=>authenticated?{id:authenticated}:null},"./payment-term-amendment-input":inputModule,"./payment-term-amendments":services,"./operational-records":{operationalFailure:e=>({status:409,error:e.message})}});
+ for(const kind of ["invoice","receipt"]){
+  const payload=request();calls=0;records.clear();
+  const post=(guard,body=payload)=>route.paymentTermRoute(kind).POST(new Request("http://localhost/write",{method:"POST",headers:{"Content-Type":"application/json",...(guard===null?{}:{"X-Expected-Actor-Id":guard})},body:JSON.stringify(body)}),{params:Promise.resolve({id:sourceId})});
+  authenticated=randomUUID();
+  for(const guard of [null,"bad",actorId,actorId+","+actorId]){const response=await post(guard),body=await response.json();assert.equal(response.status,409);assert.notEqual(body.requestOutcome?.code,"NOT_RECORDED");assert.equal(calls,0);assert.equal(records.size,0);}
+  const noChange=await post(actorId,{...payload,reason:"Reject request"});assert.notEqual((await noChange.json()).requestOutcome?.code,"NOT_RECORDED");assert.equal(calls,0);
+  authenticated=actorId;const accepted=await post(actorId.toUpperCase());assert.equal(accepted.status,201);assert.equal((await accepted.json()).change.createdBy,actorId);
+  authenticated=randomUUID();assert.equal((await post(actorId)).status,409);assert.equal(calls,1);
+  authenticated=actorId;assert.equal((await (await post(actorId)).json()).replayed,true);
+  const rejected=await post(actorId,{...request(),reason:"Reject request"});assert.equal((await rejected.json()).requestOutcome.actorId,actorId);
+  authenticated=null;assert.equal((await post(actorId)).status,401);
+ }
 });

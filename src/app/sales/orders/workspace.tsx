@@ -56,7 +56,7 @@ export function OrdersWorkspace({ options, locale }: { options: Option[]; locale
       const canManage = order.branchId ? scope.branches.find((branch) => branch.id === order.branchId)?.canManage
         : scope.canManageCompanyWide;
       return <article key={order.id}><div>
-      <h3>{order.number} · {order.customerName}</h3><a href={`/sales/orders/${order.id}`}>{t("View / print order","عرض / طباعة طلب البيع")}</a><p>{t(order.status.replace("_", " "), ({ NEW: "جديد", IN_PROGRESS: "قيد التنفيذ", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
+      <h3>{order.number} · {order.customerName}</h3><a href={`/sales/orders/${order.id}`}>{t("View / print order","عرض / طباعة طلب البيع")}</a><a href={`/sales/orders/${order.id}/inventory`}>{t("Manual stock holds", "حجوزات المخزون اليدوية")}</a><p>{t(order.status.replace("_", " "), ({ NEW: "جديد", IN_PROGRESS: "قيد التنفيذ", COMPLETED: "مكتمل", CANCELLED: "ملغى" })[order.status])} · {order.subtotal} {order.currency}</p>
       <ul>{order.lines.map((line, index) => <li key={index}>{line.description} · {line.quantity} × {line.unitPrice} = {line.amount}</li>)}</ul>
       {canManage && <div className="quote-actions">
         {order.status === "NEW" && <button disabled={busy} onClick={() => void change(order, "start")}>{t("Start work", "بدء العمل")}</button>}

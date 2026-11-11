@@ -30,3 +30,24 @@ test('import totals preserve balanced maximum-sized CSV cancellation',()=>{
  const bank=load('bank-reconciliation',{'./exact-money':money,'./access':{},'./date':{dueDate:require('zod').z.string()}}),rows=[...Array(250).fill({bookingDate:'2026-01-01',reference:'Incoming',amount:'999999999999999.999'}),...Array(250).fill({bookingDate:'2026-01-01',reference:'Outgoing',amount:'-999999999999999.999'})];
  assert.equal(bank.normalizedStatement({tenantId:id,companyId:id,accountId:id,requestId:id,reference:'Import exact',from:'2026-01-01',to:'2026-01-01',opening:'0',closing:'0',lines:rows}).closing,'0.000');
 });
+
+test('creation and designation route boundaries reject missing, malformed and switched actors before service writes or replay',async()=>{
+ const owner='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',other='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ let authenticated=owner,calls=0;const records=new Map();
+ class CertificateError extends Error{constructor(message,status,code){super(message);this.status=status;this.code=code;}}
+ const services={CertificateError,certificateFailure:e=>Response.json({error:e.message,code:e.code},{status:e.status}),
+  createCertificate:write,recordCertificateEvent:write};
+ async function write(actor,source,payload){calls++;const replayed=records.has(payload.requestId);records.set(payload.requestId,{actor,source,payload});return {id:payload.requestId,replayed};}
+ const route=load('bank-certificate-route',{'./auth':{currentUser:async()=>authenticated?{id:authenticated}:null},'./bank-certificates':services});
+ for(const [path,body] of [['bank/statements/[id]/certificates/route.ts',{tenantId:id,requestId:id,expectedDigest:'a'.repeat(64),note:'Original'}],['bank/certificates/[id]/events/route.ts',{tenantId:id,requestId:id,expectedVersion:0,action:'RESTORE',reason:'Original'}]]){
+  records.clear();calls=0;
+  const exports={};new Function('require','exports',ts.transpileModule(readFileSync(new URL('../src/app/api/'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(name=>({'@/lib/bank-certificate-route':route,'@/lib/bank-certificate-input':input,'@/lib/bank-certificates':services}[name]??require(name)),exports);
+  const post=guard=>exports.POST(new Request('http://localhost/write',{method:'POST',headers:{'Content-Type':'application/json',...(guard===undefined?{}:{'X-Expected-Actor-Id':guard})},body:JSON.stringify(body)}),{params:Promise.resolve({id})});
+  authenticated=other;
+  for(const guard of [undefined,'invalid',owner,owner+','+other]){const r=await post(guard),data=await r.json();assert.equal(r.status,409);assert.ok(['ACTOR_REQUIRED','ACTOR_MISMATCH'].includes(data.code));assert.equal(data.outcome,undefined);assert.equal(records.size,0);assert.equal(calls,0);}
+  authenticated=owner;const accepted=await post(owner.toUpperCase());assert.equal(accepted.status,201);assert.deepEqual(await accepted.json(),{id,replayed:false});assert.equal(records.get(id).actor,owner);
+  authenticated=other;assert.equal((await post(owner)).status,409);assert.equal(calls,1);
+  authenticated=owner;assert.deepEqual(await (await post(owner)).json(),{id,replayed:true});assert.equal(calls,2);
+  authenticated=null;assert.equal((await post(owner)).status,401);assert.equal(calls,2);
+ }
+});

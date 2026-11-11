@@ -117,6 +117,8 @@ enum PurchaseOrderStatus {
 }
 
 enum StockMovementType {
+  TRANSFER_IN
+  TRANSFER_OUT
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
   PURCHASE_RECEIPT
@@ -480,6 +482,9 @@ model InventoryItem {
 }
 
 model StockBalance {
+  transferOpeningDelta Decimal? @db.Decimal(30,3)
+
+  orderLinks OrderStockReservation[]
   reservedQuantity Decimal @default(0) @db.Decimal(18,3)
   reservations StockReservation[]
   id        String          @id @default(uuid()) @db.Uuid
@@ -496,10 +501,14 @@ model StockBalance {
 
   @@unique([tenantId, id])
   @@unique([tenantId, companyId, branchId, itemId])
+  @@unique([tenantId, companyId, branchId, itemId, id])
   @@index([tenantId, companyId, branchId])
 }
 
 model StockMovement {
+  transferId String? @db.Uuid
+  transfer StockTransfer? @relation(fields:[transferId],references:[id],onDelete:Restrict)
+  @@unique([transferId,type])
   id            String            @id @default(uuid()) @db.Uuid
   tenantId      String            @db.Uuid
   balanceId     String            @db.Uuid
@@ -685,6 +694,7 @@ model QuoteLine {
 }
 
 model SalesOrder {
+  stockReservations OrderStockReservation[]
   id           String           @id @default(uuid()) @db.Uuid
   tenantId     String           @db.Uuid
   companyId    String           @db.Uuid
@@ -717,6 +727,7 @@ model SalesOrder {
 }
 
 model SalesOrderLine {
+  stockReservations OrderStockReservation[]
   id          String     @id @default(uuid()) @db.Uuid
   tenantId    String     @db.Uuid
   orderId     String     @db.Uuid
@@ -728,6 +739,7 @@ model SalesOrderLine {
   order       SalesOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
 
   @@unique([orderId, position])
+  @@unique([tenantId, orderId, id])
   @@index([tenantId, orderId])
 }
 
@@ -1631,6 +1643,8 @@ model TicketDeadlineChange {
 }
 
 model StockReservation {
+ sourceKind String @default("MANUAL") @db.VarChar(20)
+ orderLink OrderStockReservation?
  id String @id @db.Uuid
  tenantId String @db.Uuid
  balanceId String @db.Uuid
@@ -1647,6 +1661,7 @@ model StockReservation {
  balance StockBalance @relation(fields:[tenantId,balanceId],references:[tenantId,id],onDelete:Restrict)
  @@index([tenantId,balanceId,createdAt,id])
  @@index([balanceId,releasedAt])
+ @@unique([tenantId,balanceId,id])
 }
 
 model ProjectBudgetEvent {
@@ -1755,4 +1770,70 @@ model BankReconciliationCertificateEvent {
  createdAt DateTime @default(now()) @db.Timestamptz(3)
  transactionId String @default(dbgenerated("(txid_current())::text"))
  @@unique([certificateId,sequence])
+}
+
+model StockTransfer {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ sourceBranchId String @db.Uuid
+ destinationBranchId String @db.Uuid
+ itemId String @db.Uuid
+ quantity Decimal @db.Decimal(18,3)
+ reference String @db.VarChar(120)
+ reason String @db.VarChar(300)
+ correctsId String? @unique @db.Uuid
+ original StockTransfer? @relation("TransferCorrection",fields:[correctsId],references:[id],onDelete:Restrict)
+ corrections StockTransfer[] @relation("TransferCorrection")
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ transactionId String @default(dbgenerated("(txid_current())::text"))
+ unit String @default("") @db.VarChar(16)
+ itemName String @default("")
+ itemSku String @default("")
+ companyName String @default("")
+ sourceBranchName String @default("")
+ destinationBranchName String @default("")
+ actorName String @default("")
+ movements StockMovement[]
+ @@index([tenantId,companyId,createdAt,id])
+ @@index([itemId])
+}
+
+model StockTransferCancellation {
+ id String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ createdBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ request Json
+ @@index([tenantId,companyId,createdAt])
+}
+
+
+model OrderStockReservation {
+ reservationId String @id @db.Uuid
+ tenantId String @db.Uuid
+ companyId String @db.Uuid
+ branchId String @db.Uuid
+ balanceId String @db.Uuid
+ itemId String @db.Uuid
+ orderId String @db.Uuid
+ lineId String? @db.Uuid
+ note String @db.VarChar(120)
+ orderNumber String
+ customerName String
+ linePosition Int?
+ lineDescription String?
+ itemSku String
+ itemName String
+ itemUnit String
+ branchName String
+ reservation StockReservation @relation(fields:[tenantId,balanceId,reservationId],references:[tenantId,balanceId,id],onDelete:Restrict)
+ balance StockBalance @relation(fields:[tenantId,companyId,branchId,itemId,balanceId],references:[tenantId,companyId,branchId,itemId,id],onDelete:Restrict)
+ order SalesOrder @relation(fields:[tenantId,companyId,orderId],references:[tenantId,companyId,id],onDelete:Restrict)
+ line SalesOrderLine? @relation(fields:[tenantId,orderId,lineId],references:[tenantId,orderId,id],onDelete:Restrict)
+ @@unique([tenantId,balanceId,reservationId])
+ @@index([tenantId,orderId,branchId,reservationId])
+ @@index([itemId])
 }

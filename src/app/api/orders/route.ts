@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       status: true, startedAt: true, completedAt: true, cancelledAt: true,
       currency: true, subtotal: true, createdAt: true,
       invoice: { select: { id: true, number: true } },
-      lines: { select: { position: true, description: true, quantity: true, unitPrice: true, amount: true },
+      lines: { select: { id: true, position: true, description: true, quantity: true, unitPrice: true, amount: true },
         orderBy: { position: "asc" } } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: page.data * 50, take: 51 });
   return NextResponse.json({ orders: orders.slice(0, 50), nextPage: orders.length > 50 ? page.data + 1 : null });

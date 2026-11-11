@@ -21,17 +21,19 @@ export async function GET(request:Request){
   const item=await tx.inventoryItem.findFirst({where:{tenantId,companyId,id:itemId,OR:[{branchId},{branchId:null}]},select:{sku:true,name:true,unit:true,archivedAt:true}});
   if(!branch||!item)return null;
   const scope={tenantId,balance:{tenantId,companyId,branchId,itemId}};
-  const [prior,movements]=await Promise.all([
+  const [prior,movements,stockBalance]=await Promise.all([
    tx.stockMovement.aggregate({where:{...scope,createdAt:{lt:start}},_sum:{delta:true}}),
-   tx.stockMovement.findMany({where:{...scope,createdAt:{gte:start,lt:end}},select:{id:true,type:true,delta:true,reason:true,createdAt:true},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001})]);
+   tx.stockMovement.findMany({where:{...scope,createdAt:{gte:start,lt:end}},select:{id:true,type:true,delta:true,reason:true,createdAt:true},orderBy:[{createdAt:"asc"},{id:"asc"}],take:5001}),
+   tx.stockBalance.findUnique({where:{tenantId_companyId_branchId_itemId:{tenantId,companyId,branchId,itemId}},select:{transferOpeningDelta:true}})]);
   let balance=prior._sum.delta??new Prisma.Decimal(0);const opening=balance.toFixed(3);let incoming=new Prisma.Decimal(0);let outgoing=new Prisma.Decimal(0);
   const rows=movements.map(movement=>{balance=balance.plus(movement.delta);if(movement.delta.gt(0))incoming=incoming.plus(movement.delta);else outgoing=outgoing.minus(movement.delta);return {...movement,delta:movement.delta.toFixed(3),balance:balance.toFixed(3),timestamp:new Date(movement.createdAt.getTime()+offset).toISOString().replace("T"," ").slice(0,19)};});
-  return {branch:branch.name,item,rows,summary:{opening,incoming:incoming.toFixed(3),outgoing:outgoing.toFixed(3),closing:balance.toFixed(3),count:rows.length}};
+  return {basis:"RECORDED_MOVEMENTS_ONLY" as const,undatedOpeningOffset:stockBalance?.transferOpeningDelta?.toFixed(3)??null,branch:branch.name,item,rows,summary:{opening,incoming:incoming.toFixed(3),outgoing:outgoing.toFixed(3),closing:balance.toFixed(3),count:rows.length}};
  },{isolationLevel:"RepeatableRead"});
  if(!result)return NextResponse.json({error:"Branch or item not found in this scope"},{status:404});
  if(result.rows.length>5000)return NextResponse.json({error:"Report exceeds 5000 movements. Narrow the date range."},{status:413});
  if(format==="json")return NextResponse.json({from,to,timeZone,...result},{headers:{"Cache-Control":"private, no-store"}});
  const prefix=[result.item.sku,result.item.name,result.item.unit,result.branch,timeZone];
- const content=[["SKU","Item","Unit","Branch","Time zone","Time","Type","Delta","Running balance","Reason"],[...prefix,from,"OPENING","",result.summary.opening,"Opening balance summary"],...result.rows.map(row=>[...prefix,row.timestamp,row.type,row.delta,row.balance,row.reason]),[...prefix,to,"CLOSING","",result.summary.closing,"Closing balance summary"]].map(row=>row.map(cell).join(",")).join("\r\n")+"\r\n";
+ const metadata=[result.basis,result.undatedOpeningOffset??"",result.undatedOpeningOffset!==null&&!new Prisma.Decimal(result.undatedOpeningOffset).isZero()?"Undated opening offset excluded. Movement totals are not historical physical balances; no date or backfill is implied.":"Recorded movements only. Undated opening offsets are excluded."];
+ const content=[["SKU","Item","Unit","Branch","Time zone","Time","Type","Delta","Running balance","Reason","Report basis","Undated opening offset","Report note"],[...prefix,from,"OPENING","",result.summary.opening,"Opening balance summary",...metadata],...result.rows.map(row=>[...prefix,row.timestamp,row.type,row.delta,row.balance,row.reason,...metadata]),[...prefix,to,"CLOSING","",result.summary.closing,"Closing balance summary",...metadata]].map(row=>row.map(cell).join(",")).join("\r\n")+"\r\n";
  return new Response(`\uFEFF${content}`,{headers:{"Content-Type":"text/csv; charset=utf-8","Content-Disposition":`attachment; filename="stock-${from}-to-${to}.csv"`,"Cache-Control":"private, no-store"}});
 }

@@ -30,6 +30,7 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
       }
       // Serialize corrections of this exact immutable source movement.
       await tx.$queryRaw`SELECT id FROM "StockMovement" WHERE "tenantId"=${tenantId}::uuid AND id=${id}::uuid FOR UPDATE`;
+      if(original.transferId)throw new StockConflict("Transfer legs require a full paired transfer correction");
       if(original.type === "PURCHASE_RETURN")throw new StockConflict("Saved stock returns cannot be reversed");
       if(original.receiptLineId){
         const source=await tx.goodsReceiptLine.findUnique({where:{id:original.receiptLineId},select:{returnedQuantity:true}});

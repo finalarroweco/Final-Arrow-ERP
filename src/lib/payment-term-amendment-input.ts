@@ -5,8 +5,9 @@ const day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>value>="2000-01-
 export const paymentTermAmendmentInput=z.object({tenantId:uuid,requestId:uuid,expectedSequence:z.number().int().min(0).max(999),paymentTerms:z.object({label:text(120),dueDate:day}).strict().nullable(),reason:text(1000)}).strict();
 export type PaymentTermAmendmentInput=z.infer<typeof paymentTermAmendmentInput>;
 export type PaymentTermSourceKind="invoice"|"receipt";
+export const paymentTermAmendmentEnvelope=z.object({version:z.literal(1),actorId:uuid,kind:z.enum(["invoice","receipt"]),sourceId:uuid,request:paymentTermAmendmentInput}).strict();
 export function pendingPaymentTermAmendment(raw:unknown,actorId:string,tenantId:string,kind:PaymentTermSourceKind,sourceId:string){
- const parsed=z.object({version:z.literal(1),actorId:uuid,kind:z.enum(["invoice","receipt"]),sourceId:uuid,request:paymentTermAmendmentInput}).strict().safeParse(raw);
+ const parsed=paymentTermAmendmentEnvelope.safeParse(raw);
  return parsed.success&&parsed.data.actorId===actorId.toLowerCase()&&parsed.data.request.tenantId===tenantId.toLowerCase()&&parsed.data.kind===kind&&parsed.data.sourceId===sourceId.toLowerCase()?parsed.data.request:null;
 }
 // Exclusive end-of-day boundary. No local-time arithmetic or user backdated events.

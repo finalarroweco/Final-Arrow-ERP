@@ -18,7 +18,7 @@ function harness({saved,kind="create",fetch:fetcher=async()=>({ok:true,status:20
  const key=`erp-bank-certificate:${kind}:${actorValue.toLowerCase()}:${tenantValue.toLowerCase()}:${idValue.toLowerCase()}`,storage=new Map(saved?[[key,saved]]:[]),slots=[],cleanup=[];let index=0,clears=0,calls=0;
  const hooks={useState(initial){const i=index++;if(!(i in slots))slots[i]=initial;return [slots[i],value=>{slots[i]=typeof value==="function"?value(slots[i]):value;}];},useRef(initial){const i=index++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useEffect(fn,deps){const i=index++;const serialized=JSON.stringify(deps);if(slots[i]!==serialized){slots[i]=serialized;cleanup.push(fn());}}};
  const api=load("request.ts",{react:hooks},{sessionStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>{if(storageFails)throw Error("blocked");storage.set(k,v);},removeItem:k=>storage.delete(k)},fetch:(...args)=>{calls++;return fetcher(...args);}});
- const render=()=>{index=0;return api.useCertificateRequests(actorValue,tenantValue,idValue,kind,()=>clears++);};render();
+ const render=(scope={})=>{actorValue=scope.actor??actorValue;tenantValue=scope.tenant??tenantValue;idValue=scope.id??idValue;index=0;return api.useCertificateRequests(actorValue,tenantValue,idValue,kind,()=>clears++);};render();
  return {render,storage,key,get calls(){return calls;},get clears(){return clears;},unmount(){cleanup.forEach(fn=>fn?.());}};
 }
 test("restored capture is actor/tenant/statement scoped, validated, and never submitted automatically",()=>{
@@ -150,4 +150,22 @@ test("download compares UUID scope case-insensitively",()=>{
  const d=load("download.ts"),upper="AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",upperTenant="BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB";
  const value={certificate:{id:upper.toLowerCase(),tenantId:upperTenant.toLowerCase(),companyId:id,accountId:id,statementId:id,digest:"a".repeat(64),createdAt:"2026-01-31",observedAt:"2026-01-31",createdBy:actor,note:null,snapshot:{...snapshot,tenantId:upperTenant.toLowerCase()}},events:[],version:0,supersededBy:null,canManage:true};
  assert.equal(d.validCertificateDownload(value,upper,upperTenant),true);
+});
+
+for(const kind of ["create","event"])test(`${kind} v1 retries use original scoped actor and preserve bytes across cookie and source changes`,async()=>{
+ const original=kind==="create"?payload:{tenantId:tenant,requestId,expectedVersion:0,action:"RESTORE",reason:"Restore original"};
+ const raw=JSON.stringify(original,null,2),headers=[],bodies=[];let authenticatedActor=id;
+ const h=harness({kind,saved:raw,fetch:async(_url,options)=>{
+  headers.push(options.headers["X-Expected-Actor-Id"]);bodies.push(options.body);
+  return authenticatedActor===actor?{ok:true,status:201,json:async()=>({id:requestId,replayed:false})}:{ok:false,status:409,json:async()=>({code:"ACTOR_MISMATCH",error:"Original account required"})};
+ }});
+ const originalRun=h.render().run;
+ await originalRun("/write",h.render().pending,()=>assert.fail(),()=>{});
+ assert.equal(headers[0],actor);assert.equal(h.storage.get(h.key),raw);assert.deepEqual(h.render().pending,original);
+ h.render({actor:id});assert.equal(h.render().pending,null);
+ await originalRun("/write",original,()=>assert.fail(),()=>{});assert.equal(h.calls,1);assert.equal(h.storage.get(h.key),raw);
+ h.render({actor, id:tenant});assert.equal(h.render().pending,null);assert.equal(h.storage.get(h.key),raw);
+ h.render({id});assert.deepEqual(h.render().pending,original);
+ authenticatedActor=actor;let done=false;await h.render().run("/write",h.render().pending,()=>{done=true;},()=>assert.fail());
+ assert.equal(done,true);assert.deepEqual(headers,[actor,actor]);assert.equal(bodies[0],bodies[1]);assert.equal(h.storage.size,0);
 });

@@ -6,13 +6,13 @@ import {PrismaClient} from "@prisma/client";
 import {readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import ts from "typescript";
-const origin="http://127.0.0.1:3249";
-async function call(path,method="GET",body,cookie){const response=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,data:await response.json(),cookie:response.headers.get("set-cookie")?.split(";")[0],headers:response.headers};}
+const origin="http://127.0.0.1:3249",actors=new Map();
+async function call(path,method="GET",body,cookie,expectedActor=actors.get(cookie)){const response=await fetch(origin+path,{method,headers:{"Content-Type":"application/json",...(method==="POST"&&path.endsWith("/payment-terms")&&expectedActor!==null&&expectedActor!==undefined?{"X-Expected-Actor-Id":expectedActor}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,data:await response.json(),cookie:response.headers.get("set-cookie")?.split(";")[0],headers:response.headers};}
 test("payment-term amendments are immutable, scoped, exactly retryable and historically bounded without accounting changes",{timeout:180000},async()=>{
  const db=new PrismaClient(),server=spawn("./node_modules/.bin/next",["start","-H","127.0.0.1","-p","3249"],{env:{...process.env,ALLOW_REGISTRATION:"true"},stdio:["ignore","ignore","inherit"]});
  try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(resolve=>setTimeout(resolve,500));}assert.ok(ready);
-  async function owner(){const s=randomUUID().slice(0,8),r=await call("/api/auth/register","POST",{name:"Amendment owner",email:`amend-${s}@example.invalid`,password:"Amendments-password-2026",organization:"Amendments QA",slug:`amend-${s}`});assert.equal(r.status,201);return r;}
+  async function owner(){const s=randomUUID().slice(0,8),r=await call("/api/auth/register","POST",{name:"Amendment owner",email:`amend-${s}@example.invalid`,password:"Amendments-password-2026",organization:"Amendments QA",slug:`amend-${s}`});assert.equal(r.status,201);actors.set(r.cookie,(await db.user.findUnique({where:{email:`amend-${s}@example.invalid`}})).id);return r;}
   const actor=await owner(),outsider=await owner(),tenantId=actor.data.tenantId,cookie=actor.cookie;
   const create=async(path,body)=>{const r=await call(path,"POST",{tenantId,...body},cookie);assert.equal(r.status,201,JSON.stringify(r.data));return r.data;};
   const {company}=await create("/api/companies",{name:"Amendments company",code:"AMEND",baseCurrency:"OMR"}),companyId=company.id;
@@ -21,7 +21,7 @@ test("payment-term amendments are immutable, scoped, exactly retryable and histo
   const invoicePermission="invoice-payment-term:manage",receiptPermission="receipt-payment-term:manage";
   const permissions=["invoice:read","inventory-stock:read","purchase-order:read",invoicePermission,receiptPermission];
   const {role}=await create("/api/roles",{name:"Terms operator",permissions}),{role:readerRole}=await create("/api/roles",{name:"Terms reader",permissions:permissions.filter(p=>p.endsWith(":read"))});
-  async function invite(roleId,branchId,name,type="BRANCH",builtIn){const invitation=await create("/api/invitations",{email:`amend-member-${randomUUID().slice(0,8)}@example.invalid`,...(builtIn?{role:builtIn}:{roleId}),scope:{type,companyId,...(type==="BRANCH"?{branchId}:{})}});const result=await call("/api/invitations/accept","POST",{token:invitation.path.split("/").at(-1),name,password:"Amendment-member-2026"});assert.equal(result.status,200);return result.cookie;}
+  async function invite(roleId,branchId,name,type="BRANCH",builtIn){const invitation=await create("/api/invitations",{email:`amend-member-${randomUUID().slice(0,8)}@example.invalid`,...(builtIn?{role:builtIn}:{roleId}),scope:{type,companyId,...(type==="BRANCH"?{branchId}:{})}});const result=await call("/api/invitations/accept","POST",{token:invitation.path.split("/").at(-1),name,password:"Amendment-member-2026"});assert.equal(result.status,200);const membership=await db.membership.findFirst({where:{tenantId,user:{name}}});assert.ok(membership);actors.set(result.cookie,membership.userId);return result.cookie;}
   const operator=await invite(role.id,branch.id,"Terms operator"),reader=await invite(readerRole.id,branch.id,"Terms reader"),wrongBranch=await invite(role.id,sibling.id,"Sibling operator"),manager=await invite(undefined,branch.id,"Default manager","COMPANY","Manager");
   const {customer}=await create("/api/customers",{companyId,code:"AMEND-C",displayName:"Amendment customer"});
   const {supplier}=await create("/api/suppliers",{companyId,code:"AMEND-S",displayName:"Amendment supplier"});
@@ -42,14 +42,31 @@ test("payment-term amendments are immutable, scoped, exactly retryable and histo
   assert.equal((await call(invPath+query+"&unknown=true","GET",undefined,reader)).status,400);
   for(const patch of [{createdAt:"2000-01-01T00:00:00Z"},{companyId},{branchId:branch.id},{expectedSequence:1000},{paymentTerms:{label:"No",dueDate:"2026-02-30"}}])assert.equal((await call(invPath,"POST",{...first,...patch},operator)).status,400);
   const initial=await call(invPath+query,"GET",undefined,reader);assert.equal(initial.status,200);assert.equal(initial.data.current.sequence,0);assert.equal(initial.data.canManage,false);assert.equal(initial.data.original.paymentTerms,original.label);assert.match(initial.headers.get("cache-control"),/no-store/);
-  const noChange={...first,requestId:randomUUID(),paymentTerms:original};const noChangeResponse=await call(invPath,"POST",noChange,operator);assert.equal(noChangeResponse.status,409);assert.deepEqual(noChangeResponse.data.requestOutcome,{code:"NOT_RECORDED",requestId:noChange.requestId});assert.equal(await db.paymentTermAmendment.count({where:{id:noChange.requestId}}),0);
+  const noChange={...first,requestId:randomUUID(),paymentTerms:original};const noChangeResponse=await call(invPath,"POST",noChange,operator);assert.equal(noChangeResponse.status,409);assert.deepEqual(noChangeResponse.data.requestOutcome,{code:"NOT_RECORDED",requestId:noChange.requestId,actorId:actors.get(operator)});assert.equal(await db.paymentTermAmendment.count({where:{id:noChange.requestId}}),0);
   assert.equal((await call(endpoint("invoice",undated.id),"POST",{...first,paymentTerms:null},operator)).status,409);
   assert.equal((await call(endpoint("invoice",undated.id),"POST",{...first,requestId:randomUUID()},operator)).status,201,"undated originals can acquire explicit terms");
   const races=await Promise.all([call(invPath,"POST",first,operator),call(invPath.toUpperCase().replace("/API/INVOICES/","/api/invoices/").replace("/PAYMENT-TERMS","/payment-terms"),"POST",{...first,tenantId:tenantId.toUpperCase(),requestId:first.requestId.toUpperCase()},operator)]);assert.ok(races.every(r=>r.status===201),JSON.stringify(races));assert.deepEqual(races.map(r=>r.data.replayed).sort(),[false,true]);
   const saved=races[0].data.change,operatorId=saved.createdBy;assert.equal(saved.paymentDueDate,future.dueDate);assert.equal(saved.sequence,1);assert.equal(saved.createdAt.slice(0,10),new Date().toISOString().slice(0,10));
   const changedRetry=await call(invPath,"POST",{...first,reason:"Changed retry reason"},operator);assert.equal(changedRetry.status,409);assert.deepEqual(changedRetry.data.requestOutcome,{code:"UNRESOLVED",requestId:first.requestId});assert.equal((await call(invPath,"POST",first,cookie)).status,409,"different actor cannot adopt another request");
   assert.equal((await call(endpoint("invoice",otherInvoice.id),"POST",first,operator)).status,409);assert.equal((await call(recPath,"POST",first,operator)).status,409,"request identity is global across source kinds");
-  const stale={...first,requestId:randomUUID()},staleResponse=await call(invPath,"POST",stale,operator);assert.equal(staleResponse.status,409,"stale sequence cannot append");assert.deepEqual(staleResponse.data.requestOutcome,{code:"NOT_RECORDED",requestId:stale.requestId});assert.equal(await db.paymentTermAmendment.count({where:{id:stale.requestId}}),0);
+  const stale={...first,requestId:randomUUID()},staleResponse=await call(invPath,"POST",stale,operator);assert.equal(staleResponse.status,409,"stale sequence cannot append");assert.deepEqual(staleResponse.data.requestOutcome,{code:"NOT_RECORDED",requestId:stale.requestId,actorId:actors.get(operator)});assert.equal(await db.paymentTermAmendment.count({where:{id:stale.requestId}}),0);
+  // A request not yet sent by A must never commit as equally authorized B,
+  // even with a current sequence. Both source kinds exercise the write boundary.
+  for(const [kind,source] of [["invoice",await invoice("AMEND-UNSENT")],["receipt",await receipt("AMEND-UNSENT-PO")]]){
+   const path=endpoint(kind,source.id),pending={...first,requestId:randomUUID()},actorA=actors.get(operator);
+   for(const expectedActor of [null,"bad",actorA+","+actorA,actorA]){
+    const denied=await call(path,"POST",pending,cookie,expectedActor);assert.equal(denied.status,409);assert.notEqual(denied.data.requestOutcome?.code,"NOT_RECORDED");
+    assert.equal(await db.paymentTermAmendment.count({where:{id:pending.requestId}}),0);assert.equal(await db.auditLog.count({where:{entityId:pending.requestId}}),0);
+   }
+   // Even a no-op or stale sequence must not produce a discardable absence verdict.
+   for(const payload of [{...pending,paymentTerms:original},{...pending,expectedSequence:8}]){
+    const denied=await call(path,"POST",payload,cookie,actorA);assert.equal(denied.status,409);assert.notEqual(denied.data.requestOutcome?.code,"NOT_RECORDED");
+   }
+   const resumed=await call(path,"POST",pending,operator,actorA.toUpperCase());assert.equal(resumed.status,201);assert.equal(resumed.data.change.createdBy,actorA);assert.equal(resumed.data.replayed,false);
+   const replayB=await call(path,"POST",pending,cookie,actorA);assert.equal(replayB.status,409);assert.notEqual(replayB.data.requestOutcome?.code,"NOT_RECORDED");
+   assert.equal((await call(path,"POST",pending,operator,actorA)).data.replayed,true);
+   assert.equal(await db.paymentTermAmendment.count({where:{id:pending.requestId}}),1);assert.equal(await db.auditLog.count({where:{entityId:pending.requestId}}),1);
+  }
   // A stale page keeps actor A's pending UUID after a lost successful response.
   // Session B has the same source rights, but may not adopt or discard A's record.
   const actorSwitchInvoice=await invoice("AMEND-ACTOR-SWITCH"),switchPath=endpoint("invoice",actorSwitchInvoice.id),lostRequest={...first,requestId:randomUUID()};

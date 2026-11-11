@@ -1,3 +1,4 @@
+import {Prisma} from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
@@ -33,7 +34,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const update = parsed.data.action === "archive"
     ? { archivedAt: parsed.data.archived ? new Date() : null }
     : { name: parsed.data.name, unit: parsed.data.unit, description: parsed.data.description };
-  const result = await db.$transaction(async (tx) => {
+  try {const result = await db.$transaction(async (tx) => {
     const result = await tx.inventoryItem.update({ where: { id }, data: update });
     await tx.auditLog.create({ data: { tenantId, actorId: actor.id,
       action: parsed.data.action === "archive" ? (parsed.data.archived ? "inventory-item.archived" : "inventory-item.restored") : "inventory-item.updated",
@@ -41,4 +42,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return result;
   });
   return NextResponse.json({ item: result });
+  }catch(error){if((error instanceof Prisma.PrismaClientKnownRequestError&&["P2004","P2010"].includes(error.code))||(error instanceof Prisma.PrismaClientUnknownRequestError&&error.message.includes('code: "23514"')))return NextResponse.json({error:"Release active order-linked holds before changing the stock unit. Existing hold snapshots never change; no unit conversion is performed."},{status:409});throw error;}
 }

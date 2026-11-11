@@ -16,16 +16,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!uuid.safeParse(id).success || !parsed.success)
     return NextResponse.json({ error: "Invalid order action" }, { status: 400 });
   const { tenantId, action } = parsed.data;
-  const order = await db.salesOrder.findUnique({ where: { tenantId_id: { tenantId, id } },
-    select: { companyId: true, branchId: true } });
-  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
-  if (!(await canAccess({ userId: actor.id, tenantId, companyId: order.companyId,
-    branchId: order.branchId ?? undefined, permission: "order:manage" })))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const target = action === "start" ? "IN_PROGRESS" : action === "complete" ? "COMPLETED" : "CANCELLED";
   const expected = action === "start" ? ["NEW"] : action === "complete" ? ["IN_PROGRESS"] : ["NEW", "IN_PROGRESS"];
   const now = new Date();
   const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${tenantId}::uuid FOR SHARE`;
+    await tx.$queryRaw`SELECT id FROM "SalesOrder" WHERE id=${id}::uuid AND "tenantId"=${tenantId}::uuid FOR UPDATE`;
+    const order = await tx.salesOrder.findUnique({where:{tenantId_id:{tenantId,id}},select:{companyId:true,branchId:true}});
+    if(!order)return {error:"Order not found",statusCode:404};
+    if(!await canAccess({userId:actor.id,tenantId,companyId:order.companyId,branchId:order.branchId??undefined,permission:"order:manage"},tx))return {error:"Forbidden",statusCode:403};
     const changed = await tx.salesOrder.updateMany({ where: { id, tenantId, status: { in: expected as ("NEW" | "IN_PROGRESS")[] } },
       data: { status: target, ...(action === "start" ? { startedAt: now } : action === "complete"
         ? { completedAt: now } : { cancelledAt: now }) } });
@@ -35,6 +34,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return tx.salesOrder.findUnique({ where: { id }, select: { id: true, status: true,
       startedAt: true, completedAt: true, cancelledAt: true } });
   });
+  if(result&&"statusCode" in result)return NextResponse.json({error:result.error},{status:result.statusCode});
   if (!result) return NextResponse.json({ error: "Order status has changed or transition is invalid" }, { status: 409 });
   return NextResponse.json({ order: result });
 }

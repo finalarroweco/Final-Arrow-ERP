@@ -17,7 +17,11 @@ export function paymentTermRoute(kind:PaymentTermSourceKind){
    const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401});
    const {id}=await params,parsed=paymentTermAmendmentInput.safeParse(await request.json().catch(()=>null));
    if(!parsed.success)return NextResponse.json({error:"Invalid payment-term amendment"},{status:400});
-   try{return NextResponse.json(await amendPaymentTerms(actor.id,kind,id,parsed.data),{status:201,headers:{"Cache-Control":"private, no-store"}});}catch(error){const failure=operationalFailure(error);return NextResponse.json({error:failure.error,requestOutcome:{code:error instanceof PaymentTermRequestNotRecorded?"NOT_RECORDED":"UNRESOLVED",requestId:parsed.data.requestId}},{status:failure.status});}
+   // This is a concurrency guard, never an authorization identity. Reject before
+   // any mutation or absence verdict, including previously uncommitted requests.
+   const expectedActor=z.string().uuid().transform(value=>value.toLowerCase()).safeParse(request.headers.get("X-Expected-Actor-Id"));
+   if(!expectedActor.success||expectedActor.data!==actor.id.toLowerCase())return NextResponse.json({error:"The original operator must be signed in to resolve this request",requestOutcome:{code:"UNRESOLVED",requestId:parsed.data.requestId}},{status:409,headers:{"Cache-Control":"private, no-store"}});
+   try{return NextResponse.json(await amendPaymentTerms(actor.id,kind,id,parsed.data),{status:201,headers:{"Cache-Control":"private, no-store"}});}catch(error){const failure=operationalFailure(error);return NextResponse.json({error:failure.error,requestOutcome:{code:error instanceof PaymentTermRequestNotRecorded?"NOT_RECORDED":"UNRESOLVED",requestId:parsed.data.requestId,...(error instanceof PaymentTermRequestNotRecorded?{actorId:actor.id}:{})}},{status:failure.status});}
   }
  };
 }

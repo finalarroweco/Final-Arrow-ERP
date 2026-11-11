@@ -35,6 +35,7 @@ export async function GET(request: Request) {
       item: { select: { sku: true, name: true, unit: true, archivedAt: true } } }, orderBy: { item: { name: "asc" } } }),
     db.stockMovement.findMany({ where: { tenantId: where.tenantId, balance: where },
       select: { id: true, type: true, delta: true, reason: true, createdAt: true,
+        transfer:{select:{id:true,sourceBranchId:true,destinationBranchId:true}},
         receiptLine: {select:{returnedQuantity:true,receipt:{select:{id:true,order:{select:{branchId:true}}}}}},
         returnLine:{select:{goodsReturn:{select:{id:true,receipt:{select:{order:{select:{branchId:true}}}}}}}},
         balance: { select: { item: { select: { sku: true, name: true, unit: true } } } } },
@@ -48,7 +49,8 @@ export async function GET(request: Request) {
     entity: "StockMovement", entityId: { in: movements.map(movement => movement.id) },
     action: { in: ["inventory-stock.reversed", "inventory-stock.reversal-created"] } },
     select: { entityId: true, action: true } });
-  const decorated = movements.map(({receiptLine,returnLine,...movement}) => ({ ...movement,
+  const decorated = movements.map(({receiptLine,returnLine,transfer,...movement}) => ({ ...movement,
+    transferId:transfer&&(stockRead===null||Array.isArray(stockRead)&&stockRead.includes(transfer.sourceBranchId)&&stockRead.includes(transfer.destinationBranchId))?transfer.id:null,
     receiptId: receiptLine && (purchaseRead === null || (Array.isArray(purchaseRead) && receiptLine.receipt.order.branchId && purchaseRead.includes(receiptLine.receipt.order.branchId))) ? receiptLine.receipt.id : null,
     returnId: returnLine && (purchaseRead === null || (Array.isArray(purchaseRead) && returnLine.goodsReturn.receipt.order.branchId && purchaseRead.includes(returnLine.goodsReturn.receipt.order.branchId))) ? returnLine.goodsReturn.id : null,
     hasReturns: Boolean(receiptLine && receiptLine.returnedQuantity>0),
