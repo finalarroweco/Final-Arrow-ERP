@@ -44,6 +44,13 @@ test('physical deliveries, usable returns, corrections and selected full holds a
   const movement=await db.stockMovement.findFirstOrThrow({where:{salesDocumentId:input.requestId}});assert.equal((await call(`/api/inventory/movements/${movement.id}/reverse`,'POST',{tenantId,reason:'Not a generic reversal'},cookie)).status,409);
   const csv=await call(endpoint+query+'&format=csv','GET',undefined,cookie);assert.equal(csv.status,200);assert.match(csv.data,/"'=private delivery reference"/);
   assert.equal((await call(endpoint+query+'&page=0&page=1','GET',undefined,cookie)).status,400);
+  for(const target of [endpoint+query,endpoint+query+'&format=csv',detail(input.requestId)]){
+   assert.equal((await call(target+'&expectedActorId='+actorId,'GET',undefined,cookie)).status,200);
+   const switched=await call(target+'&expectedActorId='+actorId,'GET',undefined,operator.cookie);assert.equal(switched.status,403);assert.ok(!JSON.stringify(switched.data).includes(input.reference));
+   assert.equal((await call(target,'GET',undefined,operator.cookie)).status,200,'direct authorized API reads need no mounted actor');
+   for(const suffix of ['&expectedActorId=broken','&expectedActorId=','&expectedActorId='+actorId+'&expectedActorId='+actorId])assert.equal((await call(target+suffix,'GET',undefined,cookie)).status,400);
+  }
+  for(const target of [endpoint+query,detail(input.requestId)])assert.equal((await call(target+'&expectedActorId='+operator.id,'GET',undefined,operator.cookie)).data.actorId,operator.id);
   const returned=ret(input.requestId,'2.125'),rr=await post(returned);assert.equal(rr.status,201,JSON.stringify(rr));assert.ok(salesStockResponseMatches(returned,rr.data.document));assert.equal((await balance()).quantity.toFixed(3),'46.125');
   assert.equal((await post(ret(input.requestId,'4.001'))).status,409);assert.equal((await post(correct(input.requestId))).status,409);
   const rc=correct(returned.requestId),rcr=await post(rc);assert.equal(rcr.status,201,JSON.stringify(rcr));assert.equal((await balance()).quantity.toFixed(3),'44.000');assert.equal((await post(rc)).status,201);assert.equal((await post({...rc,documentId:input.requestId})).status,409);assert.equal((await post(correct(rc.requestId))).status,409);

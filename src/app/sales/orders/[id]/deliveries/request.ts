@@ -1,8 +1,9 @@
 "use client";
+import { browserAuthLost } from "@/lib/browser-auth-loss";
 import { useEffect, useRef, useState } from "react";
 import { pendingSalesStock, salesStockRequest, salesStockResponseMatches, salesStockCancellationMatches, type SalesStockRequest, type SalesStockRow } from "@/lib/sales-stock-input";
 
-export function useSalesStockRequest(actorId: string, tenantId: string, companyId: string, orderId: string) {
+export function useSalesStockRequest(actorId: string, tenantId: string, companyId: string, orderId: string, onAuthLoss?: () => (() => void)) {
   const key = `erp-sales-stock:v1:${actorId}:${tenantId}:${companyId}:${orderId}`;
   const [raw, setRaw] = useState<string | null>(null), [ready, setReady] = useState(false), [busy, setBusy] = useState(false);
   const lock = useRef(false), generation = useRef(0), mountedKey = useRef<string | null>(null), renderedKey = useRef(key), exact = useRef<string | null>(null);
@@ -24,7 +25,7 @@ export function useSalesStockRequest(actorId: string, tenantId: string, companyI
   const pending = raw ? decode(raw) : null;
   async function run(request: SalesStockRequest | null, saved: (row: SalesStockRow) => void, failed: () => void, cancel = false, cancelled?: () => void) {
     if (!ready || lock.current || mountedKey.current !== key || renderedKey.current !== key) return;
-    const current = generation.current;
+    const current = generation.current, notifyAuthLoss = onAuthLoss?.();
     const active = () => generation.current === current && mountedKey.current === key && renderedKey.current === key;
     // Capture what this controller showed when the user chose submit/retry/cancel.
     const expected = exact.current;
@@ -52,7 +53,11 @@ export function useSalesStockRequest(actorId: string, tenantId: string, companyI
         if (!frozen || localStorage.getItem(key) !== serialized || !active()) throw Error("invalid pending");
         const body = JSON.stringify(JSON.parse(serialized).request);
         const response = await fetch(cancel ? "/api/sales/stock-documents/cancel" : "/api/sales/stock-documents", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        if (!active()) return;
+        if (browserAuthLost(response)) { notifyAuthLoss?.(); throw Error("authentication lost"); }
         const data = await response.json();
+        if (!active()) return;
+        if (browserAuthLost(response, data)) { notifyAuthLoss?.(); throw Error("authentication lost"); }
         const verifiedDocument = salesStockResponseMatches(frozen, data.document) && data.document.createdBy === actorId;
         const verifiedCancellation = cancel && salesStockCancellationMatches(frozen, data.cancellation);
         if (!response.ok || (!verifiedDocument && !verifiedCancellation)) throw Error("unverified");

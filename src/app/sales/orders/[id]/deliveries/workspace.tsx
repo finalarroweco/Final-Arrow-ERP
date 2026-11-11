@@ -16,46 +16,64 @@ export function SalesStockWorkspace(props: Props) {
 }
 function SalesStockController({ actorId, order, branches, locale }: Props) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
-  const request = useSalesStockRequest(actorId, order.tenantId, order.companyId, order.id);
   const [branchId, setBranchId] = useState(order.branchId ?? ""), [mode, setMode] = useState("manual"), [holdId, setHoldId] = useState("");
   const [holds, setHolds] = useState<OrderStockHoldRow[]>([]), [holdPage, setHoldPage] = useState(0), [holdNext, setHoldNext] = useState<number | null>(null), [holdLoading, setHoldLoading] = useState(false);
   const [rows, setRows] = useState<SalesStockRow[]>([]), [totals, setTotals] = useState<DeliveryTotal[]>([]), [page, setPage] = useState(0), [nextPage, setNextPage] = useState<number | null>(null);
   const [filters, setFilters] = useState({ branchId: "", itemId: "", q: "" }), [version, setVersion] = useState(0), [loading, setLoading] = useState(true), [message, setMessage] = useState("");
   const [detail, setDetail] = useState<DeliveryDetail | null>(null), [detailLoading, setDetailLoading] = useState(false), [printing, setPrinting] = useState(false), [printTicket, setPrintTicket] = useState(0);
-  const mounted = useRef(false), detailSequence = useRef(0), printLock = useRef(false), printIdentity = useRef("");
+  const readEpoch = useRef(0), mounted = useRef(false), detailSequence = useRef(0), printLock = useRef(false), printIdentity = useRef("");
   const branch = branches.find(b => b.id === branchId), selectedHold = holds.find(h => h.id === holdId);
-  const blocked = request.blocked || request.busy || !request.ready;
-  const query = new URLSearchParams({ tenantId: order.tenantId, companyId: order.companyId, orderId: order.id, page: String(page), ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) }).toString();
+  const query = new URLSearchParams({ expectedActorId: actorId, tenantId: order.tenantId, companyId: order.companyId, orderId: order.id, page: String(page), ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) }).toString();
   const belongs = useCallback((row: SalesStockRow) => row.tenantId === order.tenantId && row.companyId === order.companyId && row.orderId === order.id && branches.some(b => b.id === row.branchId), [order, branches]);
+  const invalidateReads = useCallback(() => {
+    readEpoch.current++; detailSequence.current++; printIdentity.current = ""; printLock.current = false;
+    setRows([]); setTotals([]); setNextPage(null); setHolds([]); setHoldNext(null); setHoldId("");
+    setDetail(null); setPrintTicket(0); setPrinting(false); setLoading(false); setHoldLoading(false); setDetailLoading(false);
+    setMessage(t("Account or access changed. Current display and printing stopped. Refresh to verify access.", "تغير الحساب أو صلاحية الوصول. تم إيقاف العرض والطباعة. حدّث للتحقق من الصلاحية."));
+  }, [t]);
+  const captureAuthLoss = useCallback(() => { const epoch = readEpoch.current; return () => { if (epoch === readEpoch.current) invalidateReads(); }; }, [invalidateReads]);
+  const request = useSalesStockRequest(actorId, order.tenantId, order.companyId, order.id, captureAuthLoss);
+  const blocked = request.blocked || request.busy || !request.ready;
   useEffect(() => { const sequence = detailSequence; mounted.current = true; return () => { mounted.current = false; sequence.current++; }; }, []);
   useEffect(() => {
-    let active = true; setLoading(true); setRows([]); setTotals([]); setNextPage(null);
+    let active = true; const epoch = readEpoch.current; setLoading(true); setRows([]); setTotals([]); setNextPage(null);
     void (async () => { try {
-      const response = await fetch(`/api/sales/stock-documents?${query}`, { cache: "no-store" }), data = await response.json();
+      const response = await fetch(`/api/sales/stock-documents?${query}`, { cache: "no-store" });
+      if (!active || epoch !== readEpoch.current) return;
+      if ([401, 403].includes(response.status)) { invalidateReads(); return; }
+      const data = await response.json();
+      if (!active || epoch !== readEpoch.current) return;
+      if (response.ok && data?.actorId !== actorId) { invalidateReads(); return; }
       const parsed = salesStockRow.array().max(50).safeParse(data.documents), grouped = totalSchema.array().safeParse(data.totals);
-      if (!response.ok || !parsed.success || !grouped.success || data.page !== page || !(data.nextPage === null || data.nextPage === page + 1) || parsed.data.some(row => !belongs(row)) || grouped.data.some(total => !branches.some(b => b.id === total.branchId))) throw Error("unverified register");
-      if (!active) return; setRows(parsed.data); setTotals(grouped.data); setNextPage(data.nextPage);
-    } catch { if (active) setMessage(t("Could not verify the current register. Refresh to retry.", "تعذر التحقق من السجل الحالي. حدّث لإعادة المحاولة.")); }
-    finally { if (active) setLoading(false); } })();
+      if (!response.ok || data.actorId !== actorId || !parsed.success || !grouped.success || data.page !== page || !(data.nextPage === null || data.nextPage === page + 1) || parsed.data.some(row => !belongs(row)) || grouped.data.some(total => !branches.some(b => b.id === total.branchId))) throw Error("unverified register");
+      if (!active || epoch !== readEpoch.current) return; setRows(parsed.data); setTotals(grouped.data); setNextPage(data.nextPage);
+    } catch { if (active && epoch === readEpoch.current) setMessage(t("Could not verify the current register. Refresh to retry.", "تعذر التحقق من السجل الحالي. حدّث لإعادة المحاولة.")); }
+    finally { if (active && epoch === readEpoch.current) setLoading(false); } })();
     return () => { active = false; };
-  }, [query, page, version, belongs, branches, t]);
+  }, [query, page, version, belongs, branches, t, actorId, invalidateReads]);
   useEffect(() => {
-    let active = true; setHolds([]); setHoldNext(null); setHoldId("");
+    let active = true; const epoch = readEpoch.current; setHolds([]); setHoldNext(null); setHoldId("");
     if (mode !== "hold" || !branch?.canDeliverHold) { setHoldLoading(false); return; }
     setHoldLoading(true);
     void (async () => { try {
-      const params = new URLSearchParams({ tenantId: order.tenantId, companyId: order.companyId, branchId: branch.id, state: "ACTIVE", page: String(holdPage) });
-      const response = await fetch(`/api/orders/${order.id}/reservations?${params}`, { cache: "no-store" }), data = await response.json();
+      const params = new URLSearchParams({ expectedActorId: actorId, tenantId: order.tenantId, companyId: order.companyId, branchId: branch.id, state: "ACTIVE", page: String(holdPage) });
+      const response = await fetch(`/api/orders/${order.id}/reservations?${params}`, { cache: "no-store" });
+      if (!active || epoch !== readEpoch.current) return;
+      if ([401, 403].includes(response.status)) { invalidateReads(); return; }
+      const data = await response.json();
+      if (!active || epoch !== readEpoch.current) return;
+      if (response.ok && data?.actorId !== actorId) { invalidateReads(); return; }
       const parsed = orderStockHoldRow.array().max(50).safeParse(data.reservations);
-      if (!response.ok || !parsed.success || data.page !== holdPage || !(data.nextPage === null || data.nextPage === holdPage + 1) || parsed.data.some(h => h.tenantId !== order.tenantId || h.orderLink.orderId !== order.id || h.balance.companyId !== order.companyId || h.balance.branchId !== branch.id || h.releasedAt !== null)) throw Error("unverified hold");
+      if (!response.ok || data.actorId !== actorId || !parsed.success || data.page !== holdPage || !(data.nextPage === null || data.nextPage === holdPage + 1) || parsed.data.some(h => h.tenantId !== order.tenantId || h.orderLink.orderId !== order.id || h.balance.companyId !== order.companyId || h.balance.branchId !== branch.id || h.releasedAt !== null)) throw Error("unverified hold");
       if (active) { setHolds(parsed.data); setHoldNext(data.nextPage); }
-    } catch { if (active) setMessage(t("Active holds could not be verified. Refresh the holds before choosing one.", "تعذر التحقق من الحجوزات القائمة. حدّث الحجوزات قبل اختيار أحدها.")); }
-    finally { if (active) setHoldLoading(false); } })();
+    } catch { if (active && epoch === readEpoch.current) setMessage(t("Active holds could not be verified. Refresh the holds before choosing one.", "تعذر التحقق من الحجوزات القائمة. حدّث الحجوزات قبل اختيار أحدها.")); }
+    finally { if (active && epoch === readEpoch.current) setHoldLoading(false); } })();
     return () => { active = false; };
-  }, [mode, branch, holdPage, order, version, t]);
+  }, [mode, branch, holdPage, order, version, t, actorId, invalidateReads]);
   useEffect(() => {
     if (!printTicket || !detail || printIdentity.current !== detail.document.id) return;
-    const frame = requestAnimationFrame(() => { if (mounted.current && printIdentity.current === detail.document.id) { try { window.print(); } finally { printLock.current = false; setPrinting(false); setPrintTicket(0); } } });
+    const epoch = readEpoch.current;
+    const frame = requestAnimationFrame(() => { if (mounted.current && epoch === readEpoch.current && printIdentity.current === detail.document.id) { try { window.print(); } finally { printLock.current = false; setPrinting(false); setPrintTicket(0); } } });
     return () => cancelAnimationFrame(frame);
   }, [printTicket, detail]);
   const label = (kind: SalesStockRow["kind"]) => kind === "DELIVERY" ? t("Delivery", "تسليم") : kind === "RETURN" ? t("Usable-stock return", "إرجاع مخزون صالح") : t("Full correction", "تصحيح كامل");
@@ -78,15 +96,20 @@ function SalesStockController({ actorId, order, branches, locale }: Props) {
     if (print && printLock.current) return;
     if (print) { printLock.current = true; setPrinting(true); }
     printIdentity.current = "";
-    const sequence = ++detailSequence.current; setDetailLoading(true); setPrintTicket(0); if (!print) setDetail(null);
+    const epoch = readEpoch.current, sequence = ++detailSequence.current; setDetailLoading(true); setPrintTicket(0); if (!print) setDetail(null);
     try {
-      const response = await fetch(`/api/sales/stock-documents/${row.id}?tenantId=${order.tenantId}`, { cache: "no-store" }), data = await response.json();
+      const response = await fetch(`/api/sales/stock-documents/${row.id}?tenantId=${order.tenantId}&expectedActorId=${actorId}`, { cache: "no-store" });
+      if (!mounted.current || sequence !== detailSequence.current || epoch !== readEpoch.current) return;
+      if ([401, 403].includes(response.status)) { invalidateReads(); return; }
+      const data = await response.json();
+      if (!mounted.current || sequence !== detailSequence.current || epoch !== readEpoch.current) return;
+      if (response.ok && data?.actorId !== actorId) { invalidateReads(); return; }
       const checked = validatedDeliveryDetail(data, row);
-      if (!response.ok || !checked || !belongs(checked.document)) throw Error("unverified detail");
-      if (!mounted.current || sequence !== detailSequence.current) return;
+      if (!response.ok || data.actorId !== actorId || !checked || !belongs(checked.document)) throw Error("unverified detail");
+      if (!mounted.current || sequence !== detailSequence.current || epoch !== readEpoch.current) return;
       setDetail(checked); if (print) { printIdentity.current = row.id; setPrintTicket(sequence); }
-    } catch { if (mounted.current && sequence === detailSequence.current) { setDetail(null); setMessage(t("Current access and document history could not be verified. Display and printing stopped. Refresh to retry.", "تعذر التحقق من صلاحية الوصول وسجل المستند الحالي. تم إيقاف العرض والطباعة. حدّث لإعادة المحاولة.")); } }
-    finally { if (mounted.current && sequence === detailSequence.current) { setDetailLoading(false); if (!print || printIdentity.current !== row.id) { printLock.current = false; setPrinting(false); } } }
+    } catch { if (mounted.current && sequence === detailSequence.current && epoch === readEpoch.current) { setDetail(null); setMessage(t("Current access and document history could not be verified. Display and printing stopped. Refresh to retry.", "تعذر التحقق من صلاحية الوصول وسجل المستند الحالي. تم إيقاف العرض والطباعة. حدّث لإعادة المحاولة.")); } }
+    finally { if (mounted.current && sequence === detailSequence.current && epoch === readEpoch.current) { setDetailLoading(false); if (!print || printIdentity.current !== row.id) { printLock.current = false; setPrinting(false); } } }
   }
   return <section className="sales-stock-container" data-print-ready={printTicket ? "yes" : "no"} dir={locale === "ar" ? "rtl" : "ltr"}>
     <style>{`@media print { header,.hero,.sales-stock-no-print {display:none!important} .sales-stock-container[data-print-ready="no"] {display:none!important} .sales-stock-detail {color:#000;background:#fff;box-shadow:none!important} .sales-stock-detail article {break-inside:avoid} }`}</style>

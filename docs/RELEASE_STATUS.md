@@ -34,6 +34,32 @@ The configured Core checks workflow audits dependencies, runs ESLint and TypeScr
 
 The notes below describe incremental releases; older exclusions describe their original slice. The current matrix above and latest dated release entries are authoritative.
 
+### Combined read identity and import recovery verification — 11 November 2026
+
+The final clean integrated candidate passed 79 fresh migrations, 426 unit/component tests, 40 database tests and 39 API checks on disposable vanilla PostgreSQL 17. Build, TypeScript and dependency audit passed with zero vulnerabilities; ESLint has zero errors and 23 existing warnings. The complete source archive digest remained unchanged through the full verification. A separate final bank API run passed with a one-connection pool, including uppercase UUID identities under company-scoped grants without changing original request bodies or digests.
+
+A populated 78-to-79 upgrade retained every original row and row version across all 89 existing tables, including six saved certificates, seven statements, 25 physical sales documents and live reconciliation digests. All preceding migration checksums remained unchanged. Atomic visibility and injected late-failure rollback, absent optional roles and permissive provider-default grants passed. New cancellation history remained empty until explicit test operations. Independent review found no remaining concrete blocker after canonical UUID, early authorization and post-wait authorization corrections.
+
+These isolated checks cover SQL concurrency and simulated UI/API recovery, not actual-browser or live operational acceptance. Local dependencies were physical copies with independent generated clients; clean installation and PostgreSQL 16 require exact remote CI. No merge, manual deployment, live migration, bank action or financial fixture was performed.
+
+### Permanent bank import abandonment — review candidate
+
+New actor-bound pending bank imports now have an explicit permanent-abandon action. Exact committed imports always return their original result, including a subsequently voided statement; they are never voided or reversed by abandonment. Otherwise, an immutable digest-only cancellation and its generated audit record permanently fence that UUID against any later import, including an already dispatched older-code or direct-SQL attempt. Repeating the exact request returns the same terminal outcome. UNKNOWN remains nonfinal and never clears the pending request.
+
+Import and abandonment share account-first serialization, fresh membership and company-wide ledger permissions, canonical UUID lock identity and READ COMMITTED isolation. The original request body and normalized digest algorithm stay unchanged. The interface clears only the unchanged actor-bound envelope after verifying the complete terminal receipt. Legacy actorless storage remains quarantined without viewing, adopting, sending or deleting it.
+
+Migration 79 is additive and atomic, with no manufactured committed history or financial, allocation, certificate or stock effects. Its tombstones and insert guards must remain after first use: dropping them would allow delayed requests to execute. This trusted-backend control is not protection against a database administrator disabling schema guards. See [permanent import abandonment](BANK_STATEMENT_IMPORT_ABANDONMENT.md). No live database changes or bank action are performed by this review candidate.
+
+### Mounted read identity and bank import recovery — review candidate
+
+Bank, transfer, order-hold, physical-sales, internal-text and manual-subscription workspaces bind private background reads, pickers and output links to their mounted operator. A different current session is rejected before private service reads. JSON actor receipts or download headers stay outside immutable domain records; saved bank snapshot JSON and digests are unchanged. Ordinary authenticated direct reads without the optional actor guard remain supported.
+
+Concurrent read channels and queued output share an invalidation boundary. Current authentication failures, explicit wrong-actor responses and observed mutation/recovery authorization loss fence older results and clear read state. Every attempt captures its scope and current read generation; a delayed old failure cannot clear a newer authenticated result. Pending mutation bytes and exact verified commit handling remain independent. Explicit order-hold export/print rereads the selected page before output. Native navigation/downloads already dispatched and information already viewed cannot be retracted.
+
+New bank import writes require the intended-actor header, including direct clients. Version-two pending envelopes retain exact original request bytes and UUID; success is accepted only after verifying immutable scope/account/creator/hash fields and recomputing the original unchanged digest. Committed replay belongs to the original creator and requires current permissions. Generic failures and arbitrary successful responses never silently clear pending data.
+
+The read-only exact-outcome check may confirm a committed statement. UNKNOWN only means no committed result was observed: it does not cancel a delayed request or allow safe abandonment. Actorless old session storage is quarantined without displaying, submitting, adopting, rewriting or deleting its CSV. Corrupt or unavailable storage blocks submission. This slice adds no cancellation tombstone or database migration. See [read identity](MOUNTED_WORKSPACE_READ_IDENTITY.md) and [bank import recovery](BANK_STATEMENT_IMPORT_RECOVERY.md) for compatibility and remaining limits.
+
 ### Combined manual subscription verification — 11 November 2026
 
 The final integrated candidate, including mounted-actor document read guards and lossless legacy customer-name snapshots, passed 78 fresh migrations, 336 unit/component tests, 35 database tests and 39 API checks on disposable vanilla PostgreSQL 17. Production build, TypeScript and dependency audit passed; ESLint remains at zero errors and 23 existing warnings. The final source was a clean commit with unchanged complete archive digest. Focused subscription APIs passed with eight- and one-connection pools, including long multiline Arabic/emoji and empty legacy customer names through creation, original replay, resolution, detail and selected-version export/print.

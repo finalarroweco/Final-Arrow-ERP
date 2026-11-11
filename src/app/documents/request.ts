@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DOCUMENT_REQUEST_MAX_BYTES, pendingDocument, documentRequest, documentResponseMatches, documentCancellationMatches, type DocumentRequest, type DocumentEvent } from "@/lib/internal-text-document-input";
 
-export function useDocumentRequest(actorId: string, tenantId: string, companyId: string, branchId: string | null) {
+export function useDocumentRequest(actorId: string, tenantId: string, companyId: string, branchId: string | null, captureAuthorizationFailure?: () => (() => void)) {
   const key = `erp-internal-text:v1:${actorId}:${tenantId}:${companyId}:${branchId ?? "company"}`;
   const [raw, setRaw] = useState<string | null>(null), [ready, setReady] = useState(false), [busy, setBusy] = useState(false);
   const lock = useRef(false), generation = useRef(0), mountedKey = useRef<string | null>(null), renderedKey = useRef(key), exact = useRef<string | null>(null);
@@ -25,6 +25,8 @@ export function useDocumentRequest(actorId: string, tenantId: string, companyId:
   async function run(request: DocumentRequest | null, saved: (row: DocumentEvent) => void, failed: () => void, cancel = false, cancelled?: () => void) {
     if (!ready || lock.current || mountedKey.current !== key || renderedKey.current !== key) return;
     const current = generation.current;
+    const onAuthorizationFailure = captureAuthorizationFailure?.();
+    let authorizationFailureReported = false;
     const active = () => generation.current === current && mountedKey.current === key && renderedKey.current === key;
     // Capture what this controller showed when the user chose submit/retry/cancel.
     const expected = exact.current;
@@ -53,7 +55,17 @@ export function useDocumentRequest(actorId: string, tenantId: string, companyId:
         if (!frozen || localStorage.getItem(key) !== serialized || !active()) throw Error("invalid pending");
         const body = JSON.stringify(JSON.parse(serialized).request);
         const response = await fetch(cancel ? "/api/documents/resolve" : "/api/documents", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        if (!active()) return;
+        const authorizationFailed = () => {
+          if (active() && onAuthorizationFailure) { authorizationFailureReported = true; onAuthorizationFailure(); }
+          throw Error("document authorization changed");
+        };
+        if (response.status === 401 || response.status === 403 || response.redirected) authorizationFailed();
         const data = await response.json();
+        if (!active()) return;
+        if (response.ok && ((typeof data?.actorId === "string" && data.actorId !== actorId) ||
+          (typeof data?.event?.createdBy === "string" && data.event.createdBy !== actorId) ||
+          (typeof data?.cancellation?.createdBy === "string" && data.cancellation.createdBy !== actorId))) authorizationFailed();
         const verifiedDocument = documentResponseMatches(frozen, data.event) && data.event.createdBy === actorId;
         const verifiedCancellation = cancel && documentCancellationMatches(frozen, data.cancellation);
         if (!response.ok || (!verifiedDocument && !verifiedCancellation)) throw Error("unverified");
@@ -62,7 +74,7 @@ export function useDocumentRequest(actorId: string, tenantId: string, companyId:
         localStorage.removeItem(key); if (localStorage.getItem(key) !== null) throw Error("pending removal failed"); exact.current = null; setRaw(null);
         if (verifiedDocument) saved(data.event); else cancelled?.();
       });
-    } catch { if (active()) failed(); }
+    } catch { if (active() && !authorizationFailureReported) failed(); }
     finally { lock.current = false; if (active()) setBusy(false); }
   }
   return { pending, blocked: raw !== null, ready, busy, run, abandon: (saved: (row: DocumentEvent) => void, failed: () => void, cancelled: () => void) => run(null, saved, failed, true, cancelled) };

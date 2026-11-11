@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 function load(path, overrides = {}, globals = {}) {
  const source = readFileSync(new URL('../' + path, import.meta.url), 'utf8');
  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 } });
- const exports = {}; new Function('require', 'exports', ...Object.keys(globals), outputText)(name => Object.hasOwn(overrides, name) ? overrides[name] : require(name), exports, ...Object.values(globals)); return exports;
+ const exports = {}; new Function('require', 'exports', ...Object.keys(globals), outputText)(name => name === '@/lib/browser-auth-loss' ? load('src/lib/browser-auth-loss.ts') : Object.hasOwn(overrides, name) ? overrides[name] : require(name), exports, ...Object.values(globals)); return exports;
 }
 const input = load('src/lib/stock-transfer-input.ts');
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -20,13 +20,13 @@ function browser() {
  const storage = new Map(), held = new Set();
  return { storage, locks: { async request(key, options, fn) { assert.equal(options.ifAvailable, true); if (held.has(key)) return fn(null); held.add(key); try { return await fn({ name: key }); } finally { held.delete(key); } } } };
 }
-function harness({ raw, fetcher = async () => { throw Error('network'); }, storageFails = false, shared = browser(), locking = true } = {}) {
+function harness({ captureAuthLoss, raw, fetcher = async () => { throw Error('network'); }, storageFails = false, shared = browser(), locking = true } = {}) {
  const key = `erp-stock-transfer:${actorId}:${tenantId}:${companyId}`, storage = shared.storage;
  if (raw !== undefined) storage.set(key, raw);
  const slots = [], listeners = new Set(); let index = 0, calls = 0, actor = actorId, company = companyId;
- const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++, value = JSON.stringify(deps); if (slots[i]?.deps !== value) { slots[i]?.cleanup?.(); slots[i] = { deps: value, cleanup: fn() }; } } };
+ const hooks = { useCallback: fn => fn, useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++, value = JSON.stringify(deps); if (slots[i]?.deps !== value) { slots[i]?.cleanup?.(); slots[i] = { deps: value, cleanup: fn() }; } } };
  const mod = load('src/app/inventory/transfers/request.ts', { react: hooks, '@/lib/stock-transfer-input': input }, { navigator: { locks: locking ? shared.locks : undefined }, window: { addEventListener(_type, fn) { listeners.add(fn); }, removeEventListener(_type, fn) { listeners.delete(fn); } }, localStorage: { getItem: k => storage.get(k) ?? null, setItem(k, v) { if (storageFails) throw Error('blocked'); storage.set(k, v); }, removeItem: k => storage.delete(k) }, fetch(...args) { calls++; return fetcher(...args); } });
- const render = () => { index = 0; return mod.useTransferRequest(actor, tenantId, company); }; render();
+ const render = () => { index = 0; return mod.useTransferRequest(actor, tenantId, company, captureAuthLoss); }; render();
  return { render, storage, key, get calls() { return calls; }, event(eventKey = key) { listeners.forEach(fn => fn({ key: eventKey })); }, identity(nextActor, nextCompany = companyId) { actor = nextActor; company = nextCompany; render(); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
 }
 test('pending requests hydrate without automatic writes and malformed captures remain blocked', () => {
@@ -148,23 +148,23 @@ test('frozen transfer and correction requests bind save and cancellation to the 
 const detailInput = load('src/app/inventory/transfers/detail-input.ts');
 const printable = { tenantId, companyId, sourceBranchId: payload.sourceBranchId, destinationBranchId: payload.destinationBranchId, itemId: payload.itemId, quantity: payload.quantity, reference: payload.reference, reason: payload.reason, id: payload.requestId, createdBy: actorId, createdAt: '2026-11-11T12:00:00.000Z', correctsId: null, unit: 'each', itemName: 'Item', itemSku: 'SKU', companyName: 'Company', sourceBranchName: 'East', destinationBranchName: 'West', actorName: 'Actor', corrections: [], canCorrect: true };
 function printHarness(response) {
- const slots = [], effects = [], frames = new Map(); let index = 0, printed = 0, fetches = 0, frameId = 0;
- const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++; if (!slots[i] || deps.some((value, j) => value !== slots[i].deps[j])) { const previous = slots[i]; slots[i] = { deps, cleanup: previous?.cleanup }; effects.push(() => { previous?.cleanup?.(); slots[i].cleanup = fn(); }); } } };
- const mod = load('src/app/inventory/transfers/[id]/detail.tsx', { react: hooks, 'next/navigation': { useRouter: () => ({ refresh() {} }) }, '@/lib/locale': { translate: (locale, en, ar) => locale === 'ar' ? ar : en }, '../detail-input': detailInput, '../form': { TransferForm: 'transfer-form' } }, { window: { print() { printed++; } }, requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; }, cancelAnimationFrame(id) { frames.delete(id); }, async fetch(url, options) { fetches++; assert.equal(url, `/api/inventory/transfers/${printable.id}?tenantId=${tenantId}`); assert.equal(options.cache, 'no-store'); return response; } });
- function render() { index = 0; const tree = mod.TransferDetail({ actorId, initial: printable, locale: 'en' }); effects.splice(0).forEach(fn => fn()); return tree; }
+ const slots = [], effects = [], frames = new Map(); let index = 0, printed = 0, fetches = 0, frameId = 0, currentDocument = printable;
+ const hooks = { useCallback: fn => fn, useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++; if (!slots[i] || deps.some((value, j) => value !== slots[i].deps[j])) { const previous = slots[i]; slots[i] = { deps, cleanup: previous?.cleanup }; effects.push(() => { previous?.cleanup?.(); slots[i].cleanup = fn(); }); } } };
+ const mod = load('src/app/inventory/transfers/[id]/detail.tsx', { react: hooks, 'next/navigation': { useRouter: () => ({ refresh() {} }) }, '@/lib/locale': { translate: (locale, en, ar) => locale === 'ar' ? ar : en }, '../detail-input': detailInput, '../form': { TransferForm: 'transfer-form' } }, { window: { print() { printed++; } }, requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; }, cancelAnimationFrame(id) { frames.delete(id); }, async fetch(url, options) { fetches++; assert.equal(url, `/api/inventory/transfers/${currentDocument.id}?tenantId=${tenantId}&expectedActorId=${actorId}`); assert.equal(options.cache, 'no-store'); return typeof response === 'function' ? response() : response; } });
+ function render() { index = 0; const tree = mod.TransferDetail({ actorId, initial: currentDocument, locale: 'en' }); effects.splice(0).forEach(fn => fn()); return tree; }
  function descendants(element) { return [element, ...React.Children.toArray(element?.props?.children).flatMap(child => React.isValidElement(child) ? descendants(child) : [])]; }
- return { render, descendants, click(tree) { descendants(tree).find(e => e.type === 'button').props.onClick(); }, get printed() { return printed; }, get fetches() { return fetches; }, flush() { const queued = [...frames.values()]; frames.clear(); queued.forEach(fn => fn()); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
+ return { render, descendants, navigate(document) { currentDocument = document; return render(); }, click(tree) { descendants(tree).find(e => e.type === 'button').props.onClick(); }, get printed() { return printed; }, get fetches() { return fetches; }, flush() { const queued = [...frames.values()]; frames.clear(); queued.forEach(fn => fn()); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
 }
 const settlePrint = () => new Promise(resolve => setImmediate(resolve));
 test('printing rechecks authorization and malformed or revoked responses never open print', async () => {
- for (const response of [{ ok: false, json: async () => ({ error: 'denied' }) }, { ok: true, json: async () => ({ transfer: { ...printable, createdBy: id(99) } }) }, { ok: true, json: async () => ({ transfer: { ...printable, corrections: undefined } }) }]) {
+ for (const response of [{ ok: false, json: async () => ({ error: 'denied' }) }, { ok: true, json: async () => ({ actorId, transfer: { ...printable, createdBy: id(99) } }) }, { ok: true, json: async () => ({ actorId, transfer: { ...printable, corrections: undefined } }) }]) {
   const h = printHarness(response); let tree = h.render(); const beforeKey = h.descendants(tree).find(e => e.type === 'transfer-form').key;
   h.click(tree); await settlePrint(); tree = h.render(); h.flush(); assert.equal(h.printed, 0); assert.equal(h.fetches, 1); assert.ok(h.descendants(tree).some(e => e.props?.role === 'alert')); assert.equal(h.descendants(tree).find(e => e.type === 'transfer-form').key, beforeKey);
  }
 });
 test('printing refreshes corrections and current correction permission before DOM-committed print', async () => {
  const correction = { ...printable, id: id(30), correctsId: printable.id, sourceBranchId: printable.destinationBranchId, destinationBranchId: printable.sourceBranchId, reason: 'Corrected today' }; delete correction.canCorrect; delete correction.corrections;
- const h = printHarness({ ok: true, json: async () => ({ transfer: { ...printable, corrections: [correction], canCorrect: false } }) });
+ const h = printHarness({ ok: true, json: async () => ({ actorId, transfer: { ...printable, corrections: [correction], canCorrect: false } }) });
  let tree = h.render(); const beforeKey = h.descendants(tree).find(e => e.type === 'transfer-form').key; h.click(tree); await settlePrint(); assert.equal(h.printed, 0);
  tree = h.render(); const form = h.descendants(tree).find(e => e.type === 'transfer-form'); assert.equal(form.key, beforeKey); assert.equal(form.props.correction.canCorrect, false); assert.equal(form.props.correction.corrections[0].reason, 'Corrected today'); assert.equal(h.printed, 0); h.flush(); assert.equal(h.printed, 1);
  h.click(h.render()); await settlePrint(); h.render(); h.unmount(); h.flush(); assert.equal(h.printed, 1);
@@ -196,4 +196,58 @@ test('stock report warns in both languages only for a nonzero undated opening of
   if (offset === null || offset === '0.000') assert.doesNotMatch(html, warning); else { assert.match(html, warning); assert.ok(html.includes(offset)); }
   assert.match(html, /-1.000/);
  }
+});
+
+test('print rejects a valid document returned for a different mounted actor', async () => {
+ const h = printHarness({ ok: true, json: async () => ({ actorId: id(99), transfer: printable }) });
+ h.click(h.render()); await settlePrint(); h.render(); h.flush(); assert.equal(h.printed, 0); assert.equal(h.fetches, 1);
+});
+test('transfer register binds list, export and detail links and rejects foreign actor receipts',async()=>{
+ for(const returnedActor of [actorId,id(99)]){
+  const slots=[],effects=[],calls=[];let index=0;
+  const hooks={useRef(initial){const i=index++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useCallback:fn=>fn,useState(initial){const i=index++;if(!(i in slots))slots[i]=initial;return[slots[i],v=>{slots[i]=typeof v==='function'?v(slots[i]):v;}];},useEffect(fn){effects.push(fn);}};
+  const mod=load('src/app/inventory/transfers/workspace.tsx',{react:hooks,'@/lib/locale':{translate:(_l,en)=>en},'./form':{TransferForm:'transfer-form'}},{fetch:(url)=>new Promise(resolve=>calls.push({url,resolve}))});
+  const scope={tenantId,companyId,label:'Company',branches:[],items:[]};
+  function render(){index=0;const wrapper=mod.TransferWorkspace({actorId,options:[scope],locale:'en'});const company=React.Children.toArray(wrapper.props.children).find(e=>typeof e.type==='function');return company.type(company.props);}
+  let tree=render();effects.splice(0).forEach(f=>f());assert.equal(calls.length,1);assert.equal(new URL(calls[0].url,'http://local').searchParams.get('expectedActorId'),actorId);
+  calls[0].resolve({ok:true,json:async()=>({actorId:returnedActor,transfers:[printable],nextPage:null})});await settlePrint();tree=render();const html=renderToStaticMarkup(tree);
+  assert.equal(html.includes(printable.reference),returnedActor===actorId);
+  const links=[...html.matchAll(/href="([^"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&'));assert.ok(links.length);for(const href of links)assert.equal(new URL(href,'http://local').searchParams.get('expectedActorId'),actorId);
+ }
+});
+
+
+test('current mutation and recovery auth loss notifies reads without clearing pending; business errors do not', async () => {
+ for (const cancel of [false,true]) for (const [response,expected] of [
+  [{status:401,ok:false,json:async()=>{throw Error('HTML');}},true],
+  [{status:403,ok:false,json:async()=>{throw Error('HTML');}},true],
+  [{status:200,ok:true,redirected:true,url:'https://erp.test/login?next=original',json:async()=>{throw Error('HTML');}},true],
+  [{status:409,ok:false,json:async()=>({code:'ACTOR_MISMATCH'})},true],
+  [{status:409,ok:false,json:async()=>({code:'REQUEST_CONFLICT'})},false],
+  [{status:500,ok:false,json:async()=>({error:'server'})},false]
+ ]) {
+  let losses=0;const h=harness({raw:envelope(payload),captureAuthLoss:()=>()=>losses++,fetcher:async()=>response});
+  if(cancel)await h.render().abandon(()=>assert.fail(),()=>{},()=>assert.fail());else await h.render().run(null,()=>assert.fail(),()=>{});
+  assert.equal(losses,Number(expected));assert.equal(h.storage.get(h.key),envelope(payload));
+ }
+});
+test('obsolete scope and prior read-epoch mutation denials never clear newer reads or pending', async () => {
+ for(const changed of ['scope','epoch','unmount']){
+  let release,epoch=0,losses=0;const h=harness({raw:envelope(payload),captureAuthLoss:()=>{const own=epoch;return()=>{if(own===epoch)losses++;};},fetcher:()=>new Promise(r=>release=r)});
+  const pending=h.render().run(null,()=>assert.fail(),()=>{});await new Promise(r=>setImmediate(r));
+  if(changed==='scope')h.identity(id(99));else if(changed==='unmount')h.unmount();else epoch++;
+  release({status:401,ok:false,json:async()=>{throw Error('must not parse');}});await pending;
+  assert.equal(losses,0);assert.equal(h.storage.get(h.key),envelope(payload));
+ }
+});
+
+test('transfer mutation auth-loss token cancels queued printing and older tokens cannot hide reverified transfer',async()=>{
+ const h=printHarness({ok:true,status:200,json:async()=>({actorId,transfer:printable})});
+ let tree=h.render();const token=h.descendants(tree).find(e=>e.type==='transfer-form').props.onAuthLoss();h.click(tree);await settlePrint();tree=h.render();token();h.render();h.flush();assert.equal(h.printed,0);assert.ok(!renderToStaticMarkup(h.render()).includes('<h2>'+printable.reference+'</h2>'));
+ h.click(h.render());await settlePrint();h.render();h.flush();assert.equal(h.printed,1);token();assert.ok(renderToStaticMarkup(h.render()).includes(printable.reference));
+});
+
+test('an old transfer-document mutation denial cannot cancel printing a newer document in the same company',async()=>{
+ let document=printable;const h=printHarness(()=>({ok:true,status:200,json:async()=>({actorId,transfer:document})}));
+ const old=h.descendants(h.render()).find(e=>e.type==='transfer-form').props.onAuthLoss();document={...printable,id:id(77),reference:'NEW-DOCUMENT'};h.navigate(document);h.click(h.render());await settlePrint();h.render();old();h.render();h.flush();assert.equal(h.printed,1);
 });

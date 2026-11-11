@@ -44,3 +44,7 @@ See [implementation notes](docs/IMPLEMENTATION.md) for local setup and current l
 See [release status](docs/RELEASE_STATUS.md) for the module inventory and production gates.
 See [release acceptance](docs/RELEASE_ACCEPTANCE.md) for evidence and sign-off required before live use.
 See [staging setup](docs/STAGING_SETUP.md) for database/hosting setup and live review limits.
+
+New bank-statement import clients must send `X-Expected-Actor-Id`. Current workspaces bind private reads to their mounted operator and verify pending import outcomes. Actorless legacy import storage remains quarantined; an `UNKNOWN` outcome is not safe abandonment. See [import recovery](docs/BANK_STATEMENT_IMPORT_RECOVERY.md) and [mounted read identity](docs/MOUNTED_WORKSPACE_READ_IDENTITY.md).
+
+Actor-bound pending bank imports support explicit permanent abandonment with immutable UUID fences and exact terminal receipts. It never reverses a saved statement or changes money. Keep migration79 guards and tombstones on application rollback; see [the recovery contract](docs/BANK_STATEMENT_IMPORT_ABANDONMENT.md).

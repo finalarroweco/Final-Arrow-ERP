@@ -21,20 +21,20 @@ const payload = { customerId, ...fields, tenantId, companyId, subscriptionId, br
 const row = { customerId, customerBranchId: branchId, customerName: 'Customer', customerCode: 'C-1', reference: `SUB-${subscriptionId}`, ...fields, id: id(8), requestId: payload.requestId, tenantId, companyId, subscriptionId, branchId, version: 1, action: 'create', serviceLabel: payload.serviceLabel, description: payload.description, reason: payload.reason, archived: false, createdBy: actorId, createdAt: '2026-11-11T12:00:00.000Z' };
 const current = { customerId, customerBranchId: branchId, customerName: row.customerName, customerCode: row.customerCode, reference: row.reference, ...fields, id: subscriptionId, tenantId, companyId, branchId, version: 1, serviceLabel: row.serviceLabel, description: row.description, archived: false, createdBy: actorId, createdAt: row.createdAt, updatedAt: row.createdAt };
 const scope = { tenantId, companyId, branchId, label: 'Company / Branch', canManage: true };
-const detail = { subscription: current, events: [row], page: 0, nextPage: null, canManage: true };
+const detail = { actorId, subscription: current, events: [row], page: 0, nextPage: null, canManage: true };
 const envelope = request => JSON.stringify({ version: 1, actorId, request });
 function browser() {
  const storage = new Map(), held = new Set();
  return { storage, locks: { async request(key, options, fn) { assert.equal(options.ifAvailable, true); if (held.has(key)) return fn(null); held.add(key); try { return await fn({ name: key }); } finally { held.delete(key); } } } };
 }
-function harness({ raw, fetcher = async () => { throw Error('network'); }, storageFails = false, removalFails = false, shared = browser(), locking = true } = {}) {
+function harness({ onAccessDenied = () => {}, captureAccessDenied, raw, fetcher = async () => { throw Error('network'); }, storageFails = false, removalFails = false, shared = browser(), locking = true } = {}) {
  const key = `erp-manual-subscription:v1:${actorId}:${tenantId}:${companyId}:${branchId}`, storage = shared.storage;
  if (raw !== undefined) storage.set(key, raw);
- const slots = [], listeners = new Set(); let index = 0, calls = 0, actor = actorId, branch = branchId;
+ const slots = [], listeners = new Set(); let index = 0, calls = 0, denials = 0, actor = actorId, branch = branchId;
  const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++, value = JSON.stringify(deps); if (slots[i]?.deps !== value) { slots[i]?.cleanup?.(); slots[i] = { deps: value, cleanup: fn() }; } } };
  const mod = load(directory + 'request.ts', { react: hooks, '@/lib/manual-subscription-input': input }, { navigator: { locks: locking ? shared.locks : undefined }, window: { addEventListener(_type, fn) { listeners.add(fn); }, removeEventListener(_type, fn) { listeners.delete(fn); } }, localStorage: { getItem: k => storage.get(k) ?? null, setItem(k, v) { if (storageFails) throw Error('blocked'); storage.set(k, v); }, removeItem: k => { if (!removalFails) storage.delete(k); } }, fetch(...args) { calls++; return fetcher(...args); } });
- const render = () => { index = 0; return mod.useSubscriptionRequest(actor, tenantId, companyId, branch); }; render();
- return { render, storage, key, get calls() { return calls; }, event(eventKey = key) { listeners.forEach(fn => fn({ key: eventKey })); }, identity(nextActor, nextBranch = branchId) { actor = nextActor; branch = nextBranch; render(); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
+ const render = () => { index = 0; return mod.useSubscriptionRequest(actor, tenantId, companyId, branch, () => { const notify = captureAccessDenied ? captureAccessDenied() : onAccessDenied; return () => { denials++; notify(); }; }); }; render();
+ return { render, storage, key, get calls() { return calls; }, get denials() { return denials; }, event(eventKey = key) { listeners.forEach(fn => fn({ key: eventKey })); }, identity(nextActor, nextBranch = branchId) { actor = nextActor; branch = nextBranch; render(); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
 }
 test('subscription captures hydrate without writes and malformed or actor/scope substitutions remain blocked', () => {
  for (const raw of ['broken', envelope({ ...payload, branchId: id(99) }), JSON.stringify({ version: 1, actorId: id(9), request: payload }), envelope({ ...payload, expectedActorId: id(99) })]) {
@@ -104,13 +104,13 @@ test('actor and scope switches fence late responses and leave old requests uncha
  }
 });
 test('history detail rejects scope substitutions, incoherent latest text, version order and missing pagination', () => {
- assert.deepEqual(readInput.verifiedSubscriptionDetail(detail, scope, subscriptionId, 0), detail);
- for (const patch of [{ description: 'tampered' }, { serviceLabel: 'tampered' }, { archived: true }, { version: 2 }, { branchId: null }, { id: id(99) }, { tenantId: id(99) }]) assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, subscription: { ...current, ...patch } }, scope, subscriptionId, 0), null);
- for (const patch of [{ subscriptionId: id(99) }, { branchId: null }, { tenantId: id(99) }, { description: 'tampered' }, { version: 2 }]) assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [{ ...row, ...patch }] }, scope, subscriptionId, 0), null);
- assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, nextPage: 2 }, scope, subscriptionId, 0), null);
- assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [] }, scope, subscriptionId, 0), null);
- assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [row, row] }, scope, subscriptionId, 0), null);
- assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: Array(51).fill(row) }, scope, subscriptionId, 0), null);
+ assert.deepEqual(readInput.verifiedSubscriptionDetail(detail, scope, subscriptionId, 0, actorId), detail);
+ for (const patch of [{ description: 'tampered' }, { serviceLabel: 'tampered' }, { archived: true }, { version: 2 }, { branchId: null }, { id: id(99) }, { tenantId: id(99) }]) assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, subscription: { ...current, ...patch } }, scope, subscriptionId, 0, actorId), null);
+ for (const patch of [{ subscriptionId: id(99) }, { branchId: null }, { tenantId: id(99) }, { description: 'tampered' }, { version: 2 }]) assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [{ ...row, ...patch }] }, scope, subscriptionId, 0, actorId), null);
+ assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, nextPage: 2 }, scope, subscriptionId, 0, actorId), null);
+ assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [] }, scope, subscriptionId, 0, actorId), null);
+ assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [row, row] }, scope, subscriptionId, 0, actorId), null);
+ assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: Array(51).fill(row) }, scope, subscriptionId, 0, actorId), null);
  const unicode = '😀'.repeat(200), {description: _description, ...metadata} = current; assert.ok(readInput.subscriptionMetadata.safeParse({ ...metadata, serviceLabel: unicode }).success);
 });
 test('all explicit action payloads retain independent subscription and request identities through retries', async () => {
@@ -123,11 +123,12 @@ test('all explicit action payloads retain independent subscription and request i
 });
 const localeModule = load('src/lib/locale.ts');
 function workspaceHarness({ state = {}, scopeValue = scope, locale = 'en', pending = null, blocked = false, fetcher = async () => ({ ok: false, json: async () => ({}) }), effects = false } = {}) {
- const slots = [], refs = [], captured = [], cleanups = []; let index = 0, refIndex = 0;
+ const slots = [], refs = [], captured = [], cleanups = []; let index = 0, refIndex = 0, requestCaptureAccessDenied;
  const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = Object.hasOwn(state, i) ? state[i] : initial; return [slots[i], v => { slots[i] = typeof v === 'function' ? v(slots[i]) : v; }]; }, useRef(initial) { const i = refIndex++; return refs[i] ??= { current: initial }; }, useEffect(fn) { if (effects) cleanups.push(fn()); }, useCallback(fn) { return fn; } };
- const mod = load(directory + 'workspace.tsx', { react: hooks, '@/lib/locale': localeModule, '@/lib/manual-subscription-input': input, './request': { useSubscriptionRequest: () => ({ ready: true, blocked: blocked || !!pending, busy: false, pending, run: async request => captured.push(request), abandon: async () => {} }) }, './read-input': readInput, './customer-picker': { CustomerPicker: () => React.createElement('input', {name: 'customerId'}) } }, { fetch: fetcher, crypto: { randomUUID: (() => { let n = 90; return () => id(n++); })() }, FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values[key] ?? null; } } });
+ const mod = load(directory + 'workspace.tsx', { react: hooks, '@/lib/locale': localeModule, '@/lib/manual-subscription-input': input, './request': { useSubscriptionRequest: (...args) => { requestCaptureAccessDenied = args[4]; return ({ ready: true, blocked: blocked || !!pending, busy: false, pending, run: async request => captured.push(request), abandon: async () => {} }); } }, './read-input': readInput, './customer-picker': { CustomerPicker: () => React.createElement('input', {name: 'customerId'}) } }, { fetch: fetcher, crypto: { randomUUID: (() => { let n = 90; return () => id(n++); })() }, FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values[key] ?? null; } } });
  function descendants(element) { return [element, ...React.Children.toArray(element?.props?.children).flatMap(child => React.isValidElement(child) ? descendants(child) : [])]; }
- return { mod, captured, descendants, slots, render() { index = 0; refIndex = 0; return mod.SubscriptionScopeWorkspace({ actorId, scope: scopeValue, locale }); }, submit(form, values) { form.props.onSubmit({ preventDefault() {}, currentTarget: { values } }); }, unmount() { cleanups.forEach(fn => fn?.()); } };
+ return { mod, captured, descendants, slots, // Test-only recovery simulation: production requires refresh/sign-in and remounts. Preserve the advanced epoch while restoring the same actor/scope read state.
+ simulateSameActorReadRecovery() { slots[10] = false; refs[2].current = false; }, get requestCaptureAccessDenied() { return requestCaptureAccessDenied; }, get requestAccessDenied() { return () => requestCaptureAccessDenied()(); }, render() { index = 0; refIndex = 0; return mod.SubscriptionScopeWorkspace({ actorId, scope: scopeValue, locale }); }, submit(form, values) { form.props.onSubmit({ preventDefault() {}, currentTarget: { values } }); }, unmount() { cleanups.forEach(fn => fn?.()); } };
 }
 test('Arabic and English renders treat script, URL, and mixed direction content as literal plain text', () => {
  for (const locale of ['en', 'ar']) {
@@ -181,7 +182,7 @@ test('out-of-order detail and close responses cannot expose stale history', asyn
 });
 test('subscription snapshots reject changed customer identity, reference, status and calendar fields', () => {
  for (const patch of [{ customerId: id(99) }, { customerBranchId: null }, { customerName: 'Other customer' }, { customerCode: 'other' }, { reference: 'other' }, { status: 'PAUSED' }, { startDate: null }, { endDate: '2026-12-01' }, { nextReviewDate: null }, { agreementReference: 'Other agreement' }]) {
-  assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [{ ...row, ...patch }] }, scope, subscriptionId, 0), null);
+  assert.equal(readInput.verifiedSubscriptionDetail({ ...detail, events: [{ ...row, ...patch }] }, scope, subscriptionId, 0, actorId), null);
  }
 });
 test('explicit date clearing and status change preserve source identity on edit', () => {
@@ -197,29 +198,29 @@ test('largest escaped description is frozen and transmitted without truncation f
  await h.render().run(large, () => assert.fail(), () => {}); await h.render().run(null, () => assert.fail(), () => {}); await h.render().abandon(() => assert.fail(), () => {}, () => assert.fail());
  assert.equal(sent.length, 3); assert.ok(Buffer.byteLength(sent[0]) < input.SUBSCRIPTION_REQUEST_MAX_BYTES); for (const body of sent) assert.equal(JSON.parse(body).description, large.description);
 });
-function pickerHarness(fetcher) {
- let denied = 0; const onAccessDenied = () => denied++;
+function pickerHarness(fetcher, fence = { current: 0 }, externalDenied = () => {}, externalCurrent = null) {
+ let denied = 0; const onAccessDenied = () => { denied++; fence.current++; externalDenied(); }; const isReadCurrent = externalCurrent ?? (epoch => fence.current === epoch);
  const slots = [], effects = []; let index = 0; const pendingEffects = [];
  const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => slots[i] = typeof value === 'function' ? value(slots[i]) : value]; }, useEffect(fn, deps) { const i = index++, key = JSON.stringify(deps); if (effects[i]?.key !== key) { effects[i]?.cleanup?.(); effects[i] = { key, cleanup: null }; pendingEffects.push(() => effects[i].cleanup = fn()); } } };
- const mod = load(directory + 'customer-picker.tsx', { react: hooks, '@/lib/locale': localeModule }, { fetch: fetcher });
+ const mod = load(directory + 'customer-picker.tsx', { react: hooks, '@/lib/locale': localeModule, './read-input': readInput }, { fetch: fetcher });
  const descendants = element => [element, ...React.Children.toArray(element?.props?.children).flatMap(child => React.isValidElement(child) ? descendants(child) : [])];
- return { slots, descendants, get denied() { return denied; }, render() { index = 0; const tree = mod.CustomerPicker({actorId, onAccessDenied, scope, locale: 'en'}); pendingEffects.splice(0).forEach(fn => fn()); return tree; }, unmount() { effects.forEach(effect => effect?.cleanup?.()); } };
+ return { slots, descendants, get denied() { return denied; }, render() { index = 0; const tree = mod.CustomerPicker({actorId, onAccessDenied, readEpoch: fence, isReadCurrent, scope, locale: 'en'}); pendingEffects.splice(0).forEach(fn => fn()); return tree; }, unmount() { effects.forEach(effect => effect?.cleanup?.()); } };
 }
 test('customer picker validates pagination, keeps explicit selection and fences older search responses', async () => {
  const pending = [], h = pickerHarness(url => new Promise(resolve => pending.push({url, resolve}))), first = {id: customerId, name: '<script>Literal</script>', code: 'C-1'};
  h.render(); assert.equal(pending.length, 1); assert.ok(pending[0].url.includes(`branchId=${branchId}`));
- pending[0].resolve({ok:true,json:async()=>({customers:[first],page:0,nextPage:1})}); await new Promise(resolve=>setImmediate(resolve));
+ pending[0].resolve({ok:true,json:async()=>({actorId,customers:[first],page:0,nextPage:1})}); await new Promise(resolve=>setImmediate(resolve));
  let nodes=h.descendants(h.render()); const choose=nodes.find(e=>e.type==='select');choose.props.onChange({target:{value:customerId}});
  nodes=h.descendants(h.render());assert.equal(nodes.find(e=>e.type==='input'&&e.props.name==='customerId').props.value,customerId);
  const html=renderToStaticMarkup(h.render());assert.ok(html.includes('&lt;script&gt;Literal&lt;/script&gt;'));assert.ok(!html.includes('<script>'));
  nodes.find(e=>e.type==='button'&&e.props.children==='More customers').props.onClick();h.render();assert.ok(pending[1].url.includes('page=1'));
  h.slots[0]='new';nodes=h.descendants(h.render());nodes.find(e=>e.type==='button'&&e.props.children==='Find customers').props.onClick();h.render();assert.ok(pending[2].url.includes('q=new'));
- pending[2].resolve({ok:true,json:async()=>({customers:[],page:0,nextPage:null})});await new Promise(resolve=>setImmediate(resolve));
- pending[1].resolve({ok:true,json:async()=>({customers:[{id:id(99),name:'Stale customer',code:'STALE'}],page:1,nextPage:null})});await new Promise(resolve=>setImmediate(resolve));
+ pending[2].resolve({ok:true,json:async()=>({actorId,customers:[],page:0,nextPage:null})});await new Promise(resolve=>setImmediate(resolve));
+ pending[1].resolve({ok:true,json:async()=>({actorId,customers:[{id:id(99),name:'Stale customer',code:'STALE'}],page:1,nextPage:null})});await new Promise(resolve=>setImmediate(resolve));
  assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[4].id,customerId);h.unmount();
 });
 test('customer picker rejects oversized, malformed and contact-bearing responses', async () => {
- for(const response of [{customers:[{id:customerId,name:'Customer',code:'C',email:'private@example.test'}],page:0,nextPage:null},{customers:[],page:1,nextPage:null},{customers:[],page:0,nextPage:9},{customers:Array(51).fill({id:customerId,name:'Customer',code:'C'}),page:0,nextPage:1}]) {
+ for(const response of [{actorId,customers:[{id:customerId,name:'Customer',code:'C',email:'private@example.test'}],page:0,nextPage:null},{actorId,customers:[],page:1,nextPage:null},{actorId,customers:[],page:0,nextPage:9},{actorId,customers:Array(51).fill({id:customerId,name:'Customer',code:'C'}),page:0,nextPage:1}]) {
   const h=pickerHarness(async()=>({ok:true,json:async()=>response}));h.render();await new Promise(resolve=>setImmediate(resolve));assert.equal(h.slots[7],true);assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[4],null);h.unmount();
  }
 });
@@ -240,7 +241,7 @@ test('account switch denial from list or detail clears old records and blocks la
   const denied=pending[denying==='list'?0:1],late=pending[denying==='list'?1:0];
   denied.resolve({ok:false,status:403,json:async()=>assert.fail('Denied response data must not be consumed')});await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[7],null);assert.equal(h.slots[8],null);assert.equal(h.slots[10],true);
-  late.resolve({ok:true,status:200,json:async()=>denying==='list'?detail:{subscriptions:[current],page:0,nextPage:null}});await new Promise(resolve=>setImmediate(resolve));
+  late.resolve({ok:true,status:200,json:async()=>denying==='list'?detail:{actorId,subscriptions:[current],page:0,nextPage:null}});await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[7],null);assert.equal(h.slots[8],null);
   const html=renderToStaticMarkup(h.render());assert.ok(html.includes('Refresh this page or sign in again'));assert.ok(!html.includes('<form'));assert.ok(!html.includes(row.serviceLabel));h.unmount();
  }
@@ -261,4 +262,150 @@ test('subscription-only roles may combine independent customer access grants', (
  const labels=load('src/lib/permission-labels.ts',{'./locale':localeModule});
  assert.deepEqual(labels.requiredReads('subscription:read',['subscription:read','customer:read']),['subscription:read']);
  assert.ok(!labels.requiredReads('subscription:manage',['subscription:read','customer:read']).includes('customer:read'));
+});
+test('picker denial fences detail waiting for JSON and retained native output callbacks', async () => {
+ let detailJson;
+ const h=workspaceHarness({state:{3:[current],5:false,7:detail,8:row},effects:true,fetcher:async url=>url.includes('/api/manual-subscriptions?')?new Promise(()=>{}):{ok:true,status:200,json:()=>new Promise(resolve=>detailJson=resolve)}});
+ const nodes=h.descendants(h.render()), props=nodes.find(e=>e.props?.readEpoch)?.props, links=nodes.filter(e=>e.type==='a');
+ assert.ok(props);assert.equal(links.length,3);
+ for(const link of links)link.props.onClick({preventDefault:()=>assert.fail('Current links remain available')});
+ nodes.find(e=>e.type==='button'&&Array.isArray(e.props.children)&&e.props.children[0]===row.serviceLabel).props.onClick();await new Promise(resolve=>setImmediate(resolve));assert.ok(detailJson);
+ const picker=pickerHarness(async()=>({ok:false,status:403,json:async()=>assert.fail('Non-JSON denial must not be parsed')}),props.readEpoch,props.onAccessDenied,props.isReadCurrent);
+ picker.render();await new Promise(resolve=>setImmediate(resolve));
+ detailJson(detail);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.slots[7],null);assert.equal(h.slots[8],null);assert.equal(h.slots[9],false);assert.equal(h.slots[10],true);assert.equal(picker.slots[6],false);
+ for(const link of links){let prevented=false;link.props.onClick({preventDefault:()=>prevented=true});assert.ok(prevented,'A retained link cannot start CSV/text/print after known denial');}
+ picker.unmount();h.unmount();
+});
+test('register and detail 401/403 fence picker JSON success and obsolete picker failure before unmount', async () => {
+ for(const channel of ['register','detail']) for(const status of [401,403]) for(const outcome of ['success','denial']) {
+  let registerResponse,detailResponse,pickerResponse,pickerJson;
+  const h=workspaceHarness({state:{3:[current],5:false},effects:true,fetcher:async url=>url.includes('/api/manual-subscriptions?')?new Promise(resolve=>registerResponse=resolve):new Promise(resolve=>detailResponse=resolve)});
+  const nodes=h.descendants(h.render()),props=nodes.find(e=>e.props?.readEpoch)?.props;
+  const picker=pickerHarness(()=>new Promise(resolve=>pickerResponse=resolve),props.readEpoch,props.onAccessDenied,props.isReadCurrent);picker.render();
+  if(outcome==='success'){pickerResponse({ok:true,status:200,json:()=>new Promise(resolve=>pickerJson=resolve)});await new Promise(resolve=>setImmediate(resolve));}
+  nodes.find(e=>e.type==='button'&&Array.isArray(e.props.children)&&e.props.children[0]===row.serviceLabel).props.onClick();
+  (channel==='register'?registerResponse:detailResponse)({ok:false,status,json:async()=>assert.fail('Non-JSON denial must not be parsed')});await new Promise(resolve=>setImmediate(resolve));const epoch=props.readEpoch.current;
+  if(outcome==='success')pickerJson({actorId,customers:[{id:customerId,name:'Stale customer',code:'STALE'}],page:0,nextPage:null});
+  else pickerResponse({ok:false,status:403,json:async()=>assert.fail('Obsolete denial must not be parsed')});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(picker.slots[3],[]);assert.equal(picker.slots[4],null);assert.equal(picker.denied,0);assert.equal(props.readEpoch.current,epoch);assert.equal(h.slots[10],true);
+  picker.unmount();h.unmount();
+ }
+});
+test('unmounted scope failures cannot invalidate a new scope or start retained native output', async () => {
+ let oldResponse;const old=workspaceHarness({state:{3:[current],5:false,7:detail,8:row},effects:true,fetcher:()=>new Promise(resolve=>oldResponse=resolve)});
+ const nodes=old.descendants(old.render()),props=nodes.find(e=>e.props?.readEpoch)?.props,oldLinks=nodes.filter(e=>e.type==='a');
+ let pickerResponse;const picker=pickerHarness(()=>new Promise(resolve=>pickerResponse=resolve),props.readEpoch,props.onAccessDenied,props.isReadCurrent);picker.render();
+ old.unmount();picker.unmount();const fresh=workspaceHarness({scopeValue:{...scope,branchId:id(99)},effects:true,fetcher:()=>new Promise(()=>{})});fresh.render();
+ oldResponse({ok:false,status:403,json:async()=>assert.fail()});pickerResponse({ok:false,status:403,json:async()=>assert.fail()});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(old.slots[10],false);assert.equal(fresh.slots[10],false);assert.equal(picker.denied,0);
+ for(const link of oldLinks){let prevented=false;link.props.onClick({preventDefault:()=>prevented=true});assert.ok(prevented);}
+ fresh.unmount();
+});
+test('missing or mismatched actor receipts invalidate every read channel before consuming private rows', async () => {
+ for(const channel of ['register','detail','picker']) for(const receipt of [undefined,id(99),null]) {
+  const json={}, h=workspaceHarness({state:{3:[current],5:false,7:detail,8:row},effects:true,fetcher:async url=>({ok:true,status:200,json:()=>new Promise(resolve=>json[url.includes('/api/manual-subscriptions?')?'register':'detail']=resolve)})});
+  const nodes=h.descendants(h.render()),props=nodes.find(e=>e.props?.readEpoch)?.props;
+  nodes.find(e=>e.type==='button'&&Array.isArray(e.props.children)&&e.props.children[0]===row.serviceLabel).props.onClick();
+  const picker=pickerHarness(async()=>({ok:true,status:200,json:()=>new Promise(resolve=>json.picker=resolve)}),props.readEpoch,props.onAccessDenied,props.isReadCurrent);picker.render();
+  await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(Object.keys(json).sort(),['detail','picker','register']);
+  const bad={actorId:receipt};Object.defineProperty(bad,channel==='register'?'subscriptions':channel==='detail'?'subscription':'customers',{get:()=>assert.fail('Actor receipt must be checked before private content')});
+  json[channel](bad);await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.slots[10],true);assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[7],null);assert.equal(h.slots[8],null);assert.equal(h.slots[5],false);assert.equal(h.slots[9],false);
+  for(const other of ['register','detail','picker'].filter(value=>value!==channel))json[other](other==='detail'?detail:other==='register'?{actorId,subscriptions:[current],page:0,nextPage:null}:{actorId,customers:[{id:customerId,name:'Stale customer',code:'STALE'}],page:0,nextPage:null});
+  await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[7],null);assert.equal(h.slots[8],null);assert.deepEqual(picker.slots[3],[]);assert.equal(picker.slots[4],null);
+  picker.unmount();h.unmount();
+ }
+});
+test('obsolete detail and picker JSON actor mismatches cannot invalidate newer reads', async () => {
+ const pending=[],h=workspaceHarness({state:{3:[current,{...current,id:id(40)}],5:false},effects:true,fetcher:async url=>url.includes('/api/manual-subscriptions?')?new Promise(()=>{}):{ok:true,status:200,json:()=>new Promise(resolve=>pending.push(resolve))}});
+ const nodes=h.descendants(h.render()),buttons=nodes.filter(e=>e.type==='button'&&Array.isArray(e.props.children)&&e.props.children[0]===row.serviceLabel),props=nodes.find(e=>e.props?.readEpoch)?.props;
+ buttons[0].props.onClick();await new Promise(resolve=>setImmediate(resolve));buttons[1].props.onClick();await new Promise(resolve=>setImmediate(resolve));
+ pending[1]({...detail,subscription:{...current,id:id(40),reference:`SUB-${id(40)}`},events:[{...row,subscriptionId:id(40),reference:`SUB-${id(40)}`}]});await new Promise(resolve=>setImmediate(resolve));
+ pending[0]({actorId:id(99)});await new Promise(resolve=>setImmediate(resolve));assert.equal(h.slots[10],false);assert.equal(h.slots[7].subscription.id,id(40));
+ const pickerJson=[],picker=pickerHarness(async()=>({ok:true,status:200,json:()=>new Promise(resolve=>pickerJson.push(resolve))}),props.readEpoch,props.onAccessDenied,props.isReadCurrent);
+ picker.render();await new Promise(resolve=>setImmediate(resolve));picker.slots[1]='new search';picker.render();await new Promise(resolve=>setImmediate(resolve));
+ pickerJson[1]({actorId,customers:[{id:customerId,name:'Current customer',code:'CURRENT'}],page:0,nextPage:null});await new Promise(resolve=>setImmediate(resolve));
+ pickerJson[0]({});await new Promise(resolve=>setImmediate(resolve));assert.equal(picker.denied,0);assert.equal(h.slots[10],false);assert.equal(picker.slots[3][0].name,'Current customer');picker.unmount();h.unmount();
+});
+test('detail and list envelopes require the actual authenticated actor', () => {
+ assert.equal(readInput.subscriptionActorMatches({actorId},actorId),true);
+ for(const actor of [undefined,id(99),'invalid']) {
+  assert.equal(readInput.subscriptionActorMatches({actorId:actor},actorId),false);
+  assert.equal(readInput.verifiedSubscriptionDetail({...detail,actorId:actor},scope,subscriptionId,0,actorId),null);
+ }
+ const {description: _description,...metadata}=current;
+ assert.ok(readInput.subscriptionList.safeParse({actorId,subscriptions:[metadata],page:0,nextPage:null}).success);
+ assert.equal(readInput.subscriptionList.safeParse({subscriptions:[metadata],page:0,nextPage:null}).success,false);
+});
+const authFailure = signal => signal === 'redirect' ? {ok:true,status:200,redirected:true,url:'https://erp.example.test/login?next=%2Fmanual-subscriptions',json:async()=>assert.fail('Login HTML must not be parsed')} : signal === 'code' ? {ok:false,status:409,json:async()=>({code:'ACTOR_MISMATCH'})} : signal === 'nested-code' ? {ok:false,status:409,json:async()=>({error:{code:'ACTOR_MISMATCH'}})} : {ok:false,status:signal,json:async()=>assert.fail('Non-JSON auth denial must not be parsed')};
+const performRequest = (controller, operation, saved = () => assert.fail()) => operation === 'resolve' ? controller.abandon(saved,()=>{},()=>assert.fail()) : controller.run(operation === 'submit' ? payload : null,saved,()=>{});
+test('submit, retry and resolve auth loss fence delayed reads while preserving exact pending bytes', async () => {
+ for(const operation of ['submit','retry','resolve']) for(const signal of [401,403,'redirect','code','nested-code']) {
+  const json={},h=workspaceHarness({state:{3:[current],5:false,7:detail,8:row},effects:true,fetcher:async url=>({ok:true,status:200,json:()=>new Promise(resolve=>json[url.includes('/api/manual-subscriptions?')?'register':'detail']=resolve)})});
+  const nodes=h.descendants(h.render()),props=nodes.find(e=>e.props?.readEpoch)?.props;
+  nodes.find(e=>e.type==='button'&&Array.isArray(e.props.children)&&e.props.children[0]===row.serviceLabel).props.onClick();
+  const picker=pickerHarness(async()=>({ok:true,status:200,json:()=>new Promise(resolve=>json.picker=resolve)}),props.readEpoch,props.onAccessDenied,props.isReadCurrent);picker.render();await new Promise(resolve=>setImmediate(resolve));
+  let frozen;const mutation=harness({raw:operation==='submit'?undefined:envelope(payload),captureAccessDenied:h.requestCaptureAccessDenied,fetcher:async()=>{frozen=mutation.storage.get(mutation.key);return authFailure(signal);}});
+  await performRequest(mutation.render(),operation);assert.equal(mutation.denials,1);assert.equal(mutation.storage.get(mutation.key),frozen);assert.equal(h.slots[10],true);
+  json.register({actorId,subscriptions:[current],page:0,nextPage:null});json.detail(detail);json.picker({actorId,customers:[{id:customerId,name:'Late customer',code:'LATE'}],page:0,nextPage:null});await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[7],null);assert.equal(h.slots[8],null);assert.deepEqual(picker.slots[3],[]);assert.equal(picker.slots[4],null);assert.equal(mutation.storage.get(mutation.key),frozen);
+  mutation.unmount();picker.unmount();h.unmount();
+ }
+});
+test('ordinary conflicts, network failure and unrelated redirects retain pending without authentication invalidation', async () => {
+ for(const operation of ['submit','retry','resolve']) for(const outcome of ['network','conflict','redirect']) {
+  const h=harness({raw:operation==='submit'?undefined:envelope(payload),fetcher:async()=>{if(outcome==='network')throw Error('network');return {ok:false,status:409,redirected:outcome==='redirect',url:'https://erp.example.test/unrelated',json:async()=>({code:'VERSION_CONFLICT'})};}});
+  await performRequest(h.render(),operation);assert.equal(h.denials,0);assert.ok(h.storage.get(h.key));h.unmount();
+ }
+});
+test('obsolete mutation auth failures cannot invalidate a different actor or scope, including delayed JSON codes', async () => {
+ for(const operation of ['submit','retry','resolve']) for(const change of ['actor','scope']) for(const afterJson of [false,true]) {
+  let release,releaseJson;const h=harness({raw:operation==='submit'?undefined:envelope(payload),fetcher:()=>new Promise(resolve=>release=resolve)}),running=performRequest(h.render(),operation);
+  const frozen=h.storage.get(h.key);
+  if(afterJson){release({ok:false,status:409,json:()=>new Promise(resolve=>releaseJson=resolve)});await new Promise(resolve=>setImmediate(resolve));}
+  h.identity(change==='actor'?id(99):actorId,change==='scope'?id(98):branchId);
+  if(afterJson)releaseJson({code:'ACTOR_MISMATCH'});else release(authFailure(403));await running;
+  assert.equal(h.denials,0);assert.equal(h.storage.get(h.key),frozen);h.unmount();
+ }
+});
+test('known read access loss does not erase pending bytes or discard an exact verified committed mutation', async () => {
+ const h=workspaceHarness({state:{7:detail,8:row},effects:true,fetcher:()=>new Promise(()=>{})});h.render();let release,saved=0;
+ const mutation=harness({raw:envelope(payload),captureAccessDenied:h.requestCaptureAccessDenied,fetcher:()=>new Promise(resolve=>release=resolve)});
+ const running=mutation.render().run(null,()=>saved++,()=>assert.fail());h.requestAccessDenied();assert.equal(mutation.storage.get(mutation.key),envelope(payload));
+ release({ok:true,status:200,json:async()=>({event:row})});await running;assert.equal(saved,1);assert.equal(mutation.storage.size,0);assert.equal(h.slots[10],true);mutation.unmount();h.unmount();
+});
+test('each same-scope mutation attempt captures its read epoch before delayed auth failures', async () => {
+ for(const operation of ['submit','retry','resolve']) for(const signal of [401,403,'redirect','code']) {
+  let epoch=1,shown='old read',invalidations=0,release;
+  const captureAccessDenied=()=>{const captured=epoch;return()=>{if(captured===epoch){invalidations++;epoch++;shown=null;}};};
+  const mutation=harness({raw:operation==='submit'?undefined:envelope(payload),captureAccessDenied,fetcher:()=>new Promise(resolve=>release=resolve)});
+  const running=performRequest(mutation.render(),operation),frozen=mutation.storage.get(mutation.key);
+  captureAccessDenied()();assert.equal(epoch,2);shown='new authenticated read under unchanged actor/scope';
+  release(authFailure(signal));await running;
+  assert.equal(epoch,2);assert.equal(invalidations,1);assert.equal(shown,'new authenticated read under unchanged actor/scope');assert.equal(mutation.storage.get(mutation.key),frozen);
+  // A deliberate new attempt captures epoch2 and can invalidate that epoch.
+  const retry=performRequest(mutation.render(),operation==='submit'?'retry':operation);release(authFailure(signal));await retry;
+  assert.equal(epoch,3);assert.equal(invalidations,2);assert.equal(shown,null);assert.equal(mutation.storage.get(mutation.key),frozen);mutation.unmount();
+ }
+});
+test('real workspace epoch callback preserves newer authenticated rows and detail against an older mutation auth failure', async () => {
+ for(const operation of ['submit','retry','resolve']) for(const signal of [401,'code']) {
+  const newer={...current,version:2,serviceLabel:'New authenticated revision'},newEvent={...row,version:2,action:'edit',serviceLabel:newer.serviceLabel},newDetail={...detail,subscription:newer,events:[newEvent]};
+  const {description:_description,...metadata}=newer;
+  const h=workspaceHarness({state:{3:[current],5:false,7:detail,8:row},effects:true,fetcher:async url=>({ok:true,status:200,json:async()=>url.includes('/api/manual-subscriptions?')?{actorId,subscriptions:[metadata],page:0,nextPage:null}:newDetail})});
+  h.render();await new Promise(resolve=>setImmediate(resolve));let release;
+  const mutation=harness({raw:operation==='submit'?undefined:envelope(payload),captureAccessDenied:h.requestCaptureAccessDenied,fetcher:()=>new Promise(resolve=>release=resolve)});
+  const running=performRequest(mutation.render(),operation),frozen=mutation.storage.get(mutation.key);
+  h.requestAccessDenied();assert.equal(h.slots[10],true);assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[7],null);
+  // Harness-only simulation of returning to the original account. Production requires page refresh/sign-in, not automatic recovery.
+  h.simulateSameActorReadRecovery();h.render();await new Promise(resolve=>setImmediate(resolve));
+  const nodes=h.descendants(h.render()),open=nodes.find(e=>e.type==='button'&&Array.isArray(e.props.children)&&e.props.children[0]===newer.serviceLabel);assert.ok(open);
+  open.props.onClick();await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(h.slots[3],[metadata]);assert.deepEqual(h.slots[7],newDetail);assert.deepEqual(h.slots[8],newEvent);assert.equal(h.slots[10],false);
+  release(authFailure(signal));await running;
+  assert.deepEqual(h.slots[3],[metadata]);assert.deepEqual(h.slots[7],newDetail);assert.deepEqual(h.slots[8],newEvent);assert.equal(h.slots[10],false);assert.equal(mutation.storage.get(mutation.key),frozen);
+  mutation.unmount();h.unmount();
+ }
 });

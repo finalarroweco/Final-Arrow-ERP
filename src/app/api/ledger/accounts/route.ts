@@ -6,12 +6,13 @@ import { db } from "@/lib/db";
 import { ledgerScope, queryInput } from "@/lib/ledger";
 export async function GET(request: Request) {
   const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-  const parsed = ledgerScope.extend({ page: z.coerce.number().int().min(0).max(100000).default(0) }).safeParse(queryInput(new URL(request.url).searchParams, ["tenantId", "companyId", "page"]));
+  const parsed = ledgerScope.extend({ expectedActorId: z.string().uuid().transform(value => value.toLowerCase()).optional(), page: z.coerce.number().int().min(0).max(100000).default(0) }).safeParse(queryInput(new URL(request.url).searchParams, ["tenantId", "companyId", "page", "expectedActorId"]));
   if (!parsed.success) return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
+  if (parsed.data.expectedActorId && parsed.data.expectedActorId !== actor.id) return NextResponse.json({ error: "Signed-in user changed. Reload this workspace." }, { status: 403 });
   const { tenantId, companyId, page } = parsed.data;
   if (await readableCompanyBranches({ userId: actor.id, tenantId, companyId, permission: "ledger:read" }) === false) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const accounts = await db.ledgerAccount.findMany({ where: { tenantId, companyId }, select: { id: true, code: true, name: true, type: true }, orderBy: [{ code: "asc" }, { id: "asc" }], skip: page * 100, take: 101 });
-  return NextResponse.json({ accounts: accounts.slice(0,100), nextPage: accounts.length > 100 ? page+1 : null });
+  return NextResponse.json({ actorId: actor.id, accounts: accounts.slice(0,100), nextPage: accounts.length > 100 ? page+1 : null }, { headers: { "Cache-Control": "private, no-store" } });
 }
 export async function POST(request: Request) {
   const actor = await currentUser(); if (!actor) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });

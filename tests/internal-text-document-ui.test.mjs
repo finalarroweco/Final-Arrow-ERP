@@ -26,14 +26,14 @@ function browser() {
  const storage = new Map(), held = new Set();
  return { storage, locks: { async request(key, options, fn) { assert.equal(options.ifAvailable, true); if (held.has(key)) return fn(null); held.add(key); try { return await fn({ name: key }); } finally { held.delete(key); } } } };
 }
-function harness({ raw, fetcher = async () => { throw Error('network'); }, storageFails = false, removalFails = false, shared = browser(), locking = true } = {}) {
+function harness({ raw, fetcher = async () => { throw Error('network'); }, storageFails = false, removalFails = false, shared = browser(), locking = true, onAuthorizationFailure, captureAuthorizationFailure } = {}) {
  const key = `erp-internal-text:v1:${actorId}:${tenantId}:${companyId}:${branchId}`, storage = shared.storage;
  if (raw !== undefined) storage.set(key, raw);
- const slots = [], listeners = new Set(); let index = 0, calls = 0, actor = actorId, branch = branchId;
+ const slots = [], listeners = new Set(); let index = 0, calls = 0, authorizationFailures = 0, actor = actorId, branch = branchId;
  const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++, value = JSON.stringify(deps); if (slots[i]?.deps !== value) { slots[i]?.cleanup?.(); slots[i] = { deps: value, cleanup: fn() }; } } };
  const mod = load(directory + 'request.ts', { react: hooks, '@/lib/internal-text-document-input': input }, { navigator: { locks: locking ? shared.locks : undefined }, window: { addEventListener(_type, fn) { listeners.add(fn); }, removeEventListener(_type, fn) { listeners.delete(fn); } }, localStorage: { getItem: k => storage.get(k) ?? null, setItem(k, v) { if (storageFails) throw Error('blocked'); storage.set(k, v); }, removeItem: k => { if (!removalFails) storage.delete(k); } }, fetch(...args) { calls++; return fetcher(...args); } });
- const render = () => { index = 0; return mod.useDocumentRequest(actor, tenantId, companyId, branch); }; render();
- return { render, storage, key, get calls() { return calls; }, event(eventKey = key) { listeners.forEach(fn => fn({ key: eventKey })); }, identity(nextActor, nextBranch = branchId) { actor = nextActor; branch = nextBranch; render(); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
+ const render = () => { index = 0; return mod.useDocumentRequest(actor, tenantId, companyId, branch, () => { const notify = captureAuthorizationFailure ? captureAuthorizationFailure() : onAuthorizationFailure; return () => { authorizationFailures++; notify?.(); }; }); }; render();
+ return { render, storage, key, get calls() { return calls; }, get authorizationFailures() { return authorizationFailures; }, event(eventKey = key) { listeners.forEach(fn => fn({ key: eventKey })); }, identity(nextActor, nextBranch = branchId) { actor = nextActor; branch = nextBranch; render(); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
 }
 test('document captures hydrate without writes and malformed or actor/scope substitutions remain blocked', () => {
  for (const raw of ['broken', envelope({ ...payload, branchId: id(99) }), JSON.stringify({ version: 1, actorId: id(9), request: payload }), envelope({ ...payload, expectedActorId: id(99) })]) {
@@ -122,11 +122,11 @@ test('all explicit action payloads retain independent document and request ident
 });
 const localeModule = load('src/lib/locale.ts');
 function workspaceHarness({ state = {}, scopeValue = scope, locale = 'en', pending = null, blocked = false, fetcher = async () => ({ ok: false, json: async () => ({}) }), effects = false } = {}) {
- const slots = [], refs = [], captured = [], cleanups = []; let index = 0, refIndex = 0;
+ const slots = [], refs = [], captured = [], callbacks = [], authorizationCallbacks = [], cleanups = []; let index = 0, refIndex = 0;
  const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = Object.hasOwn(state, i) ? state[i] : initial; return [slots[i], v => { slots[i] = typeof v === 'function' ? v(slots[i]) : v; }]; }, useRef(initial) { const i = refIndex++; return refs[i] ??= { current: initial }; }, useEffect(fn) { if (effects) cleanups.push(fn()); }, useCallback(fn) { return fn; } };
- const mod = load(directory + 'workspace.tsx', { react: hooks, '@/lib/locale': localeModule, '@/lib/internal-text-document-input': input, './request': { useDocumentRequest: () => ({ ready: true, blocked: blocked || !!pending, busy: false, pending, run: async request => captured.push(request), abandon: async () => {} }) }, './read-input': readInput }, { fetch: fetcher, crypto: { randomUUID: (() => { let n = 90; return () => id(n++); })() }, FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values[key] ?? null; } } });
+ const mod = load(directory + 'workspace.tsx', { react: hooks, '@/lib/locale': localeModule, '@/lib/internal-text-document-input': input, './request': { useDocumentRequest: (...args) => (authorizationCallbacks.push(args[4]), { ready: true, blocked: blocked || !!pending, busy: false, pending, run: async (request, saved, failed) => { captured.push(request); callbacks.push({ saved, failed }); }, abandon: async () => {} }) }, './read-input': readInput }, { fetch: fetcher, crypto: { randomUUID: (() => { let n = 90; return () => id(n++); })() }, FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values[key] ?? null; } } });
  function descendants(element) { return [element, ...React.Children.toArray(element?.props?.children).flatMap(child => React.isValidElement(child) ? descendants(child) : [])]; }
- return { mod, captured, descendants, slots, render() { index = 0; refIndex = 0; return mod.DocumentScopeWorkspace({ actorId, scope: scopeValue, locale }); }, submit(form, values) { form.props.onSubmit({ preventDefault() {}, currentTarget: { values } }); }, unmount() { cleanups.forEach(fn => fn?.()); } };
+ return { mod, captured, callbacks, authorizationCallbacks, descendants, slots, render() { index = 0; refIndex = 0; return mod.DocumentScopeWorkspace({ actorId, scope: scopeValue, locale }); }, submit(form, values) { form.props.onSubmit({ preventDefault() {}, currentTarget: { values } }); }, unmount() { cleanups.forEach(fn => fn?.()); } };
 }
 test('Arabic and English renders treat script, URL, and mixed direction content as literal plain text', () => {
  for (const locale of ['en', 'ar']) {
@@ -184,4 +184,63 @@ test('changed-session JSON cannot populate register or document state in a mount
  const urls=[],h=workspaceHarness({effects:true,fetcher:async url=>{urls.push(url);return {ok:true,json:async()=>({actorId:id(99),documents:[current],page:0,nextPage:null})};}});h.render();await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(h.slots[3],[]);assert.ok(urls.every(url=>new URL(url,'https://erp.test').searchParams.get('expectedActorId')===actorId));h.unmount();
  const detailUrls=[],d=workspaceHarness({state:{3:[current],5:false},effects:true,fetcher:async url=>{detailUrls.push(url);return url.includes('/api/documents?')?{ok:false,json:async()=>({})}:{ok:true,json:async()=>({...detail,actorId:id(99)})};}});const button=d.descendants(d.render()).find(e=>e.type==='button'&&e.props.children===row.title);button.props.onClick();await new Promise(resolve=>setImmediate(resolve));assert.equal(d.slots[7],null);assert.equal(d.slots[8],null);assert.ok(detailUrls.every(url=>new URL(url,'https://erp.test').searchParams.get('expectedActorId')===actorId));d.unmount();
  const links=workspaceHarness({state:{7:detail,8:row}});for(const link of links.descendants(links.render()).filter(e=>e.type==='a'&&(e.props.href.includes('/api/documents')||e.props.href.includes('/print?'))))assert.equal(new URL(link.props.href,'https://erp.test').searchParams.get('expectedActorId'),actorId);
+});
+const settleRead = () => new Promise(resolve => setImmediate(resolve));
+test('shared read fence rejects delayed success in both channel directions and blocks captured output clicks',async()=>{
+ for(const failureChannel of ['list','detail'])for(const failureKind of ['401','403','redirect','actor'])for(const successStage of ['headers','json']){
+  const pending=[],savedRecovery=JSON.stringify(payload),h=workspaceHarness({pending:payload,state:{3:[current],5:false,7:detail,8:row},effects:true,fetcher:url=>new Promise(resolve=>pending.push({channel:url.includes('/api/documents?')?'list':'detail',resolve}))});
+  const tree=h.render(),outputs=h.descendants(tree).filter(e=>e.type==='a'&&e.props.onClick),button=h.descendants(tree).find(e=>e.type==='button'&&e.props.children===row.title);button.props.onClick();
+  const failure=pending.find(p=>p.channel===failureChannel),success=pending.find(p=>p.channel!==failureChannel);assert.ok(failure&&success);let jsonCalls=0,finishJson;
+  const successData=success.channel==='list'?{actorId,documents:[current],page:0,nextPage:null}:detail;
+  if(successStage==='json'){success.resolve({ok:true,status:200,json:()=>new Promise(resolve=>{finishJson=resolve;})});await settleRead();}
+  failure.resolve(failureKind==='actor'?{ok:true,status:200,json:async()=>({actorId:id(99)})}:{ok:failureKind==='redirect',status:failureKind==='redirect'?200:Number(failureKind),redirected:failureKind==='redirect',json:async()=>{jsonCalls++;throw Error('non-JSON sign-in response');}});await settleRead();
+  assert.equal(jsonCalls,0,'authentication status checked before JSON');
+  if(successStage==='json')finishJson(successData);else success.resolve({ok:true,status:200,json:async()=>successData});await settleRead();
+  assert.deepEqual(h.slots[3],[]);assert.equal(h.slots[4],null);assert.equal(h.slots[5],false);assert.equal(h.slots[7],null);assert.equal(h.slots[8],null);assert.equal(h.slots[9],false);
+  assert.ok(outputs.length>=3);for(const output of outputs){let prevented=false;output.props.onClick({preventDefault(){prevented=true;}});assert.equal(prevented,true,'stale CSV/text/print action is fenced');}
+  assert.equal(JSON.stringify(payload),savedRecovery);assert.deepEqual(h.captured,[],'read failure never retries or clears mutation recovery');h.unmount();
+ }
+});
+test('obsolete failures cannot fence a newer scope or a later current read',async()=>{
+ const pending=[],h=workspaceHarness({state:{3:[current],5:false},effects:true,fetcher:url=>new Promise(resolve=>pending.push({url,resolve}))});
+ const button=h.descendants(h.render()).find(e=>e.type==='button'&&e.props.children===row.title);button.props.onClick();button.props.onClick();
+ pending[2].resolve({ok:true,status:200,json:async()=>detail});await settleRead();assert.equal(h.slots[7].document.id,documentId);
+ pending[1].resolve({ok:false,status:403,json:async()=>{throw Error('not JSON');}});await settleRead();assert.equal(h.slots[7].document.id,documentId,'obsolete detail denial does not clear newer selection');
+ h.unmount();const nextScope={...scope,branchId:id(66)},nextCurrent={...current,branchId:nextScope.branchId};const next=workspaceHarness({scopeValue:nextScope,effects:true,fetcher:async()=>({ok:true,status:200,json:async()=>({actorId,documents:[nextCurrent],page:0,nextPage:null})})});next.render();await settleRead();assert.equal(next.slots[3][0].branchId,id(66));
+ pending[0].resolve({ok:false,status:401,json:async()=>{throw Error('not JSON');}});await settleRead();assert.equal(next.slots[3][0].branchId,id(66),'unmounted scope failure cannot affect new scope');next.unmount();
+});
+
+test('shared read failure leaves verified mutation receipt handling independent',async()=>{let deny;const h=workspaceHarness({pending:payload,effects:true,fetcher:()=>new Promise(resolve=>{deny=resolve;})});const retry=h.descendants(h.render()).find(e=>e.type==='button'&&e.props.children==='Retry exact submitted request');retry.props.onClick();assert.deepEqual(h.captured,[null]);deny({ok:false,status:403,json:async()=>{throw Error('not JSON');}});await settleRead();assert.equal(h.callbacks.length,1);h.callbacks[0].saved(row);assert.match(h.slots[6],/Saved create at version 1/);assert.equal(h.slots[2],1);assert.equal(h.slots[7],null);h.unmount();});
+test('mutation, retry and resolve authorization loss fence delayed document reads without changing frozen bytes',async()=>{
+ for(const operation of ['submit','retry','resolve'])for(const kind of ['401','403','redirect','actor']){
+  const reads=[],workspace=workspaceHarness({state:{3:[current],5:false},effects:true,fetcher:url=>new Promise(resolve=>reads.push({url,resolve}))});const button=workspace.descendants(workspace.render()).find(e=>e.type==='button'&&e.props.children===row.title);button.props.onClick();assert.equal(reads.length,2);
+  let jsonCalls=0;const controller=harness({...(operation==='submit'?{}:{raw:envelope(payload)}),captureAuthorizationFailure:workspace.authorizationCallbacks[0],fetcher:async()=>kind==='actor'?{ok:true,status:200,json:async()=>({event:{...row,createdBy:id(99)}})}:{ok:kind==='redirect',status:kind==='redirect'?200:Number(kind),redirected:kind==='redirect',json:async()=>{jsonCalls++;throw Error('login is not JSON');}}});
+  const before=operation==='submit'?envelope(input.documentRequest.parse(payload)):controller.storage.get(controller.key);let saved=0;
+  if(operation==='resolve')await controller.render().abandon(()=>saved++,()=>{},()=>saved++);else await controller.render().run(operation==='submit'?payload:null,()=>saved++,()=>{});
+  assert.equal(controller.authorizationFailures,1);assert.equal(saved,0);assert.equal(jsonCalls,0);assert.equal(controller.storage.get(controller.key),before);
+  for(const read of reads)read.resolve({ok:true,status:200,json:async()=>read.url.includes('/api/documents?')?{actorId,documents:[current],page:0,nextPage:null}:detail});await settleRead();
+  assert.deepEqual(workspace.slots[3],[]);assert.equal(workspace.slots[7],null);assert.equal(workspace.slots[8],null);assert.equal(workspace.slots[5],false);assert.equal(workspace.slots[9],false);workspace.unmount();controller.unmount();
+ }
+});
+test('business conflicts and network errors retain pending data without revoking read epoch',async()=>{
+ for(const kind of ['409','network']){let release;const workspace=workspaceHarness({effects:true,fetcher:()=>new Promise(resolve=>{release=resolve;})});workspace.render();const controller=harness({captureAuthorizationFailure:workspace.authorizationCallbacks[0],fetcher:async()=>{if(kind==='network')throw Error('offline');return {ok:false,status:409,json:async()=>({error:'Stale version'})};}});await controller.render().run(payload,()=>assert.fail(),()=>{});assert.equal(controller.authorizationFailures,0);assert.equal(controller.storage.size,1);release({ok:true,status:200,json:async()=>({actorId,documents:[current],page:0,nextPage:null})});await settleRead();assert.equal(workspace.slots[3][0].id,documentId);workspace.unmount();controller.unmount();}
+});
+test('obsolete mutation scope failures cannot notify current read authorization',async()=>{
+ for(const change of ['actor','branch','unmount']){let release;const h=harness({fetcher:()=>new Promise(resolve=>{release=resolve;})});const pending=h.render().run(payload,()=>assert.fail(),()=>{}),raw=h.storage.get(h.key);if(change==='unmount')h.unmount();else h.identity(change==='actor'?id(99):actorId,change==='branch'?id(99):branchId);release({ok:false,status:403,json:async()=>{throw Error('not JSON');}});await pending;assert.equal(h.authorizationFailures,0);assert.equal(h.storage.get(h.key),raw);}
+});
+test('old same-scope mutation denial cannot invalidate a reauthenticated newer read epoch',async()=>{
+ const reads=[],workspace=workspaceHarness({effects:true,fetcher:()=>new Promise(resolve=>reads.push(resolve))});workspace.render();let rejectMutation;const controller=harness({captureAuthorizationFailure:workspace.authorizationCallbacks[0],fetcher:()=>new Promise(resolve=>{rejectMutation=resolve;})});const mutation=controller.render().run(payload,()=>assert.fail(),()=>{}),frozen=controller.storage.get(controller.key);
+ reads[0]({ok:false,status:403,json:async()=>{throw Error('not JSON');}});await settleRead();assert.deepEqual(workspace.slots[3],[]);
+ workspace.render();assert.equal(reads.length,2);reads[1]({ok:true,status:200,json:async()=>({actorId,documents:[current],page:0,nextPage:null})});await settleRead();assert.equal(workspace.slots[3][0].id,documentId);
+ rejectMutation({ok:false,status:401,json:async()=>{throw Error('not JSON');}});await mutation;assert.equal(controller.authorizationFailures,1);assert.equal(workspace.slots[3][0].id,documentId);assert.equal(controller.storage.get(controller.key),frozen);workspace.unmount();controller.unmount();
+});
+test('retained submit, retry and abandon handlers capture the epoch when each new attempt begins',async()=>{
+ for(const operation of ['submit','retry','resolve']){
+  const reads=[],workspace=workspaceHarness({effects:true,fetcher:()=>new Promise(resolve=>reads.push(resolve))});workspace.render();let denyMutation;const controller=harness({...(operation==='submit'?{}:{raw:envelope(payload)}),captureAuthorizationFailure:workspace.authorizationCallbacks[0],fetcher:()=>new Promise(resolve=>{denyMutation=resolve;})});const retained=controller.render();
+  reads[0]({ok:false,status:403,json:async()=>{throw Error('not JSON');}});await settleRead();
+  // No workspace rerender occurs between the fence and this retained handler's invocation.
+  const attempt=operation==='resolve'?retained.abandon(()=>assert.fail(),()=>{},()=>assert.fail()):retained.run(operation==='submit'?payload:null,()=>assert.fail(),()=>{}),frozen=controller.storage.get(controller.key);
+  workspace.render();reads[1]({ok:true,status:200,json:async()=>({actorId,documents:[current],page:0,nextPage:null})});await settleRead();assert.equal(workspace.slots[3][0].id,documentId);
+  denyMutation({ok:false,status:401,json:async()=>{throw Error('not JSON');}});await attempt;assert.equal(controller.authorizationFailures,1);assert.deepEqual(workspace.slots[3],[],'new attempt captured epoch2 even through retained render callback');assert.equal(controller.storage.get(controller.key),frozen);workspace.unmount();controller.unmount();
+ }
 });

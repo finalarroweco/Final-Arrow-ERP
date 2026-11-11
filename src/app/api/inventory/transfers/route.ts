@@ -15,7 +15,8 @@ const cell=(v:string)=>`"${(/^[\s\u0000-\u001f]*[=+@-]/u.test(v)?`'${v}`:v).repl
 export async function GET(request:Request){
  const actor=await currentUser();if(!actor)return NextResponse.json({error:"Unauthenticated"},{status:401,headers});
  const params=new URL(request.url).searchParams,p=transferFilters.safeParse(Object.fromEntries(params));if(!p.success||[...params.keys()].some(k=>params.getAll(k).length!==1))return NextResponse.json({error:"Invalid transfer filters"},{status:400,headers});
- try{const result=await listStockTransfers(actor.id,p.data);if(p.data.format!=="csv")return NextResponse.json(result,{headers});
+ if(p.data.expectedActorId&&p.data.expectedActorId!==actor.id)return NextResponse.json({error:"Signed-in user changed. Reload this workspace."},{status:403,headers});
+ try{const result=await listStockTransfers(actor.id,p.data);if(p.data.format!=="csv")return NextResponse.json({actorId:actor.id,...result},{headers});
   const rows=[["Transfer ID","Recorded at (UTC)","Company","From branch","To branch","SKU","Item","Quantity","Stock unit","Reference","Reason","Recorded by","Corrects transfer"],...result.transfers.map(t=>[t.id,t.createdAt,t.companyName,t.sourceBranchName,t.destinationBranchName,t.itemSku,t.itemName,t.quantity,t.unit,t.reference,t.reason,t.actorName,t.correctsId??""])];
   return new Response('\uFEFF'+rows.map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n',{headers:{...headers,"Content-Type":"text/csv; charset=utf-8","Content-Disposition":'attachment; filename="branch-stock-transfers.csv"'}});
  }catch(e){return transferFailure(e);}

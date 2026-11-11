@@ -48,7 +48,7 @@ export async function readStockTransfer(userId:string,id:string,tenantId?:string
   return {...transferView(row),corrections:row.corrections.map(transferView),canCorrect};
  },{timeout:15000,maxWait:10000});
 }
-export const transferFilters=stockTransferScope.extend({page:z.coerce.number().int().min(0).max(100000).default(0),sourceBranchId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),destinationBranchId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),itemId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),q:z.string().trim().max(120).optional(),format:z.enum(["json","csv"]).default("json")}).strict();
+export const transferFilters=stockTransferScope.extend({expectedActorId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),page:z.coerce.number().int().min(0).max(100000).default(0),sourceBranchId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),destinationBranchId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),itemId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),q:z.string().trim().max(120).optional(),format:z.enum(["json","csv"]).default("json")}).strict();
 export async function listStockTransfers(userId:string,f:z.infer<typeof transferFilters>){
  return db.$transaction(async tx=>{
   await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${f.tenantId}::uuid FOR SHARE`;

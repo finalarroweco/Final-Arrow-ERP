@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SUBSCRIPTION_REQUEST_MAX_BYTES, pendingSubscription, subscriptionRequest, subscriptionResponseMatches, subscriptionCancellationMatches, type SubscriptionRequest, type SubscriptionEvent } from "@/lib/manual-subscription-input";
 
-export function useSubscriptionRequest(actorId: string, tenantId: string, companyId: string, branchId: string | null) {
+export function useSubscriptionRequest(actorId: string, tenantId: string, companyId: string, branchId: string | null, captureAccessDenied: () => (() => void)) {
   const key = `erp-manual-subscription:v1:${actorId}:${tenantId}:${companyId}:${branchId ?? "company"}`;
   const [raw, setRaw] = useState<string | null>(null), [ready, setReady] = useState(false), [busy, setBusy] = useState(false);
   const lock = useRef(false), generation = useRef(0), mountedKey = useRef<string | null>(null), renderedKey = useRef(key), exact = useRef<string | null>(null);
@@ -25,6 +25,8 @@ export function useSubscriptionRequest(actorId: string, tenantId: string, compan
   async function run(request: SubscriptionRequest | null, saved: (row: SubscriptionEvent) => void, failed: () => void, cancel = false, cancelled?: () => void) {
     if (!ready || lock.current || mountedKey.current !== key || renderedKey.current !== key) return;
     const current = generation.current;
+    // Capture the shared read epoch now, not when this attempt eventually returns.
+    const onAccessDenied = captureAccessDenied();
     const active = () => generation.current === current && mountedKey.current === key && renderedKey.current === key;
     // Capture what this controller showed when the user chose submit/retry/cancel.
     const expected = exact.current;
@@ -53,7 +55,13 @@ export function useSubscriptionRequest(actorId: string, tenantId: string, compan
         if (!frozen || localStorage.getItem(key) !== serialized || !active()) throw Error("invalid pending");
         const body = JSON.stringify(JSON.parse(serialized).request);
         const response = await fetch(cancel ? "/api/manual-subscriptions/resolve" : "/api/manual-subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        if (!active()) return;
+        let redirectedLogin = false;
+        if (response.redirected) { try { redirectedLogin = new URL(response.url).pathname.replace(/\/$/, "") === "/login"; } catch { /* An unrecognized redirect is not proof of authentication loss. */ } }
+        if (response.status === 401 || response.status === 403 || redirectedLogin) { onAccessDenied(); throw Error("account or access changed"); }
         const data = await response.json();
+        if (!active()) return;
+        if (data?.code === "ACTOR_MISMATCH" || data?.error?.code === "ACTOR_MISMATCH") { onAccessDenied(); throw Error("account changed"); }
         const verifiedSubscription = subscriptionResponseMatches(frozen, data.event) && data.event.createdBy === actorId;
         const verifiedCancellation = cancel && subscriptionCancellationMatches(frozen, data.cancellation);
         if (!response.ok || (!verifiedSubscription && !verifiedCancellation)) throw Error("unverified");

@@ -4,7 +4,7 @@ import { translate, type Locale } from "@/lib/locale";
 import { subscriptionRequest, type SubscriptionEvent } from "@/lib/manual-subscription-input";
 import { CustomerPicker } from "./customer-picker";
 import { useSubscriptionRequest } from "./request";
-import { belongsToScope, subscriptionMetadata, verifiedSubscriptionDetail } from "./read-input";
+import { belongsToScope, subscriptionActorMatches, subscriptionList, verifiedSubscriptionDetail } from "./read-input";
 import type { SubscriptionDetail, SubscriptionFields, SubscriptionMetadata, SubscriptionScopeOption } from "./types";
 
 type Props = { actorId: string; options: SubscriptionScopeOption[]; locale: Locale };
@@ -23,48 +23,56 @@ export function SubscriptionsWorkspace({ actorId, options, locale }: Props) {
 }
 export function SubscriptionScopeWorkspace({ actorId, scope, locale }: { actorId: string; scope: SubscriptionScopeOption; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
-  const request = useSubscriptionRequest(actorId, scope.tenantId, scope.companyId, scope.branchId);
   const [filters, setFilters] = useState({ q: "", state: "ACTIVE", status: "", reviewFrom: "", reviewTo: "" }), [page, setPage] = useState(0), [refresh, setRefresh] = useState(0);
   const [rows, setRows] = useState<SubscriptionMetadata[]>([]), [nextPage, setNextPage] = useState<number | null>(null), [loading, setLoading] = useState(true), [message, setMessage] = useState("");
   const [detail, setDetail] = useState<SubscriptionDetail | null>(null), [selected, setSelected] = useState<SubscriptionEvent | null>(null), [detailLoading, setDetailLoading] = useState(false);
   const [actorDenied, setActorDenied] = useState(false);
-  const mounted = useRef(false), sequence = useRef(0), deniedRef = useRef(false);
-  const denyAccess = useCallback(() => { deniedRef.current = true; sequence.current++; setActorDenied(true); setRows([]); setNextPage(null); setDetail(null); setSelected(null); setDetailLoading(false); setLoading(false); }, []);
+  const mounted = useRef(false), sequence = useRef(0), deniedRef = useRef(false), readEpoch = useRef(0);
+  const renderedReadEpoch = readEpoch.current;
+  const isReadCurrent = useCallback((epoch: number) => mounted.current && !deniedRef.current && readEpoch.current === epoch, []);
+  const denyAccess = useCallback(() => { readEpoch.current++; deniedRef.current = true; sequence.current++; setActorDenied(true); setRows([]); setNextPage(null); setDetail(null); setSelected(null); setDetailLoading(false); setLoading(false); }, []);
+  const captureAccessDenied = useCallback(() => { const epoch = readEpoch.current; return () => { if (isReadCurrent(epoch)) denyAccess(); }; }, [isReadCurrent, denyAccess]);
+  const request = useSubscriptionRequest(actorId, scope.tenantId, scope.companyId, scope.branchId, captureAccessDenied);
   const blocked = actorDenied || request.blocked || request.busy || !request.ready;
   const query = new URLSearchParams({ expectedActorId: actorId, tenantId: scope.tenantId, companyId: scope.companyId, branchId: scope.branchId ?? "company", state: filters.state, q: filters.q, ...(filters.status ? { status: filters.status } : {}), ...(filters.reviewFrom ? { reviewFrom: filters.reviewFrom } : {}), ...(filters.reviewTo ? { reviewTo: filters.reviewTo } : {}), page: String(page) }).toString();
   const scopeQuery = new URLSearchParams({ expectedActorId: actorId, tenantId: scope.tenantId, companyId: scope.companyId }).toString();
-  useEffect(() => { const current = sequence; mounted.current = true; return () => { mounted.current = false; current.current++; }; }, []);
+  useEffect(() => { const current = sequence, epoch = readEpoch; mounted.current = true; return () => { mounted.current = false; current.current++; epoch.current++; }; }, []);
   useEffect(() => {
     let active = true;
+    const epoch = readEpoch.current;
     setRows([]); setNextPage(null); setLoading(true);
     void (async () => { try {
       const response = await fetch(`/api/manual-subscriptions?${query}`, { cache: "no-store" });
-      if (!active || deniedRef.current) return;
+      if (!active || !isReadCurrent(epoch)) return;
       if (response.status === 401 || response.status === 403) { denyAccess(); return; }
-      const data = await response.json();
-      const parsed = subscriptionMetadata.array().max(50).safeParse(data.subscriptions);
-      if (!response.ok || !parsed.success || data.page !== page || !(data.nextPage === null || data.nextPage === page + 1) || parsed.data.some(row => !belongsToScope(row, scope) || (filters.state === "ACTIVE" && row.archived) || (filters.state === "ARCHIVED" && !row.archived))) throw Error("unverified register");
-      if (active && !deniedRef.current) { setRows(parsed.data); setNextPage(data.nextPage); }
-    } catch { if (active) setMessage(t("The register could not be verified. Refresh to retry.", "تعذر التحقق من السجل. حدّث لإعادة المحاولة.")); }
-    finally { if (active) setLoading(false); } })();
+      const data = await response.json().catch(() => null);
+      if (!active || !isReadCurrent(epoch)) return;
+      if (response.ok && !subscriptionActorMatches(data, actorId)) { denyAccess(); return; }
+      const parsed = subscriptionList.safeParse(data);
+      if (!response.ok || !parsed.success || data.page !== page || !(data.nextPage === null || data.nextPage === page + 1) || parsed.data.subscriptions.some(row => !belongsToScope(row, scope) || (filters.state === "ACTIVE" && row.archived) || (filters.state === "ARCHIVED" && !row.archived))) throw Error("unverified register");
+      if (active && isReadCurrent(epoch)) { setRows(parsed.data.subscriptions); setNextPage(data.nextPage); }
+    } catch { if (active && isReadCurrent(epoch)) setMessage(t("The register could not be verified. Refresh to retry.", "تعذر التحقق من السجل. حدّث لإعادة المحاولة.")); }
+    finally { if (active && isReadCurrent(epoch)) setLoading(false); } })();
     return () => { active = false; };
-  }, [query, page, refresh, scope, filters.state, t, denyAccess]);
+  }, [query, page, refresh, scope, filters.state, t, actorId, denyAccess, isReadCurrent]);
   function closeDetail() { sequence.current++; setDetail(null); setSelected(null); setDetailLoading(false); }
   async function openDetail(id: string, historyPage = 0) {
     if (deniedRef.current) return;
-    const current = ++sequence.current;
+    const current = ++sequence.current, epoch = readEpoch.current;
     setDetail(null); setSelected(null); setDetailLoading(true);
     try {
       const response = await fetch(`/api/manual-subscriptions/${id}?${scopeQuery}&page=${historyPage}`, { cache: "no-store" });
-      if (!mounted.current || sequence.current !== current || deniedRef.current) return;
+      if (!isReadCurrent(epoch) || sequence.current !== current) return;
       if (response.status === 401 || response.status === 403) { denyAccess(); return; }
-      const data = await response.json();
-      const checked = verifiedSubscriptionDetail(data, scope, id, historyPage);
+      const data = await response.json().catch(() => null);
+      if (!isReadCurrent(epoch) || sequence.current !== current) return;
+      if (response.ok && !subscriptionActorMatches(data, actorId)) { denyAccess(); return; }
+      const checked = verifiedSubscriptionDetail(data, scope, id, historyPage, actorId);
       if (!response.ok || !checked) throw Error("unverified detail");
-      if (!mounted.current || sequence.current !== current || deniedRef.current) return;
+      if (!isReadCurrent(epoch) || sequence.current !== current) return;
       setDetail(checked); setSelected(checked.events[0] ?? null);
-    } catch { if (mounted.current && sequence.current === current) setMessage(t("Current access and subscription history could not be verified. Nothing is shown. Refresh to retry.", "تعذر التحقق من صلاحية الوصول وتاريخ السجل. لم يُعرض محتوى. حدّث لإعادة المحاولة.")); }
-    finally { if (mounted.current && sequence.current === current) setDetailLoading(false); }
+    } catch { if (isReadCurrent(epoch) && sequence.current === current) setMessage(t("Current access and subscription history could not be verified. Nothing is shown. Refresh to retry.", "تعذر التحقق من صلاحية الوصول وتاريخ السجل. لم يُعرض محتوى. حدّث لإعادة المحاولة.")); }
+    finally { if (isReadCurrent(epoch) && sequence.current === current) setDetailLoading(false); }
   }
   function saved(event: SubscriptionEvent) { closeDetail(); setPage(0); setRefresh(value => value + 1); setMessage(t(`Saved ${event.action} at version ${event.version}. Open the subscription to read its current state.`, `تم حفظ ${actionLabel(event.action)} بالإصدار ${event.version}. افتح السجل لقراءة حالته الحالية.`)); }
   function failed() { setMessage(t("Outcome unconfirmed. Keep the saved request. Explicitly retry it or check and abandon it; do not submit a replacement. A conflict may mean the subscription or your access changed.", "النتيجة غير مؤكدة. احتفظ بالطلب المحفوظ وأعد إرساله صراحةً أو تحقق منه وألغه، ولا ترسل بديلًا. قد يعني التعارض أن السجل أو صلاحياتك تغيرت.")); }
@@ -87,11 +95,11 @@ export function SubscriptionScopeWorkspace({ actorId, scope, locale }: { actorId
     {request.blocked && <aside className="panel"><h2>{t("Unconfirmed submitted request", "طلب مرسل غير مؤكد")}</h2><p>{t("Even permanently abandoned requests retain customer identity and scope constraints. Abandonment does not permit customer reassignment or changing its source scope.", "حتى الطلبات الملغاة نهائيًا تحتفظ بقيود هوية العميل ونطاقه. إلغاء الطلب لا يسمح بإعادة تعيين العميل أو تغيير نطاق مصدره.")}</p>
       {request.pending ? <><p>{actionLabel(request.pending.action)} · {request.pending.requestId} · {t("Expected version", "الإصدار المتوقع")}: {request.pending.expectedVersion}</p><p>{request.pending.reason}</p><p>{t("It may already be saved. Refreshing and duplicate tabs must not create a replacement.", "قد يكون محفوظًا بالفعل. إعادة التحميل وتكرار التبويبات يجب ألا ينشئا طلبًا بديلًا.")}</p><button type="button" disabled={request.busy || !request.ready} onClick={() => void request.run(null, saved, failed)}>{t("Retry exact submitted request", "إعادة إرسال الطلب نفسه")}</button> <button type="button" disabled={request.busy || !request.ready} onClick={() => { if (window.confirm(t("Check and permanently abandon this request if it has not committed? If already saved, its original result will be returned. This does not undo subscription changes.", "التحقق من الطلب وإلغاؤه نهائيًا إذا لم يُحفظ؟ إذا حُفظ بالفعل فستُعاد نتيجته الأصلية. لا يعكس هذا تغييرات السجل."))) void request.abandon(saved, failed, () => setMessage(t("Request permanently abandoned. Its UUID cannot execute later.", "أُلغي الطلب نهائيًا ولا يمكن تنفيذ معرّفه لاحقًا."))); }}>{t("Check and abandon request", "التحقق من الطلب وإلغاؤه")}</button></> : <p role="alert">{t("The saved request does not match this actor and scope or is invalid. It is retained without showing or sending its text. Preserve browser data and ask for help.", "الطلب المحفوظ لا يطابق هذا المستخدم والنطاق أو أنه غير صالح. احتُفظ به دون عرض نصه أو إرساله. احتفظ ببيانات المتصفح واطلب المساعدة.")}</p>}
     </aside>}
-    {scope.canManage && <details><summary>{t("Create manual subscription record", "إنشاء سجل اشتراك يدوي")}</summary><form key={`create:${refresh}`} onSubmit={event => submit(event, "create")} className="panel"><fieldset disabled={blocked}><legend>{t("Explicitly save revision 1", "حفظ الإصدار الأول صراحةً")}</legend><p>{scope.label}</p><CustomerPicker actorId={actorId} scope={scope} locale={locale} onAccessDenied={denyAccess}/><TextFields locale={locale}/><ReasonField locale={locale}/><button type="submit">{t("Save revision 1", "حفظ الإصدار الأول")}</button></fieldset></form></details>}
+    {scope.canManage && <details><summary>{t("Create manual subscription record", "إنشاء سجل اشتراك يدوي")}</summary><form key={`create:${refresh}`} onSubmit={event => submit(event, "create")} className="panel"><fieldset disabled={blocked}><legend>{t("Explicitly save revision 1", "حفظ الإصدار الأول صراحةً")}</legend><p>{scope.label}</p><CustomerPicker actorId={actorId} scope={scope} locale={locale} onAccessDenied={denyAccess} readEpoch={readEpoch} isReadCurrent={isReadCurrent}/><TextFields locale={locale}/><ReasonField locale={locale}/><button type="submit">{t("Save revision 1", "حفظ الإصدار الأول")}</button></fieldset></form></details>}
     <section className="panel"><h2>{t("Subscription register", "سجل الاشتراكات")}</h2>
       <form onSubmit={event => { event.preventDefault(); const f = new FormData(event.currentTarget); closeDetail(); setPage(0); setFilters({ q: String(f.get("q") ?? "").trim(), state: String(f.get("state") ?? "ACTIVE"), status: String(f.get("status") ?? ""), reviewFrom: String(f.get("reviewFrom") ?? ""), reviewTo: String(f.get("reviewTo") ?? "") }); }}>
         <label>{t("Search service, agreement and text", "البحث في الخدمة والاتفاقية والنص")} <input name="q" maxLength={240} defaultValue={filters.q}/></label> <label>{t("State", "الحالة")} <select name="state" defaultValue={filters.state}><option value="ACTIVE">{t("Unarchived", "غير مؤرشف")}</option><option value="ARCHIVED">{t("Archived", "مؤرشف")}</option><option value="ALL">{t("All", "الكل")}</option></select></label> <label>{t("Operator-reported status", "الحالة المسجلة من المستخدم")} <select name="status" defaultValue={filters.status}><option value="">{t("All", "الكل")}</option>{["PLANNED", "ACTIVE", "PAUSED", "ENDED"].map(status => <option key={status} value={status}>{statusLabel(status, locale)}</option>)}</select></label> <label>{t("Next review from", "المراجعة التالية من")} <input name="reviewFrom" type="date" defaultValue={filters.reviewFrom}/></label> <label>{t("Next review through", "المراجعة التالية حتى")} <input name="reviewTo" type="date" defaultValue={filters.reviewTo}/></label> <button type="submit">{t("Apply filters", "تطبيق الفلاتر")}</button>
-      </form><button type="button" onClick={() => { closeDetail(); setRefresh(value => value + 1); }}>{t("Refresh register", "تحديث السجل")}</button> <a href={`/api/manual-subscriptions?${query}&format=csv`}>{t("Download metadata CSV", "تنزيل بيانات وصفية CSV")}</a>
+      </form><button type="button" onClick={() => { closeDetail(); setRefresh(value => value + 1); }}>{t("Refresh register", "تحديث السجل")}</button> <a onClick={event => { if (!isReadCurrent(renderedReadEpoch)) event.preventDefault(); }} href={`/api/manual-subscriptions?${query}&format=csv`}>{t("Download metadata CSV", "تنزيل بيانات وصفية CSV")}</a>
       {loading ? <p role="status">{t("Loading…", "جارٍ التحميل…")}</p> : rows.length ? <ul>{rows.map(row => <li key={row.id}><button type="button" onClick={() => void openDetail(row.id)}>{row.serviceLabel} · {row.customerName} · {statusLabel(row.status, locale)}</button> · {t("Version", "الإصدار")} {row.version} · {row.archived ? t("Archived", "مؤرشف") : t("Unarchived", "غير مؤرشف")}</li>)}</ul> : <p>{t("No records in these filters.", "لا توجد سجلات ضمن هذه الفلاتر.")}</p>}
       <button type="button" disabled={loading || page === 0} onClick={() => setPage(value => value - 1)}>{t("Previous page", "الصفحة السابقة")}</button> <span>{page + 1}</span> <button type="button" disabled={loading || nextPage === null} onClick={() => { if (nextPage !== null) setPage(nextPage); }}>{t("Next page", "الصفحة التالية")}</button>
     </section>
@@ -103,7 +111,7 @@ export function SubscriptionScopeWorkspace({ actorId, scope, locale }: { actorId
       {detail.canManage && scope.canManage && <form key={`lifecycle:${detail.subscription.id}:${detail.subscription.version}`} onSubmit={event => submit(event, detail.subscription.archived ? "restore" : "archive")}><fieldset disabled={blocked}><legend>{detail.subscription.archived ? t("Restore record visibility", "استعادة ظهور السجل") : t("Archive subscription", "أرشفة السجل")}</legend><p>{detail.subscription.archived ? t("Restore keeps current metadata unchanged. It does not restore an older revision or reactivate actual service.", "الاستعادة تحافظ على البيانات الحالية دون تغيير. لا تستعيد إصدارًا سابقًا ولا تعيد تفعيل الخدمة الفعلية.") : t("Archive hides this record from the default register and preserves its history. It does not cancel an agreement or terminate service.", "تخفي الأرشفة السجل من العرض الافتراضي وتحفظ تاريخه. لا تلغي اتفاقية ولا تنهي الخدمة.")}</p><ReasonField locale={locale}/><button type="submit">{detail.subscription.archived ? t("Restore subscription", "استعادة السجل") : t("Archive subscription", "أرشفة السجل")}</button></fieldset></form>}
       <h3>{t("Immutable revision and lifecycle history", "سجل الإصدارات ودورة الحياة غير القابل للتعديل")}</h3><ul>{detail.events.map(event => <li key={event.id}><button type="button" aria-pressed={selected?.id === event.id} onClick={() => setSelected(event)}>{t("Version", "الإصدار")} {event.version} · {actionLabel(event.action)}</button> · {event.createdAt} · {event.reason}</li>)}</ul>
       <button type="button" disabled={detail.page === 0} onClick={() => void openDetail(detail.subscription.id, detail.page - 1)}>{t("Newer history", "سجل أحدث")}</button> <span>{detail.page + 1}</span> <button type="button" disabled={detail.nextPage === null} onClick={() => { if (detail.nextPage !== null) void openDetail(detail.subscription.id, detail.nextPage); }}>{t("Older history", "سجل أقدم")}</button>
-      {selected && <article><h3>{selected.serviceLabel}</h3><p>{t("Selected version", "الإصدار المحدد")}: {selected.version} · {actionLabel(selected.action)} · {selected.createdAt}</p><p>{t("Author ID", "معرّف الكاتب")}: {selected.createdBy}</p><p>{selected.reason}</p><RecordMetadata value={selected} locale={locale}/><div dir="auto" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", unicodeBidi: "plaintext" }}>{selected.description}</div><p><a href={`/api/manual-subscriptions/${detail.subscription.id}/export?${scopeQuery}&eventId=${selected.id}`}>{t("Download complete selected revision", "تنزيل الإصدار المحدد كاملًا")}</a> · <a href={`/manual-subscriptions/${detail.subscription.id}/print?${scopeQuery}&eventId=${selected.id}`} target="_blank" rel="noopener noreferrer">{t("Open authorized print view", "فتح نسخة الطباعة بعد التحقق من الصلاحيات")}</a></p></article>}
+      {selected && <article><h3>{selected.serviceLabel}</h3><p>{t("Selected version", "الإصدار المحدد")}: {selected.version} · {actionLabel(selected.action)} · {selected.createdAt}</p><p>{t("Author ID", "معرّف الكاتب")}: {selected.createdBy}</p><p>{selected.reason}</p><RecordMetadata value={selected} locale={locale}/><div dir="auto" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", unicodeBidi: "plaintext" }}>{selected.description}</div><p><a onClick={event => { if (!isReadCurrent(renderedReadEpoch)) event.preventDefault(); }} href={`/api/manual-subscriptions/${detail.subscription.id}/export?${scopeQuery}&eventId=${selected.id}`}>{t("Download complete selected revision", "تنزيل الإصدار المحدد كاملًا")}</a> · <a onClick={event => { if (!isReadCurrent(renderedReadEpoch)) event.preventDefault(); }} href={`/manual-subscriptions/${detail.subscription.id}/print?${scopeQuery}&eventId=${selected.id}`} target="_blank" rel="noopener noreferrer">{t("Open authorized print view", "فتح نسخة الطباعة بعد التحقق من الصلاحيات")}</a></p></article>}
     </section>}
   </div>;
 }

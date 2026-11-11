@@ -2,14 +2,11 @@ import {createHash} from "node:crypto";
 import {Prisma} from "@prisma/client";
 import {z} from "zod";
 import {canAccess} from "./access";
-import {dueDate} from "./date";
+import {bankStatementInput} from "./bank-statement-input";
+export {bankScope,bankStatementInput} from "./bank-statement-input";
 import {certificateSnapshot,CertificateError,type BankCertificateInputsV2} from "./bank-certificate-snapshot";
 import {moneyMillis,moneyText} from "./exact-money";
 export class BankError extends Error{constructor(message:string,public status=409,public code?:string){super(message);}}
-export const bankScope=z.object({tenantId:z.string().uuid(),companyId:z.string().uuid()});
-const signed=z.string().regex(/^-?(?:0|[1-9]\d{0,14})(?:\.\d{1,3})?$/);
-const reference=z.string().trim().min(1).max(120).refine(s=>!/[\u0000-\u001f]/u.test(s));
-export const bankStatementInput=bankScope.extend({requestId:z.string().uuid(),accountId:z.string().uuid(),reference:reference.refine(s=>s.length>=3),from:dueDate,to:dueDate,opening:signed,closing:signed,lines:z.array(z.object({bookingDate:dueDate,reference,amount:signed}).strict()).max(500)}).strict().refine(s=>s.from<=s.to&&(Date.parse(s.to)-Date.parse(s.from))/86400000<366);
 export async function bankAllowed(userId:string,tenantId:string,companyId:string,write=false){return (await Promise.all([canAccess({userId,tenantId,companyId,permission:"ledger:read"}),...(write?[canAccess({userId,tenantId,companyId,permission:"ledger:post"})]:[])])).every(Boolean);}
 export async function lockBankAccount(tx:Prisma.TransactionClient,tenantId:string,companyId:string,accountId:string){
  const rows=await tx.$queryRaw<{id:string}[]>`SELECT id FROM "LedgerAccount" WHERE id=${accountId}::uuid AND "tenantId"=${tenantId}::uuid AND "companyId"=${companyId}::uuid AND type='ASSET' FOR UPDATE`;

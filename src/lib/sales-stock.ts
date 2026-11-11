@@ -79,7 +79,7 @@ export async function readSalesStockDocument(actorId:string,id:string,tenantId:s
   return {document:salesStockView(row),corrections:corrections.map(salesStockView),returns:returns.map(salesStockView),returnCorrections:returnCorrections.map(salesStockView),canCorrect:write&&currentUnit&&row.kind!=='CORRECTION'&&!corrections.length&&(row.kind==='RETURN'||effectiveReturns.eq(0)),canReturn:write&&currentUnit&&row.kind==='DELIVERY'&&!corrections.length&&remaining.gt(0),returnableQuantity:row.kind==='DELIVERY'?remaining.toFixed(3):'0.000'};
  },{timeout:15000,maxWait:10000,isolationLevel:Prisma.TransactionIsolationLevel.ReadCommitted});
 }
-export const salesStockFilters=salesStockScope.extend({page:z.coerce.number().int().min(0).max(100000).default(0),branchId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),itemId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),q:z.string().trim().max(120).optional(),format:z.enum(['json','csv']).default('json')}).strict();
+export const salesStockFilters=salesStockScope.extend({expectedActorId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),page:z.coerce.number().int().min(0).max(100000).default(0),branchId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),itemId:z.string().uuid().transform(v=>v.toLowerCase()).optional(),q:z.string().trim().max(120).optional(),format:z.enum(['json','csv']).default('json')}).strict();
 export async function listSalesStockDocuments(actorId:string,f:z.infer<typeof salesStockFilters>){
  return db.$transaction(async tx=>{
   await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id=${f.tenantId}::uuid FOR SHARE`;

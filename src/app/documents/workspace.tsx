@@ -22,39 +22,71 @@ export function DocumentsWorkspace({ actorId, options, locale }: Props) {
 }
 export function DocumentScopeWorkspace({ actorId, scope, locale }: { actorId: string; scope: DocumentScopeOption; locale: Locale }) {
   const t = useCallback((en: string, ar: string) => translate(locale, en, ar), [locale]);
-  const request = useDocumentRequest(actorId, scope.tenantId, scope.companyId, scope.branchId);
   const [filters, setFilters] = useState({ q: "", state: "ACTIVE" }), [page, setPage] = useState(0), [refresh, setRefresh] = useState(0);
   const [rows, setRows] = useState<DocumentMetadata[]>([]), [nextPage, setNextPage] = useState<number | null>(null), [loading, setLoading] = useState(true), [message, setMessage] = useState("");
   const [detail, setDetail] = useState<DocumentDetail | null>(null), [selected, setSelected] = useState<DocumentEvent | null>(null), [detailLoading, setDetailLoading] = useState(false);
-  const mounted = useRef(false), sequence = useRef(0);
-  const blocked = request.blocked || request.busy || !request.ready;
+  const mounted = useRef(false), sequence = useRef(0), readEpoch = useRef(0);
+  const readKey = `${actorId}:${scope.tenantId}:${scope.companyId}:${scope.branchId ?? "company"}`, readIdentity = useRef(readKey);
+  readIdentity.current = readKey;
   const query = new URLSearchParams({ expectedActorId: actorId, tenantId: scope.tenantId, companyId: scope.companyId, branchId: scope.branchId ?? "company", state: filters.state, q: filters.q, page: String(page) }).toString();
   const scopeQuery = new URLSearchParams({ expectedActorId: actorId, tenantId: scope.tenantId, companyId: scope.companyId }).toString();
-  useEffect(() => { const current = sequence; mounted.current = true; return () => { mounted.current = false; current.current++; }; }, []);
+  useEffect(() => { const current = sequence, epoch = readEpoch; mounted.current = true; return () => { mounted.current = false; current.current++; epoch.current++; }; }, []);
+  const fenceReads = useCallback((epoch: number, key: string) => {
+    if (!mounted.current || readEpoch.current !== epoch || readIdentity.current !== key) return;
+    readEpoch.current++; sequence.current++;
+    setRows([]); setNextPage(null); setDetail(null); setSelected(null); setLoading(false); setDetailLoading(false);
+    setMessage(t("Read access or the signed-in user changed. Reload the workspace. Saved mutation recovery is retained.", "تغيرت صلاحية القراءة أو المستخدم المسجل. أعد تحميل مساحة العمل. تم الاحتفاظ بطلبات الاستعادة المحفوظة."));
+  }, [t]);
+  const request = useDocumentRequest(actorId, scope.tenantId, scope.companyId, scope.branchId, () => {
+    // Capture when an attempt starts, not when its possibly-retained handler rendered.
+    const epoch = readEpoch.current;
+    return () => fenceReads(epoch, readKey);
+  });
+  const blocked = request.blocked || request.busy || !request.ready;
+  const outputEpoch = readEpoch.current;
+  function guardOutput(event: { preventDefault: () => void }) {
+    // Native downloads/new-tab navigation already dispatched cannot be retracted.
+    if (!mounted.current || readEpoch.current !== outputEpoch || readIdentity.current !== readKey) event.preventDefault();
+  }
   useEffect(() => {
     let active = true;
+    const epoch = readEpoch.current, key = readKey;
+    const current = () => active && mounted.current && readEpoch.current === epoch && readIdentity.current === key;
     setRows([]); setNextPage(null); setLoading(true);
     void (async () => { try {
-      const response = await fetch(`/api/documents?${query}`, { cache: "no-store" }), data = await response.json();
+      const response = await fetch(`/api/documents?${query}`, { cache: "no-store" });
+      if (!current()) return;
+      if (response.status === 401 || response.status === 403 || response.redirected) { fenceReads(epoch, key); return; }
+      if (!response.ok) throw Error("register read failed");
+      const data = await response.json();
+      if (!current()) return;
+      if (data?.actorId !== actorId) { fenceReads(epoch, key); return; }
       const parsed = documentMetadata.array().max(50).safeParse(data.documents);
       if (!response.ok || data.actorId !== actorId || !parsed.success || data.page !== page || !(data.nextPage === null || data.nextPage === page + 1) || parsed.data.some(row => !belongsToScope(row, scope) || (filters.state === "ACTIVE" && row.archived) || (filters.state === "ARCHIVED" && !row.archived))) throw Error("unverified register");
-      if (active) { setRows(parsed.data); setNextPage(data.nextPage); }
-    } catch { if (active) setMessage(t("The register could not be verified. Refresh to retry.", "تعذر التحقق من السجل. حدّث لإعادة المحاولة.")); }
-    finally { if (active) setLoading(false); } })();
+      if (current()) { setRows(parsed.data); setNextPage(data.nextPage); }
+    } catch { if (current()) setMessage(t("The register could not be verified. Refresh to retry.", "تعذر التحقق من السجل. حدّث لإعادة المحاولة.")); }
+    finally { if (current()) setLoading(false); } })();
     return () => { active = false; };
-  }, [query, page, refresh, scope, filters.state, t, actorId]);
+  }, [query, page, refresh, scope, filters.state, t, actorId, readKey, fenceReads]);
   function closeDetail() { sequence.current++; setDetail(null); setSelected(null); setDetailLoading(false); }
   async function openDetail(id: string, historyPage = 0) {
-    const current = ++sequence.current;
+    const current = ++sequence.current, epoch = readEpoch.current, key = readKey;
+    const active = () => mounted.current && sequence.current === current && readEpoch.current === epoch && readIdentity.current === key;
     setDetail(null); setSelected(null); setDetailLoading(true);
     try {
-      const response = await fetch(`/api/documents/${id}?${scopeQuery}&page=${historyPage}`, { cache: "no-store" }), data = await response.json();
+      const response = await fetch(`/api/documents/${id}?${scopeQuery}&page=${historyPage}`, { cache: "no-store" });
+      if (!active()) return;
+      if (response.status === 401 || response.status === 403 || response.redirected) { fenceReads(epoch, key); return; }
+      if (!response.ok) throw Error("detail read failed");
+      const data = await response.json();
+      if (!active()) return;
+      if (data?.actorId !== actorId) { fenceReads(epoch, key); return; }
       const checked = verifiedDocumentDetail(data, scope, id, historyPage, actorId);
       if (!response.ok || !checked) throw Error("unverified detail");
-      if (!mounted.current || sequence.current !== current) return;
+      if (!active()) return;
       setDetail(checked); setSelected(checked.events[0] ?? null);
-    } catch { if (mounted.current && sequence.current === current) setMessage(t("Current access and document history could not be verified. Nothing is shown. Refresh to retry.", "تعذر التحقق من صلاحية الوصول وسجل المستند. لم يُعرض محتوى. حدّث لإعادة المحاولة.")); }
-    finally { if (mounted.current && sequence.current === current) setDetailLoading(false); }
+    } catch { if (active()) setMessage(t("Current access and document history could not be verified. Nothing is shown. Refresh to retry.", "تعذر التحقق من صلاحية الوصول وسجل المستند. لم يُعرض محتوى. حدّث لإعادة المحاولة.")); }
+    finally { if (active()) setDetailLoading(false); }
   }
   function saved(event: DocumentEvent) { closeDetail(); setPage(0); setRefresh(value => value + 1); setMessage(t(`Saved ${event.action} at version ${event.version}. Open the document to read its current state.`, `تم حفظ ${actionLabel(event.action)} بالإصدار ${event.version}. افتح المستند لقراءة حالته الحالية.`)); }
   function failed() { setMessage(t("Outcome unconfirmed. Keep the saved request. Explicitly retry it or check and abandon it; do not submit a replacement. A conflict may mean the document or your access changed.", "النتيجة غير مؤكدة. احتفظ بالطلب المحفوظ وأعد إرساله صراحةً أو تحقق منه وألغه، ولا ترسل بديلًا. قد يعني التعارض أن المستند أو صلاحياتك تغيرت.")); }
@@ -80,7 +112,7 @@ export function DocumentScopeWorkspace({ actorId, scope, locale }: { actorId: st
     <section className="panel"><h2>{t("Document register", "سجل المستندات")}</h2>
       <form onSubmit={event => { event.preventDefault(); const f = new FormData(event.currentTarget); closeDetail(); setPage(0); setFilters({ q: String(f.get("q") ?? "").trim(), state: String(f.get("state") ?? "ACTIVE") }); }}>
         <label>{t("Search title and text", "البحث في العنوان والنص")} <input name="q" maxLength={120} defaultValue={filters.q}/></label> <label>{t("State", "الحالة")} <select name="state" defaultValue={filters.state}><option value="ACTIVE">{t("Active", "نشط")}</option><option value="ARCHIVED">{t("Archived", "مؤرشف")}</option><option value="ALL">{t("All", "الكل")}</option></select></label> <button type="submit">{t("Apply filters", "تطبيق الفلاتر")}</button>
-      </form><button type="button" onClick={() => { closeDetail(); setRefresh(value => value + 1); }}>{t("Refresh register", "تحديث السجل")}</button> <a href={`/api/documents?${query}&format=csv`}>{t("Download metadata CSV", "تنزيل بيانات وصفية CSV")}</a>
+      </form><button type="button" onClick={() => { closeDetail(); setRefresh(value => value + 1); }}>{t("Refresh register", "تحديث السجل")}</button> <a onClick={guardOutput} href={`/api/documents?${query}&format=csv`}>{t("Download metadata CSV", "تنزيل بيانات وصفية CSV")}</a>
       {loading ? <p role="status">{t("Loading…", "جارٍ التحميل…")}</p> : rows.length ? <ul>{rows.map(row => <li key={row.id}><button type="button" onClick={() => void openDetail(row.id)}>{row.title}</button> · {t("Version", "الإصدار")} {row.version} · {row.archived ? t("Archived", "مؤرشف") : t("Active", "نشط")}</li>)}</ul> : <p>{t("No documents in these filters.", "لا توجد مستندات ضمن هذه الفلاتر.")}</p>}
       <button type="button" disabled={loading || page === 0} onClick={() => setPage(value => value - 1)}>{t("Previous page", "الصفحة السابقة")}</button> <span>{page + 1}</span> <button type="button" disabled={loading || nextPage === null} onClick={() => { if (nextPage !== null) setPage(nextPage); }}>{t("Next page", "الصفحة التالية")}</button>
     </section>
@@ -92,7 +124,7 @@ export function DocumentScopeWorkspace({ actorId, scope, locale }: { actorId: st
       {detail.canManage && scope.canManage && <form key={`lifecycle:${detail.document.id}:${detail.document.version}`} onSubmit={event => submit(event, detail.document.archived ? "restore" : "archive")}><fieldset disabled={blocked}><legend>{detail.document.archived ? t("Restore active status", "استعادة الحالة النشطة") : t("Archive document", "أرشفة المستند")}</legend><p>{detail.document.archived ? t("Restore keeps the current text unchanged. It does not replace it with an earlier revision.", "الاستعادة تحافظ على النص الحالي دون تغيير ولا تستبدله بإصدار سابق.") : t("Archive hides this document from the default register. Its complete history remains readable with permission.", "تخفي الأرشفة المستند من السجل الافتراضي. يبقى سجله الكامل مقروءًا لمن لديهم الصلاحية.")}</p><ReasonField locale={locale}/><button type="submit">{detail.document.archived ? t("Restore document", "استعادة المستند") : t("Archive document", "أرشفة المستند")}</button></fieldset></form>}
       <h3>{t("Immutable revision and lifecycle history", "سجل الإصدارات ودورة الحياة غير القابل للتعديل")}</h3><ul>{detail.events.map(event => <li key={event.id}><button type="button" aria-pressed={selected?.id === event.id} onClick={() => setSelected(event)}>{t("Version", "الإصدار")} {event.version} · {actionLabel(event.action)}</button> · {event.createdAt} · {event.reason}</li>)}</ul>
       <button type="button" disabled={detail.page === 0} onClick={() => void openDetail(detail.document.id, detail.page - 1)}>{t("Newer history", "سجل أحدث")}</button> <span>{detail.page + 1}</span> <button type="button" disabled={detail.nextPage === null} onClick={() => { if (detail.nextPage !== null) void openDetail(detail.document.id, detail.nextPage); }}>{t("Older history", "سجل أقدم")}</button>
-      {selected && <article><h3>{selected.title}</h3><p>{t("Selected version", "الإصدار المحدد")}: {selected.version} · {actionLabel(selected.action)} · {selected.createdAt}</p><p>{t("Author ID", "معرّف الكاتب")}: {selected.createdBy}</p><p>{selected.reason}</p><div dir="auto" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", unicodeBidi: "plaintext" }}>{selected.body}</div><p><a href={`/api/documents/${detail.document.id}/export?${scopeQuery}&eventId=${selected.id}`}>{t("Download complete selected text", "تنزيل النص المحدد كاملًا")}</a> · <a href={`/documents/${detail.document.id}/print?${scopeQuery}&eventId=${selected.id}`} target="_blank" rel="noopener noreferrer">{t("Open authorized print view", "فتح نسخة الطباعة بعد التحقق من الصلاحيات")}</a></p></article>}
+      {selected && <article><h3>{selected.title}</h3><p>{t("Selected version", "الإصدار المحدد")}: {selected.version} · {actionLabel(selected.action)} · {selected.createdAt}</p><p>{t("Author ID", "معرّف الكاتب")}: {selected.createdBy}</p><p>{selected.reason}</p><div dir="auto" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", unicodeBidi: "plaintext" }}>{selected.body}</div><p><a onClick={guardOutput} href={`/api/documents/${detail.document.id}/export?${scopeQuery}&eventId=${selected.id}`}>{t("Download complete selected text", "تنزيل النص المحدد كاملًا")}</a> · <a onClick={guardOutput} href={`/documents/${detail.document.id}/print?${scopeQuery}&eventId=${selected.id}`} target="_blank" rel="noopener noreferrer">{t("Open authorized print view", "فتح نسخة الطباعة بعد التحقق من الصلاحيات")}</a></p></article>}
     </section>}
   </div>;
 }

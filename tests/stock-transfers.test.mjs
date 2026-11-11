@@ -54,6 +54,16 @@ test("paired branch transfers conserve stock, protect holds, authorize both scop
   assert.equal((await call(endpoint+"/cancel","POST",staleActor,operator.cookie)).status,403);
   assert.equal(await db.stockTransfer.count({where:{id:staleActor.requestId}}),0);assert.equal(await db.stockTransferCancellation.count({where:{id:staleActor.requestId}}),0);
   const query="?"+new URLSearchParams(scope),read=await call(endpoint+query,"GET",undefined,operator.cookie);assert.equal(read.status,200);assert.equal(read.data.transfers.length,1);
+  // Simulate a cookie change in another tab while the mounted workspace retains the owner.
+  for(const target of [endpoint+query,endpoint+query+'&format=csv',endpoint+`/${input.requestId}?tenantId=${tenantId}`]){
+   const bound=target+'&expectedActorId='+userId;
+   assert.equal((await call(bound,'GET',undefined,cookie)).status,200);
+   const switched=await call(bound,'GET',undefined,operator.cookie);assert.equal(switched.status,403);assert.ok(!JSON.stringify(switched.data).includes(input.reference));
+   assert.equal((await call(target,'GET',undefined,operator.cookie)).status,200,'unguarded authenticated reads remain supported');
+   for(const suffix of ['&expectedActorId=broken','&expectedActorId=','&expectedActorId='+userId+'&expectedActorId='+userId])assert.equal((await call(target+suffix,'GET',undefined,cookie)).status,400);
+  }
+  assert.equal(read.data.actorId,operatorUser);
+  assert.equal((await call(endpoint+`/${input.requestId}?tenantId=${tenantId}&expectedActorId=${userId}`,'GET',undefined,cookie)).data.actorId,userId);
   assert.equal((await call(endpoint+query,"GET",undefined,viewer.cookie)).status,403);
   assert.equal((await call(endpoint+`/${input.requestId}?tenantId=${tenantId}`,"GET",undefined,viewer.cookie)).status,404);
   assert.equal((await call(endpoint+query+"&format=csv","GET",undefined,viewer.cookie)).status,403);

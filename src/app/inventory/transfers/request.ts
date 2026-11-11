@@ -1,9 +1,10 @@
 "use client";
+import { browserAuthLost } from "@/lib/browser-auth-loss";
 import { useEffect, useRef, useState } from "react";
 import { pendingStockTransfer, stockTransferRequest, stockTransferResponseMatches, stockTransferCancellationMatches, type StockTransferRequest } from "@/lib/stock-transfer-input";
 import type { TransferRow } from "./types";
 
-export function useTransferRequest(actorId: string, tenantId: string, companyId: string) {
+export function useTransferRequest(actorId: string, tenantId: string, companyId: string, onAuthLoss?: () => (() => void)) {
   const key = `erp-stock-transfer:${actorId}:${tenantId}:${companyId}`;
   const [raw, setRaw] = useState<string | null>(null), [ready, setReady] = useState(false), [busy, setBusy] = useState(false);
   const lock = useRef(false), generation = useRef(0), mountedKey = useRef<string | null>(null), renderedKey = useRef(key), exact = useRef<string | null>(null);
@@ -25,7 +26,7 @@ export function useTransferRequest(actorId: string, tenantId: string, companyId:
   const pending = raw ? decode(raw) : null;
   async function run(request: StockTransferRequest | null, saved: (row: TransferRow) => void, failed: () => void, cancel = false, cancelled?: () => void) {
     if (!ready || lock.current || mountedKey.current !== key || renderedKey.current !== key) return;
-    const current = generation.current;
+    const current = generation.current, notifyAuthLoss = onAuthLoss?.();
     const active = () => generation.current === current && mountedKey.current === key && renderedKey.current === key;
     // Capture what this controller showed when the user chose submit/retry/cancel.
     const expected = exact.current;
@@ -53,7 +54,11 @@ export function useTransferRequest(actorId: string, tenantId: string, companyId:
         if (!frozen || localStorage.getItem(key) !== serialized || !active()) throw Error("invalid pending");
         const body = JSON.stringify(JSON.parse(serialized).request);
         const response = await fetch(cancel ? "/api/inventory/transfers/cancel" : "/api/inventory/transfers", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        if (!active()) return;
+        if (browserAuthLost(response)) { notifyAuthLoss?.(); throw Error("authentication lost"); }
         const data = await response.json();
+        if (!active()) return;
+        if (browserAuthLost(response, data)) { notifyAuthLoss?.(); throw Error("authentication lost"); }
         const verifiedTransfer = stockTransferResponseMatches(frozen, data.transfer) && data.transfer.createdBy === actorId;
         const verifiedCancellation = cancel && stockTransferCancellationMatches(frozen, data.cancellation, actorId);
         if (!response.ok || (!verifiedTransfer && !verifiedCancellation)) throw Error("unverified");

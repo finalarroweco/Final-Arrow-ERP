@@ -4,7 +4,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {PrismaClient} from '@prisma/client';
 const origin='http://127.0.0.1:3259',actors=new Map();
-async function call(path,method='GET',body,cookie,expectedActor=actors.get(cookie)){const r=await fetch(origin+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...(method==='POST'&&/\/(?:matches|void|certificates(?:\/[^/]+\/events)?)$/.test(path)&&expectedActor?{'X-Expected-Actor-Id':expectedActor}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),cache:r.headers.get('cache-control'),disposition:r.headers.get('content-disposition'),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
+async function call(path,method='GET',body,cookie,expectedActor=actors.get(cookie)){const r=await fetch(origin+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...(method==='POST'&&/\/(?:statements|matches|void|certificates(?:\/[^/]+\/events)?)$/.test(path)&&expectedActor?{'X-Expected-Actor-Id':expectedActor}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json(),responseActor:r.headers.get('x-actor-id'),cache:r.headers.get('cache-control'),disposition:r.headers.get('content-disposition'),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 test('bank snapshots freeze complete exact observations, preserve corrections, enforce current scopes and audited reversible designations',{timeout:120000},async()=>{
  const db=new PrismaClient(),server=spawn('./node_modules/.bin/next',['start','-H','127.0.0.1','-p','3259'],{env:{...process.env,ALLOW_REGISTRATION:'true'},stdio:['ignore','ignore','inherit']});
  try{
@@ -59,6 +59,21 @@ test('bank snapshots freeze complete exact observations, preserve corrections, e
   await assert.rejects(db.$transaction(async tx=>{const id=randomUUID(),[{transaction}]=await tx.$queryRaw`SELECT txid_current()::text AS transaction`;await tx.bankReconciliationCertificateEvent.create({data:{id,tenantId,companyId,accountId:bank.id,certificateId:created[0].data.id,sequence:5,action:'SUPERSEDE',replacementId:next.id,reason:'Missing matching audit version',requestDigest:'a'.repeat(64),createdBy:frozen.createdBy}});await tx.auditLog.create({data:{tenantId,actorId:frozen.createdBy,entity:'BankReconciliationCertificateEvent',entityId:id,action:'bank-certificate.supersede',metadata:{transaction,certificateId:created[0].data.id,sequence:1}}});}),/same-transaction audit/);
   const invite=async(type,role='Manager')=>{const invitation=await create('/api/invitations',{email:`cert-reader-${randomUUID().slice(0,8)}@example.invalid`,role,scope:{type,companyId,...(type==='BRANCH'?{branchId:branch.id}:{})}});const r=await call('/api/invitations/accept','POST',{token:invitation.path.split('/').at(-1),name:'Certificate reader',password:'Certificate-reader-password-2026'});assert.equal(r.status,200);actors.set(r.cookie,(await db.session.findUniqueOrThrow({where:{tokenHash:createHash('sha256').update(decodeURIComponent(r.cookie.split('=').slice(1).join('='))).digest('hex')}})).userId);return r.cookie;};
   const managerCookie=await invite('COMPANY'),branchCookie=await invite('BRANCH');
+  // Both sessions can read the same company: the optional mounted actor guard must reject cookie switches before exposing data.
+  const ownerActor=actors.get(cookie),readerActor=actors.get(managerCookie);
+  const readUrls=[base+query,base+'/preview'+query,detail+query,detail+query+'&format=json',`/api/bank/statements?tenantId=${tenantId}&companyId=${companyId}`,`/api/bank/statements/${current.id}?tenantId=${tenantId}`,`/api/ledger/accounts?tenantId=${tenantId}&companyId=${companyId}`];
+  for(const url of readUrls){
+   assert.equal((await call(url,'GET',null,managerCookie)).status,200,`direct read ${url}`);
+   const own=await call(url+`&expectedActorId=${ownerActor.toUpperCase()}`,'GET',null,cookie);assert.equal(own.status,200,url);
+   assert.equal((await call(url+`&expectedActorId=${ownerActor}`,'GET',null,managerCookie)).status,403,`cookie switched ${url}`);
+   const switched=await call(url+`&expectedActorId=${readerActor}`,'GET',null,managerCookie);assert.equal(switched.status,200,url);
+   if(!url.includes('format=json'))assert.equal(switched.data.actorId,readerActor);else{assert.equal(switched.responseActor,readerActor);assert.equal('actorId' in switched.data,false);assert.deepEqual(switched.data.certificate,frozen);}
+   for(const suffix of ['&expectedActorId=bad','&expectedActorId=','&expectedActorId='+ownerActor+'&expectedActorId='+ownerActor])assert.equal((await call(url+suffix,'GET',null,cookie)).status,400,url+suffix);
+  }
+  for(const path of [`/accounting/bank/${current.id}`,`/accounting/bank/certificates/${id}?tenantId=${tenantId}`]){
+   const separator=path.includes('?')?'&':'?';
+   assert.equal((await fetch(origin+path+separator+`expectedActorId=${ownerActor}`,{headers:{Cookie:managerCookie}})).status,404);
+  }
   assert.equal((await call(detail+query,'GET',null,managerCookie)).status,200);assert.equal((await call(base,'POST',{...payload,requestId:randomUUID()},managerCookie)).status,403);assert.equal((await call(detail+'/events','POST',{...event,requestId:randomUUID(),expectedVersion:2},managerCookie)).status,403);
   for(const url of [base+query,base+'/preview'+query,detail+query,detail+query+'&format=json'])assert.equal((await call(url,'GET',null,branchCookie)).status,403,url);
   assert.equal((await call(detail+query,'GET',null,outside.cookie)).status,403);
@@ -78,7 +93,7 @@ test('bank snapshots freeze complete exact observations, preserve corrections, e
   }
   const delegated={...payload,requestId:randomUUID(),expectedDigest:(await preview()).data.digest};assert.equal((await call(base,'POST',delegated,managerCookie)).status,201);const switched=await call(base,'POST',delegated,cookie);assert.equal(switched.status,409,'retry cannot switch actor');assert.equal(switched.data.code,'REQUEST_CONFLICT');
   await db.rolePermission.delete({where:{tenantId_roleId_permissionKey:{tenantId,roleId:mgr.id,permissionKey:'bank-reconciliation:create'}}});assert.equal((await call(base,'POST',delegated,managerCookie)).status,403,'revoked creation denies even exact retries');
-  await db.rolePermission.delete({where:{tenantId_roleId_permissionKey:{tenantId,roleId:mgr.id,permissionKey:'ledger:read'}}});assert.equal((await call(detail+query,'GET',null,managerCookie)).status,403,'saved document does not retain revoked read rights');assert.equal((await call(detail+query+'&format=json','GET',null,managerCookie)).status,403,'download cannot retain revoked read rights');
+  await db.rolePermission.delete({where:{tenantId_roleId_permissionKey:{tenantId,roleId:mgr.id,permissionKey:'ledger:read'}}});assert.equal((await call(detail+query,'GET',null,managerCookie)).status,403,'saved document does not retain revoked read rights');for(const url of readUrls)assert.equal((await call(url+`&expectedActorId=${readerActor}`,'GET',null,managerCookie)).status,403,'matching actor does not retain revoked permission');assert.equal((await call(detail+query+'&format=json','GET',null,managerCookie)).status,403,'download cannot retain revoked read rights');
   await assert.rejects(db.bankReconciliationCertificate.update({where:{id},data:{note:'Altered'}}));await assert.rejects(db.bankReconciliationCertificate.delete({where:{id}}));await assert.rejects(db.bankReconciliationCertificateEvent.delete({where:{id:event.requestId}}));await assert.rejects(db.bankReconciliationCertificateEvent.update({where:{id:event.requestId},data:{reason:'Altered'}}));
   // Direct inserts cannot spoof snapshots or skip their same-transaction audit.
   const raw=await db.bankReconciliationCertificate.findUnique({where:{id:next.id}});const invalid={...raw,id:randomUUID(),observedAt:new Date(),createdAt:new Date(),transactionId:'ignored'};

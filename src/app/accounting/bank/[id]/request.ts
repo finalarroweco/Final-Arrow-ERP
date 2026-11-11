@@ -1,4 +1,5 @@
 "use client";
+import {browserAuthLost} from "@/lib/browser-auth-loss";
 import {useEffect,useRef,useState} from "react";
 import {z} from "zod";
 const uuid=z.string().uuid().transform(v=>v.toLowerCase());
@@ -30,7 +31,7 @@ export function confirmedResolution(data:unknown,p:Action,s:Scope){
  if(!abandoned.success)return null;const a=abandoned.data;
  return a.id===p.requestId&&a.statementId===s.id&&a.actorId===s.actorId&&a.tenantId===s.tenantId&&a.companyId===s.companyId&&a.accountId===s.accountId&&JSON.stringify(a.request)===JSON.stringify(allocationAction.parse(p))?"abandoned":null;
 }
-export function useAllocationRequests(scope:Scope,onSaved:(outcome:"committed"|"abandoned")=>Promise<void>){
+export function useAllocationRequests(scope:Scope,onSaved:(outcome:"committed"|"abandoned")=>Promise<void>,captureAccessLoss?:()=>()=>void){
  const key=requestKey(scope),legacy=`erp-bank-match:${scope.tenantId}:${scope.id}`;
  const [pending,setPending]=useState<Action|null>(null),[blocked,setBlocked]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
  const ref=useRef({key,generation:0,working:false,controller:null as AbortController|null});const currentKey=useRef(key);currentKey.current=key;
@@ -40,13 +41,16 @@ export function useAllocationRequests(scope:Scope,onSaved:(outcome:"committed"|"
  // Scope identity is completely represented by key.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[key,legacy]);
- async function run(input:Action,recover=false){const s=ref.current;if(s.working||s.key!==key||currentKey.current!==key||blocked)return;s.working=true;setBusy(true);setError("");const generation=s.generation,valid=()=>s.generation===generation&&currentKey.current===key;const controller=new AbortController();s.controller=controller;
+ async function run(input:Action,recover=false){const s=ref.current;if(s.working||s.key!==key||currentKey.current!==key||blocked)return;s.working=true;setBusy(true);setError("");const notifyAccessLoss=captureAccessLoss?.(),generation=s.generation,valid=()=>s.generation===generation&&currentKey.current===key;const controller=new AbortController();s.controller=controller;
   try{if(!navigator.locks)throw Error("Browser locks are required for safe retries");await navigator.locks.request(key,{mode:"exclusive",ifAvailable:true},async lock=>{
    if(!lock)throw Error("Another tab is confirming this request");if(!valid())return;
    const p=allocationAction.parse(input);if(p.tenantId!==scope.tenantId)throw Error("Request scope changed");
    let serialized:string;try{if(sessionStorage.getItem(legacy)!==null||localStorage.getItem(legacy)!==null)throw Error("Legacy request requires recovery");const raw=localStorage.getItem(key);if(raw!==null){const existing=savedRequest(raw,scope);if(JSON.stringify(existing)!==JSON.stringify(p))throw Error("An unresolved request is already saved");serialized=raw;}else{if(recover)throw Error("Saved request is missing");serialized=JSON.stringify({version:2,...scope,request:p});localStorage.setItem(key,serialized);if(localStorage.getItem(key)!==serialized)throw Error("Request could not be saved");}setPending(p);}catch{setBlocked(true);throw Error("Storage or saved identity requires recovery; nothing new was sent");}
    const response=await fetch(`/api/bank/statements/${scope.id}/${recover?"requests/resolve":p.action==="void"?"void":"matches"}`,{method:"POST",cache:"no-store",signal:controller.signal,headers:{"Content-Type":"application/json","X-Expected-Actor-Id":scope.actorId},body:JSON.stringify(recover?{tenantId:scope.tenantId,request:p}:p)});
+   if(!valid())return;
+   if(browserAuthLost(response)){notifyAccessLoss?.();throw Error("Access or signed-in account changed. Keep the original saved request.");}
    const data=await response.json();if(!valid())return;
+   if(browserAuthLost(response,data)){notifyAccessLoss?.();throw Error("Signed-in account changed. Keep the original saved request.");}
    if(!response.ok)throw Error(typeof data?.error==="string"?data.error.replace(/[\u0000-\u001f]/g," ").slice(0,300):"Request remains unconfirmed");
    const outcome=recover?confirmedResolution(data,p,scope):confirmedAllocation(data,p,scope)?"committed":null;
    if(!outcome)throw Error("Response identity is unconfirmed; keep the saved request");

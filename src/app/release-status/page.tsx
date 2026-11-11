@@ -13,7 +13,7 @@ export default async function ReleaseStatusPage(){
  ["/crm",t("CRM, customers, contacts, quotes and sales orders","إدارة العملاء وجهات الاتصال وعروض الأسعار وطلبات البيع")],
  ["/purchasing/orders",t("Purchases, partial receipts, returns and source settlements","المشتريات والاستلام الجزئي والمرتجعات والتسويات المرتبطة")],
  ["/accounting/vat-settings",t("Optional Oman VAT snapshots for invoices, purchase receipts/returns, expenses and POS; internal accounting only","لقطات ضريبة القيمة المضافة العُمانية الاختيارية للفواتير واستلام المشتريات ومرتجعاتها والمصروفات ونقاط البيع؛ للمحاسبة الداخلية فقط")],
- ["/accounting/bank",t("Manual partial/split bank allocations, safe request recovery and immutable internal reconciliation snapshots","تخصيصات بنكية يدوية جزئية ومقسمة واستعادة آمنة للطلبات ولقطات داخلية ثابتة للتسوية")],
+ ["/accounting/bank",t("Actor-bound bank imports, permanent pending-request abandonment, partial/split allocations and immutable internal reconciliation snapshots","استيراد بنكي مرتبط بالمستخدم وإلغاء نهائي للطلبات المعلقة وتخصيصات جزئية ومقسمة ولقطات تسوية داخلية ثابتة")],
  ["/accounting/ledger",t("Source journals, corrections, period locks and financial reports","قيود المستندات والعكس وإقفال الفترات والتقارير المالية")],
  ["/inventory/stock",t("Manual stock reservations, available quantities and permanent release history","حجز المخزون اليدوي والكميات المتاحة وسجل فك الحجز الدائم")],
  ["/inventory/transfers",t("Completed same-company branch stock transfers with paired corrections, two-branch authorization and safe pending-request cancellation","تسجيل تحويلات مخزون مكتملة بين فروع الشركة مع تصحيح مزدوج وصلاحيات للفرعين وإلغاء آمن للطلبات المعلّقة")],

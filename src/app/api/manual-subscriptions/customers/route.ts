@@ -27,6 +27,6 @@ export async function GET(request: Request) {
    const rows = await tx.customer.findMany({ where, select: { id: true, displayName: true, code: true }, orderBy: [{ displayName: "asc" }, { id: "asc" }], skip: p.page * 50, take: 51 });
    return { customers: rows.slice(0, 50).map(row => ({ id: row.id, name: row.displayName, code: row.code })), page: p.page, nextPage: rows.length > 50 ? p.page + 1 : null };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15000 });
-  return NextResponse.json(result, { headers });
+  return NextResponse.json({ actorId: actor.id, ...result }, { headers });
  } catch (error) { return subscriptionFailure(error); }
 }

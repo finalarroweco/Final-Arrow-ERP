@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 function load(path, overrides = {}, globals = {}) {
  const source = readFileSync(new URL('../' + path, import.meta.url), 'utf8');
  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 } });
- const exports = {}; new Function('require', 'exports', ...Object.keys(globals), outputText)(name => Object.hasOwn(overrides, name) ? overrides[name] : require(name), exports, ...Object.values(globals)); return exports;
+ const exports = {}; new Function('require', 'exports', ...Object.keys(globals), outputText)(name => name === '@/lib/browser-auth-loss' ? load('src/lib/browser-auth-loss.ts') : Object.hasOwn(overrides, name) ? overrides[name] : require(name), exports, ...Object.values(globals)); return exports;
 }
 const input = load('src/lib/sales-stock-input.ts');
 const holdInput = load('src/lib/order-stock-hold-input.ts');
@@ -25,13 +25,13 @@ function browser() {
  const storage = new Map(), held = new Set();
  return { storage, locks: { async request(key, options, fn) { assert.equal(options.ifAvailable, true); if (held.has(key)) return fn(null); held.add(key); try { return await fn({ name: key }); } finally { held.delete(key); } } } };
 }
-function harness({ raw, fetcher = async () => { throw Error('network'); }, storageFails = false, removalFails = false, shared = browser(), locking = true } = {}) {
+function harness({ captureAuthLoss, raw, fetcher = async () => { throw Error('network'); }, storageFails = false, removalFails = false, shared = browser(), locking = true } = {}) {
  const key = `erp-sales-stock:v1:${actorId}:${tenantId}:${companyId}:${orderId}`, storage = shared.storage;
  if (raw !== undefined) storage.set(key, raw);
  const slots = [], listeners = new Set(); let index = 0, calls = 0, actor = actorId, order = orderId;
  const hooks = { useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++, value = JSON.stringify(deps); if (slots[i]?.deps !== value) { slots[i]?.cleanup?.(); slots[i] = { deps: value, cleanup: fn() }; } } };
  const mod = load(directory + 'request.ts', { react: hooks, '@/lib/sales-stock-input': input }, { navigator: { locks: locking ? shared.locks : undefined }, window: { addEventListener(_type, fn) { listeners.add(fn); }, removeEventListener(_type, fn) { listeners.delete(fn); } }, localStorage: { getItem: k => storage.get(k) ?? null, setItem(k, v) { if (storageFails) throw Error('blocked'); storage.set(k, v); }, removeItem: k => { if (!removalFails) storage.delete(k); } }, fetch(...args) { calls++; return fetcher(...args); } });
- const render = () => { index = 0; return mod.useSalesStockRequest(actor, tenantId, companyId, order); }; render();
+ const render = () => { index = 0; return mod.useSalesStockRequest(actor, tenantId, companyId, order, captureAuthLoss); }; render();
  return { render, storage, key, get calls() { return calls; }, event(eventKey = key) { listeners.forEach(fn => fn({ key: eventKey })); }, identity(nextActor, nextOrder = orderId) { actor = nextActor; order = nextOrder; render(); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
 }
 test('sales captures hydrate without writes and malformed or actor/source substitutions remain blocked', () => {
@@ -143,22 +143,22 @@ test('options page intersects order source and actual stock rights within tenant
  assert.match(page, /canAccess\(\{\.\.\.scope,permission:"order:read"\},tx\)/);
 });
 function printHarness(response) {
- const slots = [], effects = [], frames = new Map(); let index = 0, printed = 0, fetches = 0, frameId = 0;
- const hooks = { useCallback(fn) { return fn; }, useState(initial) { const i = index++; if (!(i in slots)) slots[i] = i === 15 ? detail : initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++; if (i === 24 || i === 25) return; if (!slots[i] || deps.some((value, j) => value !== slots[i].deps[j])) { const previous = slots[i]; slots[i] = { deps, cleanup: previous?.cleanup }; effects.push(() => { previous?.cleanup?.(); slots[i].cleanup = fn(); }); } } };
- const mod = load(directory + 'workspace.tsx', { ...commonOverrides, react: hooks, './request': { useSalesStockRequest: () => ({ ready: true, pending: null, blocked: false, busy: false }) } }, { window: { print() { printed++; } }, requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; }, cancelAnimationFrame(id) { frames.delete(id); }, async fetch(url, options) { fetches++; assert.equal(url, `/api/sales/stock-documents/${row.id}?tenantId=${tenantId}`); assert.equal(options.cache, 'no-store'); return typeof response === 'function' ? response() : response; } });
- function render() { index = 0; const wrapper = mod.SalesStockWorkspace({ actorId, order, branches, locale: 'en' }), tree = wrapper.type(wrapper.props); effects.splice(0).forEach(fn => fn()); return tree; }
+ const slots = [], effects = [], frames = new Map(); let index = 0, effectIndex = 0, printed = 0, fetches = 0, frameId = 0;
+ const hooks = { useCallback(fn) { return fn; }, useState(initial) { const i = index++; if (!(i in slots)) slots[i] = i === 15 ? detail : initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; }, useEffect(fn, deps) { const i = index++; const ordinal = effectIndex++; if (ordinal === 1 || ordinal === 2) return; if (!slots[i] || deps.some((value, j) => value !== slots[i].deps[j])) { const previous = slots[i]; slots[i] = { deps, cleanup: previous?.cleanup }; effects.push(() => { previous?.cleanup?.(); slots[i].cleanup = fn(); }); } } };
+ const mod = load(directory + 'workspace.tsx', { ...commonOverrides, react: hooks, './request': { useSalesStockRequest: () => ({ ready: true, pending: null, blocked: false, busy: false }) } }, { window: { print() { printed++; } }, requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; }, cancelAnimationFrame(id) { frames.delete(id); }, async fetch(url, options) { fetches++; assert.equal(url, `/api/sales/stock-documents/${row.id}?tenantId=${tenantId}&expectedActorId=${actorId}`); assert.equal(options.cache, 'no-store'); return typeof response === 'function' ? response() : response; } });
+ function render() { index = 0; effectIndex = 0; const wrapper = mod.SalesStockWorkspace({ actorId, order, branches, locale: 'en' }), tree = wrapper.type(wrapper.props); effects.splice(0).forEach(fn => fn()); return tree; }
  function descendants(element) { return [element, ...React.Children.toArray(element?.props?.children).flatMap(child => React.isValidElement(child) ? descendants(child) : [])]; }
  return { render, descendants, click(tree) { descendants(tree).find(e => e.type === 'button' && e.props.children === 'Verify and print document').props.onClick(); }, get printed() { return printed; }, get fetches() { return fetches; }, flush() { const queued = [...frames.values()]; frames.clear(); queued.forEach(fn => fn()); }, unmount() { slots.forEach(slot => slot?.cleanup?.()); } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 test('print reauthorizes and revoked or malformed responses never print stale source details', async () => {
- for (const response of [{ ok: false, json: async () => ({ error: 'denied' }) }, { ok: true, json: async () => ({ ...detail, document: { ...row, createdBy: id(99) } }) }, { ok: true, json: async () => ({ ...detail, corrections: undefined }) }]) {
+ for (const response of [{ ok: false, json: async () => ({ error: 'denied' }) }, { ok: true, json: async () => ({ actorId, ...detail, document: { ...row, createdBy: id(99) } }) }, { ok: true, json: async () => ({ actorId, ...detail, corrections: undefined }) }]) {
   const h = printHarness(response); h.click(h.render()); await settle(); const tree = h.render(); h.flush(); assert.equal(h.printed, 0); assert.equal(h.fetches, 1); assert.equal(tree.props['data-print-ready'], 'no');
  }
 });
 test('print uses refreshed corrections only after DOM commit and unmount fences delayed print', async () => {
  const correction = { ...row, id: id(30), kind: 'CORRECTION', correctsId: row.id, delta: '2.500', reason: 'Corrected today' };
- const h = printHarness({ ok: true, json: async () => ({ ...detail, corrections: [correction], canCorrect: false, canReturn: false }) });
+ const h = printHarness({ ok: true, json: async () => ({ actorId, ...detail, corrections: [correction], canCorrect: false, canReturn: false }) });
  h.click(h.render()); await settle(); assert.equal(h.printed, 0); const tree = h.render(); assert.equal(tree.props['data-print-ready'], 'yes');
  assert.ok(h.descendants(tree).some(e => e.type === 'p' && React.Children.toArray(e.props.children).includes('Corrected today'))); h.flush(); assert.equal(h.printed, 1);
  h.click(h.render()); await settle(); h.render(); h.unmount(); h.flush(); assert.equal(h.printed, 1);
@@ -195,4 +195,95 @@ test('return and correction forms bind original document unit and require explic
  }
  const h = formHarness({ detailValue: detail }), forms = h.descendants(h.render()).filter(e => e.type === 'form');
  h.submit(forms[2], { quantity: '0.125', reference: 'RET-001', reason: 'Usable goods returned' }); h.submit(forms[3], { reason: 'Full document correction' }); await settle(); assert.equal(h.captured.length, 0);
+});
+
+test('print rejects otherwise valid history served for another actor', async () => {
+ const h = printHarness({ ok: true, json: async () => ({ ...detail, actorId: id(99) }) });
+ h.click(h.render()); await settle(); const tree = h.render(); h.flush(); assert.equal(h.printed, 0); assert.equal(tree.props['data-print-ready'], 'no');
+});
+function readHarness({initialDetail=false}={}) {
+ const slots=[],effects=[],calls=[],frames=new Map();let index=0,stateIndex=0,printed=0,frameId=0,captureLoss;
+ const same=(a,b)=>a&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
+ const hooks={useState(initial){const i=index++,ordinal=stateIndex++;if(!(i in slots))slots[i]=ordinal===15&&initialDetail?detail:initial==='manual'?'hold':initial;return[slots[i],v=>{slots[i]=typeof v==='function'?v(slots[i]):v;}];},useRef(initial){const i=index++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useCallback(fn,deps){const i=index++;if(!slots[i]||!same(slots[i].deps,deps))slots[i]={deps,fn};return slots[i].fn;},useEffect(fn,deps){const i=index++,old=slots[i];if(!old||!same(old.deps,deps)){const current={deps};slots[i]=current;effects.push(()=>{old?.cleanup?.();current.cleanup=fn();});}}};
+ const mod=load(directory+'workspace.tsx',{...commonOverrides,react:hooks,'./request':{useSalesStockRequest:(_a,_t,_c,_o,capture)=>{captureLoss=capture;return{ready:true,pending:null,blocked:false,busy:false};}}},{window:{print(){printed++;}},requestAnimationFrame(fn){frames.set(++frameId,fn);return frameId;},cancelAnimationFrame(id){frames.delete(id);},fetch:(url,options)=>new Promise(resolve=>calls.push({url,options,resolve}))});
+ function render(){index=0;stateIndex=0;const wrapper=mod.SalesStockWorkspace({actorId,order,branches,locale:'en'}),tree=wrapper.type(wrapper.props);effects.splice(0).forEach(f=>f());return tree;}
+ function descendants(e){return[e,...React.Children.toArray(e?.props?.children).flatMap(c=>React.isValidElement(c)?descendants(c):[])];}
+ return{render,calls,captureLoss:()=>captureLoss(),get printed(){return printed;},flush(){const queued=[...frames.values()];frames.clear();queued.forEach(fn=>fn());},button(label){return descendants(render()).find(e=>e.type==='button'&&e.props.children===label);},unmount(){slots.forEach(s=>s?.cleanup?.());}};
+}
+test('delivery register and hold picker bind actor URLs and reject otherwise valid foreign receipts',async()=>{
+ const hold={id:id(70),tenantId,balanceId:id(8),quantity:'1.125',reference:'Order-linked manual hold',createdBy:actorId,createdAt:row.createdAt,releasedBy:null,releasedAt:null,releaseReason:null,releaseRequestId:null,orderLink:{orderId,lineId:null,note:'Picker private note',orderNumber:'SO-001',customerName:'Customer',linePosition:null,lineDescription:null,itemSku:'SECRET-HOLD',itemName:'Item',itemUnit:'each',branchName:'East'},balance:{itemId,branchId,companyId}};
+ for(const returnedActor of [actorId,id(99)]){
+  const h=readHarness(),tree=h.render();assert.equal(h.calls.length,2);
+  const html=renderToStaticMarkup(tree);assert.ok(html.includes('expectedActorId='+actorId),'CSV binds mounted actor');
+  for(const request of h.calls){assert.equal(new URL(request.url,'http://local').searchParams.get('expectedActorId'),actorId);request.resolve({ok:true,json:async()=>request.url.includes('/reservations?')?{actorId:returnedActor,reservations:[hold],page:0,nextPage:null}:{actorId:returnedActor,documents:[row],totals:[],page:0,nextPage:null}});}
+  await settle();const result=renderToStaticMarkup(h.render());assert.equal(result.includes(row.reference),returnedActor===actorId);assert.equal(result.includes('SECRET-HOLD'),returnedActor===actorId);h.unmount();
+ }
+});
+const crossHold={id:id(70),tenantId,balanceId:id(8),quantity:'1.125',reference:'Order-linked manual hold',createdBy:actorId,createdAt:row.createdAt,releasedBy:null,releasedAt:null,releaseReason:null,releaseRequestId:null,orderLink:{orderId,lineId:null,note:'Cross-channel private note',orderNumber:'SO-001',customerName:'Customer',linePosition:null,lineDescription:null,itemSku:'CROSS-HOLD',itemName:'Item',itemUnit:'each',branchName:'East'},balance:{itemId,branchId,companyId}};
+function channel(call){return call.url.includes('/reservations?')?'holds':call.url.includes('/stock-documents?')?'register':'detail';}
+function validRead(call){return channel(call)==='holds'?{actorId,reservations:[crossHold],page:0,nextPage:null}:channel(call)==='register'?{actorId,documents:[row],totals:[],page:0,nextPage:null}:{actorId,...detail};}
+function resolveRead(call){call.resolve({ok:true,status:200,json:async()=>validRead(call)});}
+for(const deniedChannel of ['register','holds','detail'])test(`${deniedChannel} denial fences every concurrent read channel before delayed successes`,async()=>{
+ for(const status of [401,403,200]){
+  const h=readHarness({initialDetail:true});h.render();h.button('Verify and print document').props.onClick();assert.equal(h.calls.length,3);
+  const denied=h.calls.find(c=>channel(c)===deniedChannel);let parsed=0;
+  denied.resolve({ok:status===200,status,json:async()=>{parsed++;if(status!==200)throw Error('Non-JSON access denial');return{...validRead(denied),actorId:id(99)};}});
+  await settle();assert.equal(parsed,status===200?1:0,'access status is checked without relying on JSON');
+  for(const call of h.calls.filter(c=>c!==denied))resolveRead(call);
+  await settle();const tree=h.render(),html=renderToStaticMarkup(tree);h.flush();assert.equal(h.printed,0);assert.equal(tree.props['data-print-ready'],'no');assert.ok(!html.includes(row.reference));assert.ok(!html.includes('CROSS-HOLD'));h.unmount();
+ }
+});
+for(const deniedChannel of ['register','holds'])test(`${deniedChannel} denial cancels an already queued print synchronously`,async()=>{
+ const h=readHarness({initialDetail:true});h.render();h.button('Verify and print document').props.onClick();resolveRead(h.calls.find(c=>channel(c)==='detail'));await settle();assert.equal(h.render().props['data-print-ready'],'yes');
+ h.calls.find(c=>channel(c)===deniedChannel).resolve({ok:false,status:403,json:async()=>{throw Error('not JSON');}});await settle();h.flush();assert.equal(h.printed,0);assert.equal(h.render().props['data-print-ready'],'no');h.unmount();
+});
+test('obsolete register and hold denials cannot clear newer successful read state',async()=>{
+ const h=readHarness();h.render();const old=[...h.calls];h.button('Refresh holds').props.onClick();h.render();const newer=h.calls.slice(old.length);assert.equal(newer.length,2);newer.forEach(resolveRead);await settle();h.render();
+ for(const call of old)call.resolve({ok:false,status:403,json:async()=>{throw Error('must not parse obsolete denial');}});
+ await settle();const html=renderToStaticMarkup(h.render());assert.ok(html.includes(row.reference));assert.ok(html.includes('CROSS-HOLD'));h.unmount();
+});
+test('obsolete detail denial cannot clear a newer verified document or current register',async()=>{
+ const h=readHarness({initialDetail:true});h.render();const oldClick=h.button('Refresh document').props.onClick;oldClick();const oldDetail=h.calls.at(-1);oldClick();const newDetail=h.calls.at(-1);
+ resolveRead(newDetail);h.calls.filter(c=>channel(c)!=='detail').forEach(resolveRead);await settle();h.render();oldDetail.resolve({ok:false,status:401,json:async()=>{throw Error('obsolete');}});await settle();const html=renderToStaticMarkup(h.render());assert.ok(html.includes(row.reference));assert.ok(html.includes('CROSS-HOLD'));assert.ok(h.button('Verify and print document'));h.unmount();
+});
+test('access invalidation also fences successful responses already awaiting JSON decoding',async()=>{
+ for(const delayedChannel of ['register','holds','detail']){
+  const h=readHarness({initialDetail:true});h.render();h.button('Verify and print document').props.onClick();const delayed=h.calls.find(c=>channel(c)===delayedChannel);let finishJson;
+  delayed.resolve({ok:true,status:200,json:()=>new Promise(resolve=>{finishJson=resolve;})});await settle();assert.equal(typeof finishJson,'function');
+  const denied=h.calls.find(c=>c!==delayed);denied.resolve({ok:false,status:403,json:async()=>{throw Error('not JSON');}});await settle();finishJson(validRead(delayed));h.calls.filter(c=>c!==delayed&&c!==denied).forEach(resolveRead);
+  await settle();const tree=h.render(),html=renderToStaticMarkup(tree);h.flush();assert.equal(h.printed,0);assert.ok(!html.includes(row.reference));assert.ok(!html.includes('CROSS-HOLD'));h.unmount();
+ }
+});
+
+
+test('current mutation and recovery auth loss notifies reads without clearing pending; business errors do not', async () => {
+ for (const cancel of [false,true]) for (const [response,expected] of [
+  [{status:401,ok:false,json:async()=>{throw Error('HTML');}},true],
+  [{status:403,ok:false,json:async()=>{throw Error('HTML');}},true],
+  [{status:200,ok:true,redirected:true,url:'https://erp.test/login?next=original',json:async()=>{throw Error('HTML');}},true],
+  [{status:409,ok:false,json:async()=>({code:'ACTOR_MISMATCH'})},true],
+  [{status:409,ok:false,json:async()=>({code:'REQUEST_CONFLICT'})},false],
+  [{status:500,ok:false,json:async()=>({error:'server'})},false]
+ ]) {
+  let losses=0;const h=harness({raw:envelope(payload),captureAuthLoss:()=>()=>losses++,fetcher:async()=>response});
+  if(cancel)await h.render().abandon(()=>assert.fail(),()=>{},()=>assert.fail());else await h.render().run(null,()=>assert.fail(),()=>{});
+  assert.equal(losses,Number(expected));assert.equal(h.storage.get(h.key),envelope(payload));
+ }
+});
+test('obsolete scope and prior read-epoch mutation denials never clear newer reads or pending', async () => {
+ for(const changed of ['scope','epoch','unmount']){
+  let release,epoch=0,losses=0;const h=harness({raw:envelope(payload),captureAuthLoss:()=>{const own=epoch;return()=>{if(own===epoch)losses++;};},fetcher:()=>new Promise(r=>release=r)});
+  const pending=h.render().run(null,()=>assert.fail(),()=>{});await new Promise(r=>setImmediate(r));
+  if(changed==='scope')h.identity(id(99));else if(changed==='unmount')h.unmount();else epoch++;
+  release({status:401,ok:false,json:async()=>{throw Error('must not parse');}});await pending;
+  assert.equal(losses,0);assert.equal(h.storage.get(h.key),envelope(payload));
+ }
+});
+
+test('mutation auth-loss token fences delivery reads and queued print but a superseded token leaves refreshed data intact',async()=>{
+ const h=readHarness({initialDetail:true});h.render();const oldDenial=h.captureLoss();h.button('Verify and print document').props.onClick();
+ const reads=[...h.calls];resolveRead(reads.find(c=>channel(c)==='detail'));await settle();h.render();oldDenial();h.render();h.flush();assert.equal(h.printed,0);
+ reads.filter(c=>channel(c)!=='detail').forEach(resolveRead);await settle();assert.ok(!renderToStaticMarkup(h.render()).includes(row.reference));
+ h.button('Refresh register').props.onClick();h.render();h.calls.slice(reads.length).forEach(resolveRead);await settle();assert.ok(renderToStaticMarkup(h.render()).includes(row.reference));
+ oldDenial();assert.ok(renderToStaticMarkup(h.render()).includes(row.reference));h.unmount();
 });

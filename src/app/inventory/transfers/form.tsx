@@ -4,9 +4,9 @@ import { translate, type Locale } from "@/lib/locale";
 import { stockTransferRequest } from "@/lib/stock-transfer-input";
 import { useTransferRequest } from "./request";
 import type { TransferOption, TransferRow } from "./types";
-export function TransferForm({ actorId, scope, locale, correction, onSaved }: { actorId: string; scope: TransferOption; locale: Locale; correction?: TransferRow; onSaved: (row: TransferRow) => void }) {
+export function TransferForm({ actorId, scope, locale, correction, onSaved, onAuthLoss }: { actorId: string; scope: TransferOption; locale: Locale; correction?: TransferRow; onSaved: (row: TransferRow) => void; onAuthLoss?: () => (() => void) }) {
   const t = (en: string, ar: string) => translate(locale, en, ar);
-  const request = useTransferRequest(actorId, scope.tenantId, scope.companyId);
+  const request = useTransferRequest(actorId, scope.tenantId, scope.companyId, onAuthLoss);
   const [error, setError] = useState("");
   const branches = scope.branches.filter(branch => branch.canWrite);
   const allowed = correction ? correction.canCorrect : branches.length >= 2;

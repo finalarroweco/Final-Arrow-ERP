@@ -86,8 +86,13 @@ test('manual subscriptions are scoped, source-authorized, immutable, versioned a
   // Mounted actor context remains bound even after another tab changes the cookie.
   const actorReadPaths=[endpoint+query(),endpoint+query({format:'csv'}),detail(initial.subscriptionId),detail(initial.subscriptionId,{page:'0'}),exportPath(initial.subscriptionId,original.id),printPath(initial.subscriptionId,original.id),endpoint+'/customers'+query({branchId:branch.id})];
   for(const path of actorReadPaths){
-   const matched=await call(path+'&expectedActorId='+actorId,'GET',undefined,cookie);assert.equal(matched.status,200,path);
+   const matched=await call(path+'&expectedActorId='+actorId,'GET',undefined,cookie);assert.equal(matched.status,200,path);if(matched.headers.get('content-type')?.includes('application/json'))assert.equal(matched.data.actorId,actorId,'JSON receipt identifies authenticated actor');
    for(const [expectedActorId,session] of [[reader.id,cookie],[actorId,reader.cookie]]){const denied=await call(path+'&expectedActorId='+expectedActorId,'GET',undefined,session);assert.ok([403,404].includes(denied.status),path+' actor mismatch '+denied.status);for(const secret of [initial.serviceLabel,initial.description,customer.displayName])assert.ok(!JSON.stringify(denied.data).includes(secret),'no switched-actor data '+path);}
+  }
+  for(const [session, authenticatedId] of [[cookie,actorId],[manager.cookie,manager.id]]) {
+   for(const path of [endpoint+query(),detail(initial.subscriptionId),endpoint+'/customers'+query({branchId:branch.id})]) {
+    const direct=await call(path,'GET',undefined,session);assert.equal(direct.status,200,path);assert.equal(direct.data.actorId,authenticatedId,'unguarded direct reads still report actual session actor');
+   }
   }
   const metadata=await call(endpoint+query({format:'csv'}),'GET',undefined,cookie);assert.equal(metadata.status,200);assert.ok(metadata.data.includes("'=Private Arabic reference"));assert.ok(!metadata.data.includes(initial.description));assert.ok(!metadata.data.includes(initial.reason));
   for(const suffix of ['&page=0&page=1','&q=x&q=y','&unknown=true','&page=-1','&page=1.2','&state=DELETED','&q='+encodeURIComponent('x'.repeat(121))])assert.equal((await call(endpoint+query()+suffix,'GET',undefined,cookie)).status,400,suffix);

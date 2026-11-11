@@ -10,15 +10,17 @@ const root="../src/app/accounting/bank/certificates/";
 function load(file,overrides={},globals={}){
  const filename=new URL(root+file,import.meta.url);
  const {outputText}=ts.transpileModule(readFileSync(filename,"utf8"),{fileName:filename.pathname,compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}});
- const exports={};new Function("require","exports",...Object.keys(globals),outputText)(name=>Object.hasOwn(overrides,name)?overrides[name]:require(name),exports,...Object.values(globals));return exports;
+ const exports={};new Function("require","exports",...Object.keys(globals),outputText)(name=>Object.hasOwn(overrides,name)?overrides[name]:name==="../read-identity"?readIdentityModule:name==="@/lib/browser-auth-loss"?authLoss:require(name),exports,...Object.values(globals));return exports;
 }
+const authLoss=load("../../../../lib/browser-auth-loss.ts");
+const readIdentityModule=load("../read-identity.ts");
 const tenant="00000000-0000-4000-8000-000000000001",actor="00000000-0000-4000-8000-000000000002",id="00000000-0000-4000-8000-000000000003",requestId="00000000-0000-4000-8000-000000000004";
 const payload={tenantId:tenant,requestId,expectedDigest:"a".repeat(64),note:"review"};
-function harness({saved,kind="create",fetch:fetcher=async()=>({ok:true,status:200,json:async()=>({id:requestId,replayed:false})}),storageFails=false,actorValue=actor,tenantValue=tenant,idValue=id}={}){
+function harness({saved,kind="create",fetch:fetcher=async()=>({ok:true,status:200,json:async()=>({id:requestId,replayed:false})}),storageFails=false,actorValue=actor,tenantValue=tenant,idValue=id,readIdentity}={}){
  const key=`erp-bank-certificate:${kind}:${actorValue.toLowerCase()}:${tenantValue.toLowerCase()}:${idValue.toLowerCase()}`,storage=new Map(saved?[[key,saved]]:[]),slots=[],cleanup=[];let index=0,clears=0,calls=0;
  const hooks={useState(initial){const i=index++;if(!(i in slots))slots[i]=initial;return [slots[i],value=>{slots[i]=typeof value==="function"?value(slots[i]):value;}];},useRef(initial){const i=index++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useEffect(fn,deps){const i=index++;const serialized=JSON.stringify(deps);if(slots[i]!==serialized){slots[i]=serialized;cleanup.push(fn());}}};
  const api=load("request.ts",{react:hooks},{sessionStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>{if(storageFails)throw Error("blocked");storage.set(k,v);},removeItem:k=>storage.delete(k)},fetch:(...args)=>{calls++;return fetcher(...args);}});
- const render=(scope={})=>{actorValue=scope.actor??actorValue;tenantValue=scope.tenant??tenantValue;idValue=scope.id??idValue;index=0;return api.useCertificateRequests(actorValue,tenantValue,idValue,kind,()=>clears++);};render();
+ const render=(scope={})=>{actorValue=scope.actor??actorValue;tenantValue=scope.tenant??tenantValue;idValue=scope.id??idValue;index=0;return api.useCertificateRequests(actorValue,tenantValue,idValue,kind,()=>clears++,readIdentity);};render();
  return {render,storage,key,get calls(){return calls;},get clears(){return clears;},unmount(){cleanup.forEach(fn=>fn?.());}};
 }
 test("restored capture is actor/tenant/statement scoped, validated, and never submitted automatically",()=>{
@@ -58,7 +60,7 @@ test("preview confirmation captures digest, detail manages history and wrapper r
  const widget=readFileSync(new URL(root+"widget.tsx",import.meta.url),"utf8"),detail=readFileSync(new URL(root+"[id]/detail.tsx",import.meta.url),"utf8"),page=readFileSync(new URL(root+"[id]/page.tsx",import.meta.url),"utf8");
  assert.match(widget,/expectedDigest:preview.digest/);assert.match(widget,/requestId:crypto.randomUUID\(\)/);assert.match(widget,/Confirm and save this preview/);assert.match(detail,/expectedVersion:data.version/);assert.match(detail,/<input required value=\{replacement\}/);assert.match(detail,/Print snapshot with all source lines/);assert.match(page,/currentUser\(\)/);assert.match(page,/redirect\("\/login"\)/);assert.match(page,/uuid\(\).safeParse\(rawTenantId\)/);assert.match(page,/parsedTenant.data.toLowerCase\(\)/);
 });
-function detailHarness(secondStatus=200,historyVersion=0){
+function detailHarness(secondStatus=200,historyVersion=0,identity){
  const slots=[],effects=[],frames=new Map(),listeners=new Map();let index=0,frameId=0,printed=0,requests=0,downloads=0;
  const hooks={
   useState(initial){const i=index++;if(!(i in slots))slots[i]=initial;return [slots[i],v=>{slots[i]=typeof v==="function"?v(slots[i]):v;}];},
@@ -67,7 +69,7 @@ function detailHarness(secondStatus=200,historyVersion=0){
  };
  const initial={certificate:{id,tenantId:tenant,companyId:id,accountId:id,statementId:id,createdAt:"2026-01-31",observedAt:"2026-01-31",createdBy:actor,note:"captured",digest:"a".repeat(64),snapshot},events:[],version:historyVersion,supersededBy:null,canManage:true};
  const latest={...initial,version:1,supersededBy:actor,events:[{id:requestId,sequence:1,action:"SUPERSEDE",replacementId:actor,reason:"newer observation",createdAt:"2026-02-02",createdBy:actor}]};
- const request=load("request.ts",{react:hooks},{sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},fetch:async(url,options)=>{requests++;assert.ok([`/api/bank/certificates/${id}?tenantId=${tenant}`,`/api/bank/certificates/${id}?tenantId=${tenant}&format=json`].includes(url));assert.equal(options.cache,"no-store");assert.equal(options.method,undefined);const status=requests===1?200:secondStatus;return {ok:status===200,status,json:async()=>status===200?(requests===1?initial:latest):{error:"denied"}};}});
+ const request=load("request.ts",{react:hooks,...(identity?{"../read-identity":{BankReadIdentity:class {constructor(){return identity;}}}}:{})},{sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},fetch:async(url,options)=>{requests++;assert.ok([`/api/bank/certificates/${id}?tenantId=${tenant}&expectedActorId=${actor}`,`/api/bank/certificates/${id}?tenantId=${tenant}&expectedActorId=${actor}&format=json`].includes(url));assert.equal(options.cache,"no-store");assert.equal(options.method,undefined);const status=requests===1?200:secondStatus;return {ok:status===200,status,headers:new Headers({"X-Actor-Id":actor}),json:async()=>status===200?(requests===1?initial:latest):{error:"denied"}};}});
  const detail=load("[id]/detail.tsx",{react:hooks,"@/lib/locale":locale,"../snapshot":snapshotModule,"../request":request,"../download":{downloadCertificate(value,downloadId,downloadTenant){assert.equal(downloadId,id);assert.equal(downloadTenant,tenant);assert.equal(value.version,1);downloads++;}}},{window:{print(){printed++;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},requestAnimationFrame:fn=>{frames.set(++frameId,fn);return frameId;},cancelAnimationFrame:n=>frames.delete(n)});
  function render(){index=0;const tree=detail.CertificateDetail({actorId:actor,tenantId:tenant,id,locale:"en"});effects.splice(0).forEach(fn=>fn());return tree;}
  function descendants(element){return [element,...React.Children.toArray(element?.props?.children).flatMap(child=>React.isValidElement(child)?descendants(child):[])];}
@@ -177,3 +179,51 @@ for(const kind of ["create","event"])test(`${kind} v1 retries use original scope
  const html=renderToStaticMarkup(React.createElement(v.SnapshotView,{snapshot:{...snapshot,version:2,book:[{id:"line",amount:"10.000",allocated:"6.000",currentRemaining:"4.000",cutoffRemaining:"7.000",allocations:[{id:"allocation",amount:"3.000",cancelledAt:null}]}]},locale:"en",printAll:true}));
  assert.match(html,/Available now/);assert.match(html,/Remaining through cutoff/);assert.match(html,/Allocation history/);assert.match(html,/allocation/);
  });
+test("certificate reads reject another actor or missing receipt before rendering, downloading or printing",async()=>{
+ for(const responseActor of [id,null]){const h=harness({saved:JSON.stringify(payload),fetch:async()=>({ok:true,status:200,headers:new Headers(responseActor?{"X-Actor-Id":responseActor}:{}),json:async()=>({certificate:{id}})})});let error;
+  await h.render().run(`/read?expectedActorId=${actor}`,undefined,()=>assert.fail('wrong actor reached callback'),e=>{error=e;});assert.equal(error.status,403);assert.equal(h.clears,1);assert.deepEqual(h.render().pending,payload);assert.equal(h.storage.get(h.key),JSON.stringify(payload));
+ }
+ const h=harness({fetch:async()=>({ok:true,status:200,headers:new Headers({"X-Actor-Id":actor}),json:async()=>({actorId:id})})});await h.render().run('/read',undefined,()=>assert.fail(),()=>{});assert.equal(h.clears,1);
+});
+test("certificate read results are fenced after actor navigation and unmount",async()=>{
+ for(const change of ['switch','unmount']){let release;const h=harness({fetch:()=>new Promise(resolve=>{release=resolve;})});let callbacks=0;const task=h.render().run('/read',undefined,()=>callbacks++,()=>callbacks++);
+  if(change==='switch')h.render({actor:id});else h.unmount();release({ok:true,status:200,headers:new Headers({"X-Actor-Id":actor}),json:async()=>({actorId:actor})});await task;assert.equal(callbacks,0);
+ }
+});
+test("bank workspaces bind mounted list, picker, preview, detail and download navigation",()=>{
+ for(const file of ['widget.tsx','[id]/detail.tsx'])assert.match(readFileSync(new URL(root+file,import.meta.url),'utf8'),/new URLSearchParams\(\{tenantId,expectedActorId:actorId\}\)/);
+ const main=readFileSync(new URL('../src/app/accounting/bank/workspace.tsx',import.meta.url),'utf8');assert.equal((main.match(/new URLSearchParams\(/g)||[]).length,(main.match(/new URLSearchParams\(\{expectedActorId:actorId/g)||[]).length);assert.match(main,/d\?\.actorId!==actorId/);assert.match(main,/expectedActorId=\$\{actorId\}/);
+ const panel=readFileSync(new URL('../src/app/accounting/bank/[id]/panel.tsx',import.meta.url),'utf8');assert.match(panel,/new URLSearchParams\(\{tenantId,expectedActorId:actorId\}\)/);assert.match(panel,/d.actorId!==actorId/);assert.match(panel,/generation!==readGeneration.current/);
+});
+
+test("shared bank denial fences a sibling late read; obsolete failures cannot invalidate a newer epoch",async()=>{
+ const shared=new readIdentityModule.BankReadIdentity();let release;
+ const late=harness({readIdentity:shared,fetch:()=>new Promise(resolve=>{release=resolve;})});let callbacks=0;
+ const task=late.render().run('/late',undefined,()=>callbacks++,()=>callbacks++);
+ const denied=harness({readIdentity:shared,fetch:async()=>({status:403,ok:false,json:async()=>{throw Error('HTML forbidden');}})});let error;
+ await denied.render().run('/denied',undefined,()=>assert.fail(),e=>{error=e;});assert.equal(error.status,403);assert.equal(late.clears,1);assert.equal(denied.clears,1);
+ release({status:200,ok:true,headers:new Headers({'X-Actor-Id':actor}),json:async()=>({actorId:actor})});await task;assert.equal(callbacks,0);
+ let oldRelease;const old=harness({readIdentity:shared,fetch:()=>new Promise(resolve=>{oldRelease=resolve;})});const oldTask=old.render().run('/old',undefined,()=>assert.fail(),()=>assert.fail());shared.invalidate();const epoch=shared.generation;
+ oldRelease({status:403,ok:false,json:async()=>{throw Error('must not parse obsolete denial');}});await oldTask;assert.equal(shared.generation,epoch);
+});
+
+test("shared invalidation cancels a queued certificate print before any browser output",async()=>{
+ const identity=new readIdentityModule.BankReadIdentity(),h=detailHarness(200,0,identity);let tree=h.render();h.click(tree,'Load / refresh snapshot');await settle();tree=h.render();h.click(tree,'Print snapshot with all source lines');await settle();h.render();assert.equal(h.queuedFrames,1);identity.invalidate();h.render();h.flushFrames();assert.equal(h.printed,0);assert.equal(h.queuedFrames,0);
+});
+
+test("certificate mutation auth loss cancels queued printing and late sibling reads while preserving exact pending bytes",async()=>{
+ for(const verdict of ['401','403','login','actor','business']){
+  const identity=new readIdentityModule.BankReadIdentity(),detail=detailHarness(200,0,identity);let tree=detail.render();detail.click(tree,'Load / refresh snapshot');await settle();tree=detail.render();detail.click(tree,'Print snapshot with all source lines');await settle();detail.render();assert.equal(detail.queuedFrames,1);
+  let release;const late=harness({readIdentity:identity,fetch:()=>new Promise(resolve=>{release=resolve;})});let adopted=0;const read=late.render().run('/late',undefined,()=>adopted++,()=>{});
+  const status=verdict==='actor'||verdict==='business'?409:verdict==='login'?200:Number(verdict);let parsed=false;
+  const raw=JSON.stringify(payload),writer=harness({readIdentity:identity,saved:raw,fetch:async()=>({ok:status===200,status,redirected:verdict==='login',url:'http://localhost/login',json:async()=>{parsed=true;if(verdict==='401'||verdict==='403'||verdict==='login')throw Error('HTML denial');return {code:verdict==='actor'?'ACTOR_MISMATCH':'REQUEST_CONFLICT'};}})});
+  await writer.render().run('/write',payload,()=>assert.fail(),()=>{});assert.equal(writer.storage.get(writer.key),raw);assert.deepEqual(writer.render().pending,payload);assert.equal(parsed,verdict==='actor'||verdict==='business');
+  release({ok:true,status:200,headers:new Headers({'X-Actor-Id':actor}),json:async()=>({actorId:actor})});await read;detail.render();detail.flushFrames();assert.equal(adopted,verdict==='business'?1:0);assert.equal(detail.printed,verdict==='business'?1:0);
+ }
+});
+
+test("same-scope old certificate mutation denial cannot cancel newly reauthenticated queued print",async()=>{
+ const identity=new readIdentityModule.BankReadIdentity();let release;const writer=harness({readIdentity:identity,saved:JSON.stringify(payload),fetch:()=>new Promise(resolve=>{release=resolve;})});const pending=writer.render().run('/write',payload,()=>assert.fail(),()=>{});identity.invalidate();
+ const detail=detailHarness(200,0,identity);let tree=detail.render();detail.click(tree,'Load / refresh snapshot');await settle();tree=detail.render();detail.click(tree,'Print snapshot with all source lines');await settle();detail.render();assert.equal(detail.queuedFrames,1);const epoch=identity.generation;
+ release({status:401,ok:false,json:async()=>{assert.fail('obsolete mutation response parsed');}});await pending;assert.equal(identity.generation,epoch);detail.render();detail.flushFrames();assert.equal(detail.printed,1);assert.equal(writer.storage.get(writer.key),JSON.stringify(payload));
+});
