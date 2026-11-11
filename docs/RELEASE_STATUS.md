@@ -34,6 +34,10 @@ The configured Core checks workflow audits dependencies, runs ESLint and TypeScr
 
 ## Implementation history
 
+### Disposable CI hostname compatibility - 11 November 2026
+
+The first remote clean-install run for the combined candidate passed installation, audit, lint/types, all 88 migrations, 651 unit tests, 149 DB tests and build, but one API test rejected the disposable database hostname `localhost` before executing its requests. Its safety allowlist now accepts only `127.0.0.1` and `localhost`; external hostnames remain rejected. No application, schema, migration, package or workflow changed. The complete 50-API suite, lint and types passed locally using a genuine localhost database; lifecycle regressions separately passed both accepted hostnames at pools eight and one, including HTTP logout, post-lock expiry and valid controls. Frozen source manifests matched. This targeted test correction is separate from the earlier full local aggregate; a new exact-head remote aggregate is required.
+
 ### Final integrated milestone and document review verification - 11 November 2026
 
 The clean combined candidate passed 88 migrations, 651 unit/component tests, 149 database tests and 50 API checks. Nine focused API suites also passed with both eight- and one-connection pools: RFQs, recurring billing, configurable approvals, private alerts, approved-time billing, automation, milestone billing, invoice lifecycle and document review. Warning-free lint, TypeScript, production build and zero-vulnerability audit passed. Every explicit test path exists and predecessor suites remain registered. Initial/final tracked source/input manifests and the complete archive digest matched.
